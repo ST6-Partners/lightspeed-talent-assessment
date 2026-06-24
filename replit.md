@@ -1,4 +1,4 @@
-# Template App (SP-002)
+# AI Talent Assessment
 
 ## Overview
 Express + tRPC backend with React + Vite frontend. Uses PostgreSQL via Drizzle ORM.

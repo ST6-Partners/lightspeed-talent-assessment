@@ -1,4 +1,6 @@
-# Template App — SP-002 Starter Scaffold
+# AI Talent Assessment
+
+> AI-augmented hiring funnel for Lightspeed — automate top-of-funnel, concentrate human judgment on finalists. Scaffolded from `template-type2-app` (SP-002).
 
 Production-ready starter scaffold for Type 2 applications. Clone, rename, and build.
 
