@@ -10,6 +10,7 @@ import { feedbackApiRouter } from './server/src/http/feedbackApi.js';
 import { createContext } from './server/src/trpc.js';
 import { pool, db } from './server/src/db.js';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { inspect } from 'node:util';
 import { env } from './server/src/env.js';
 import { getSessionMiddleware, verifyToken } from './server/src/auth.js';
 import { registerBuiltInJobs } from './server/src/services/job-runner.js';
@@ -36,8 +37,10 @@ async function applyMigrationsWithRetry(maxAttempts = 20, delayMs = 3000): Promi
       console.log('[boot] Migrations up to date.');
       return;
     } catch (err) {
-      const detail = `${(err as any)?.message ?? ''} ${String((err as any)?.cause ?? '')}`;
-      const transient = /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET/.test(detail);
+      // Inspect the full error tree — pg surfaces ECONNREFUSED nested inside
+      // an AggregateError.errors[], which a shallow String(cause) misses.
+      const detail = inspect(err, { depth: 8 });
+      const transient = /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|getaddrinfo|Connection terminated/.test(detail);
       if (attempt < maxAttempts && transient) {
         console.warn(`[boot] DB not reachable yet — retrying in ${delayMs}ms`);
         await new Promise((r) => setTimeout(r, delayMs));
