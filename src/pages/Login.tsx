@@ -51,7 +51,7 @@ export default function Login() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 w-full max-w-sm">
         <div className="text-center mb-6">
-          <h1 className="text-xl font-bold text-gray-900">Template App</h1>
+          <h1 className="text-xl font-bold text-gray-900">Lightspeed Talent Assessment</h1>
           <p className="text-sm text-gray-500 mt-1">
             {mode === 'login' ? 'Sign in to continue' : 'Create your account'}
           </p>
