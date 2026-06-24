@@ -26,19 +26,35 @@ process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
 });
 
+const MIGRATIONS_FOLDER = path.join(__dirname, 'server/drizzle/migrations');
+
+async function applyMigrationsWithRetry(maxAttempts = 20, delayMs = 3000): Promise<void> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.log(`[boot] Applying database migrations (attempt ${attempt}/${maxAttempts})...`);
+      await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+      console.log('[boot] Migrations up to date.');
+      return;
+    } catch (err) {
+      const detail = `${(err as any)?.message ?? ''} ${String((err as any)?.cause ?? '')}`;
+      const transient = /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET/.test(detail);
+      if (attempt < maxAttempts && transient) {
+        console.warn(`[boot] DB not reachable yet — retrying in ${delayMs}ms`);
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
+      console.error('[boot] Migration failed — aborting startup:', err);
+      process.exit(1);
+    }
+  }
+}
+
 async function main() {
   // ── Apply pending DB migrations before serving (migrate-on-boot) ──
-  // Runs inside the app container (DATABASE_URL reachable here), applies
-  // committed SQL migrations idempotently, and fails loudly if the DB
-  // isn't reachable rather than serving an empty schema.
-  try {
-    console.log('[boot] Applying database migrations...');
-    await migrate(db, { migrationsFolder: path.join(__dirname, 'server/drizzle/migrations') });
-    console.log('[boot] Migrations up to date.');
-  } catch (err) {
-    console.error('[boot] Migration failed — aborting startup:', err);
-    process.exit(1);
-  }
+  // Retries transient connection errors: Railway's private network can take
+  // a few seconds to come up at container start, so the first migrate()
+  // attempts may hit ECONNREFUSED. Fails loudly only after exhausting retries.
+  await applyMigrationsWithRetry();
 
   const app = express();
   // Create the HTTP server explicitly so Vite's HMR WebSocket can piggy-
