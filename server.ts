@@ -8,7 +8,8 @@ import { fileURLToPath } from 'url';
 import { appRouter } from './server/src/router.js';
 import { feedbackApiRouter } from './server/src/http/feedbackApi.js';
 import { createContext } from './server/src/trpc.js';
-import { pool } from './server/src/db.js';
+import { pool, db } from './server/src/db.js';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { env } from './server/src/env.js';
 import { getSessionMiddleware, verifyToken } from './server/src/auth.js';
 import { registerBuiltInJobs } from './server/src/services/job-runner.js';
@@ -26,6 +27,19 @@ process.on('uncaughtException', (err) => {
 });
 
 async function main() {
+  // ── Apply pending DB migrations before serving (migrate-on-boot) ──
+  // Runs inside the app container (DATABASE_URL reachable here), applies
+  // committed SQL migrations idempotently, and fails loudly if the DB
+  // isn't reachable rather than serving an empty schema.
+  try {
+    console.log('[boot] Applying database migrations...');
+    await migrate(db, { migrationsFolder: path.join(__dirname, 'server/drizzle/migrations') });
+    console.log('[boot] Migrations up to date.');
+  } catch (err) {
+    console.error('[boot] Migration failed — aborting startup:', err);
+    process.exit(1);
+  }
+
   const app = express();
   // Create the HTTP server explicitly so Vite's HMR WebSocket can piggy-
   // back on the same port instead of spawning its own listener on 24678.

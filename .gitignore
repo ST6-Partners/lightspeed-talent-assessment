@@ -4,4 +4,4 @@ build-output/
 .env
 *.local
 .DS_Store
-server/drizzle/migrations/
+# migrations are committed (migrate-on-boot applies them) — see README
