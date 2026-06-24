@@ -286,7 +286,7 @@ export default function GettingStarted() {
     <div style={st.container}>
       {/* Welcome banner */}
       <div style={st.banner}>
-        <h1 style={st.bannerTitle}>Welcome to Template App</h1>
+        <h1 style={st.bannerTitle}>Welcome to Lightspeed Talent Assessment</h1>
         <p style={st.bannerSub}>
           A modern React + tRPC + Claude starter with built-in admin panels, telemetry,
           AI chat, and type-safe data handling. Follow the steps below to customize.

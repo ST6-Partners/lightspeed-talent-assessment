@@ -15,9 +15,9 @@ export default function Home() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Template App</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Lightspeed Talent Assessment</h1>
         <p className="text-gray-500 mt-1">
-          SP-002 starter scaffold for Type 2 applications. Clone, rename, and build.
+          AI-augmented hiring funnel for Lightspeed — automate top-of-funnel, concentrate human judgment on finalists.
         </p>
       </div>
 
