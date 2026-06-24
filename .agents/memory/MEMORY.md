@@ -1,0 +1,1 @@
+- [Session cookies in Replit iframe](session-cookies-replit-iframe.md) — auth cookies need SameSite=None+Secure or login silently fails inside the preview iframe.

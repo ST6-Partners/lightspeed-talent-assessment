@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>How Dreadnought Runs the Feedback to Auto-Fix Loop in Signal (RCDO)</title><style>
+:root{--blue:#1284BE;--navy:#0E2841;--bg:#fff;--ink:#1c2733;--muted:#5b6b7a;--line:#e3e8ee;--code:#f4f6f8;}
+*{box-sizing:border-box}
+body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--ink);line-height:1.6;max-width:860px;margin:0 auto;padding:48px 28px 96px;background:var(--bg);}
+h1{font-size:30px;line-height:1.25;color:var(--navy);margin:0 0 8px;border-bottom:3px solid var(--blue);padding-bottom:14px;}
+h2{font-size:22px;color:var(--navy);margin:42px 0 12px;padding-top:10px;border-top:1px solid var(--line);}
+h3{font-size:17px;color:var(--blue);margin:26px 0 8px;}
+p,li{font-size:15.5px;}
+a{color:var(--blue);}strong{color:var(--navy);}
+code{background:var(--code);padding:1.5px 5px;border-radius:4px;font-size:13.5px;font-family:SFMono-Regular,Consolas,Menlo,monospace;color:#0b3d59;}
+pre{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:14px 16px;overflow:auto;}
+pre code{background:none;padding:0;color:var(--ink);}
+table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top;}
+th{background:var(--navy);color:#fff;font-weight:600;}
+tr:nth-child(even) td{background:#f8fafc;}
+blockquote{border-left:4px solid var(--blue);margin:14px 0;padding:6px 16px;background:#f3f9fd;color:var(--muted);}
+hr{border:none;border-top:1px solid var(--line);margin:34px 0;}
+ul,ol{padding-left:24px;}
+.banner{background:#f3f9fd;border:1px solid #cfe6f5;border-left:4px solid var(--blue);border-radius:8px;padding:14px 18px;margin:18px 0 28px;font-size:14px;color:var(--muted);}
+</style></head><body>
+<div class="banner"><strong>Review draft companion (HTML).</strong> Source of truth is the matching <code>.md</code> file. Rendered 2026-06-02.</div>
+<h1 id="how-dreadnought-runs-the-feedback-auto-fix-loop-in-signal-rcdo">How Dreadnought Runs the Feedback → Auto-Fix Loop in Signal (RCDO)</h1>
+<p><strong>Part-one reference doc — for Mark's review before we build the Foundry harness</strong></p>
+<p><strong>Author:</strong> Sarah Light · <strong>Date:</strong> 2026-06-01 · <strong>Status:</strong> Draft for review (v1)
+<strong>Reviewer:</strong> Mark Friedman — please confirm accuracy and up-level where needed.
+<strong>Purpose:</strong> Document, precisely and end-to-end, how the Dreadnought operating system is used inside the Signal / RCDO app to <em>proactively pull user feedback and process it</em> — the bug-triage skill and the scheduled debug agent. This is the source of truth we lock down before designing/building the equivalent harness in Foundry. No Foundry build happens until this doc is right.</p>
+<p><strong>Primary sources (all paths under the Dreadnought workspace):</strong>
+- <code>1-ST6/Dreadnought/Debug Agent — Design Request v1.md</code> (canonical design)
+- <code>1-ST6/Dreadnought/0-Claude Skills/debug-agent/SKILL.md</code> (v1.5)
+- <code>1-ST6/Dreadnought/0-Claude Skills/bug-triage/SKILL.md</code> (v1)
+- <code>1-ST6/Dreadnought/0-Claude Skills/feedback-triage/SKILL.md</code> (v3)
+- <code>1-ST6/PA/RCDO App/CLAUDE-module.md</code> (v1.5)
+- <code>1-ST6/PA/RCDO App/3-Sessions/2026-04-13-session-log.md</code> (the scheduling decision)
+- <code>1-ST6/PA/RCDO App/4-Project Management/debug-agent-run-2026-05-15-1604.md</code> (a real run)</p>
+<hr />
+<h2 id="1-executive-summary-the-loop-in-one-breath">1. Executive summary — the loop in one breath</h2>
+<p>A user hits a bug in Signal and files feedback from inside the app (with screen attribution and, for chat bugs, a full debug log). That feedback lands in Signal's own Postgres database and is exposed through a feedback API. On a schedule, an automated <strong>debug agent</strong> running in Cowork wakes up, pulls the open bug reports through that API, filters them to the screens it's allowed to touch, diagnoses each one against the live codebase, and <strong>scores its own confidence</strong>. High-confidence bugs it fixes itself — writes the code, audits it, pushes to dev, smoke-tests, spot-checks the feature, and then resolves the feedback item (notifying the user). Anything it isn't confident about, it diagnoses as far as it can and <strong>routes to a human</strong> for review, with the full diagnosis attached. It never touches production, and any test failure triggers an automatic revert so dev is never left broken.</p>
+<p>That loop is assembled from a small cast of Dreadnought skills, with one orchestrator (<code>debug-agent</code>) calling the others.</p>
+<hr />
+<h2 id="2-the-cast-which-skills-and-agents-are-involved">2. The cast — which skills and agents are involved</h2>
+<p>Mark named two pieces in the brief: a <strong>bug-triage skill</strong> ("uses the API, pulls feedback from Signal, diagnoses issues") and a <strong>debug agent</strong> (scheduled, "classifies an issue, fixes it if it can, otherwise tees it up for human review"). Those are the two stars. In the actual implementation the "pull feedback" and "diagnose" responsibilities are split across three skills, with two more as dependencies. Worth getting this exactly right before we replicate it.</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Type</th>
+<th>Role in the loop</th>
+<th>Source file</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>debug-agent</strong></td>
+<td>Scheduled agent (orchestrator)</td>
+<td>The thing that runs on a schedule. Executes the 11-step pipeline, owns the confidence gate, decides auto-fix vs. route-to-human, and writes the run record. Calls the other skills rather than duplicating them.</td>
+<td><code>debug-agent/SKILL.md</code> v1.5</td>
+</tr>
+<tr>
+<td><strong>bug-triage</strong></td>
+<td>Skill (diagnosis engine)</td>
+<td>The root-cause engine. Parses evidence, traces the code path, classifies the root cause, checks Design-Decision Verification Criteria, proposes a fix. Interactive when a human runs it; the debug-agent runs the same logic without a human in the loop.</td>
+<td><code>bug-triage/SKILL.md</code> v1</td>
+</tr>
+<tr>
+<td><strong>feedback-triage</strong></td>
+<td>Skill (transport)</td>
+<td>The thing that actually <em>talks to Signal's API</em> — fetch open feedback, resolve items, upload resolution screenshots — with a Chrome → curl → paste fallback chain. The debug-agent borrows this transport logic for its fetch and resolve steps.</td>
+<td><code>feedback-triage/SKILL.md</code> v3</td>
+</tr>
+<tr>
+<td><strong>code-audit</strong></td>
+<td>Skill (verification)</td>
+<td>Post-fix check: runs the staged diff against the relevant DD Verification Criteria. If any criterion fails, the agent does not push.</td>
+<td>dependency</td>
+</tr>
+<tr>
+<td><strong>repo-connect</strong></td>
+<td>Skill (plumbing)</td>
+<td>Clones/pulls the Signal repo into <code>/tmp</code> at the start of each run so the agent can read and edit code.</td>
+<td>dependency</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Clarification for the record:</strong> the brief attributes "pulls feedback from Signal + diagnoses" to the bug-triage skill. In the built system that's two skills — <strong>feedback-triage</strong> does the pulling (it's the API transport), <strong>bug-triage</strong> does the diagnosing. The <strong>debug-agent</strong> is what stitches pull + diagnose + fix + verify + resolve into one unattended pipeline. When we build Foundry's harness we inherit all three, not just one.</p>
+<hr />
+<h2 id="3-the-application-signal-rcdo">3. The application — Signal / RCDO</h2>
+<p><strong>Signal</strong> (also called the RCDO App Tool / RCDO Hierarchy Tool) is a standalone strategic-planning and weekly-commitment web app. It is <em>not</em> part of the PA production platform — it has its own GitHub repo, its own Postgres database, and its own passwordless auth.</p>
+<table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GitHub repo</td>
+<td><code>mhf-st6partners/rcdo-hierarchy-tool</code></td>
+</tr>
+<tr>
+<td>Deployed URL (prod <strong>and</strong> dev)</td>
+<td><code>https://rcdo-hierarchy-tool.replit.app/</code></td>
+</tr>
+<tr>
+<td>Hosting</td>
+<td>Replit — dev auto-builds from <code>main</code>; production is the same project, promoted by a manual <strong>Republish</strong> click (commit-level promotion). Separate databases for dev vs. prod.</td>
+</tr>
+<tr>
+<td>Stack</td>
+<td>React 18 client · Node/Express server · Postgres 15+ · Anthropic SDK for the in-app Claude chat</td>
+</tr>
+<tr>
+<td>Users</td>
+<td>~25–30</td>
+</tr>
+<tr>
+<td>Active screens (per CLAUDE-module.md v1.5)</td>
+<td><strong>WorkspaceView</strong> (tree + table + detail + Claude chat), <strong>MyWeekPage</strong> (weekly planner + Claude chat tray), <strong>ExecutionDashboard</strong> (CEO analytics + Claude chat tray, ELT-only)</td>
+</tr>
+</tbody>
+</table>
+<p>The deployment model matters for the agent: because dev and prod share a Replit project but use separate databases, the agent can push to <code>main</code> (dev) and do full CRUD verification on dev data safely, while production stays behind a human Republish click.</p>
+<hr />
+<h2 id="4-how-customer-feedback-is-captured">4. How customer feedback is captured</h2>
+<p>Feedback is filed by users <em>inside</em> Signal, not through an external tracker. Each item carries enough structured context for an agent to act on it without a human re-explaining the bug:</p>
+<ul>
+<li><strong>Type</strong> — <code>bug</code>, <code>enhancement</code>, or <code>question</code>.</li>
+<li><strong>Screen attribution</strong> — which screen the user was on (e.g. <code>chat</code>/<code>claude</code>, <code>my-week</code>/<code>myweek</code>, <code>hierarchy</code>/<code>workspace</code>, <code>admin</code>). This is the single most important field for the agent — no screen, no trace.</li>
+<li><strong>Severity / priority</strong> — <code>blocking</code> / <code>annoying</code> / <code>nice_to_have</code>; priority high/medium/low.</li>
+<li><strong>Description + title</strong> — the user's own words.</li>
+<li><strong>Context path</strong> — <code>context_item_path</code>, the hierarchy item or location in view.</li>
+<li><strong>Interactive AI Review at submit (deflection).</strong> Hitting "submit" doesn't file the ticket straight away — the system <strong>intercepts before saving</strong> and calls <code>POST /api/feedback/ai-review</code>. Claude checks for (1) an existing answer (questions already answered in specs/docs), (2) a duplicate (with "Me too" voting), and (3) related context, and shows it in an AI Review Panel. The user can then <strong>resolve without submitting</strong>, vote on an existing item, or submit as new. Only on submit-as-new is the item saved, storing <code>ai_review_result</code> plus AI-enhanced <code>claude_title</code> / <code>claude_description</code> (alongside the user's originals) and a suggested priority. Deflection is a tracked metric. (RCDO Design Decisions v52.)</li>
+<li><strong>Debug session link</strong> — for chat bugs, <code>chat_debug_session_id</code> points to a full debug log (see §5).</li>
+<li><strong>Attachments</strong> — screenshots, with an <code>attachment_count</code> and an attachments array.</li>
+<li><strong>Submitter</strong> — name + timestamp (<code>created_at</code>).</li>
+</ul>
+<hr />
+<h2 id="5-the-data-model">5. The data model</h2>
+<h3 id="51-feedback-item-the-feedback-table">5.1 Feedback item (the <code>feedback</code> table)</h3>
+<p>Core fields the pipeline reads: <code>id</code>, <code>type</code>, <code>status</code>, <code>screen</code>, <code>priority</code>, <code>severity</code>, <code>title</code>, <code>description</code>, <code>context_item_path</code>, <code>ai_review_result</code>, <code>claude_title</code>, <code>claude_description</code>, <code>chat_debug_session_id</code>, <code>attachment_count</code>, <code>created_at</code>, submitter name.</p>
+<p>Status lifecycle: <code>open</code> → <code>in_progress</code> / <code>acknowledged</code> → <code>resolved</code> / <code>wont_fix</code>, plus a dedicated <code>pm_review</code> state for agent-diagnosed-but-not-fixed items (added in debug-agent v1.4).</p>
+<p><strong>Resolution attribution columns</strong> (added for the agent, Design Request §6 &amp; §9):</p>
+<pre><code class="language-sql">ALTER TABLE feedback ADD COLUMN resolved_by_type VARCHAR(10) DEFAULT 'human';  -- 'agent' | 'human'
+ALTER TABLE feedback ADD COLUMN agent_run_id VARCHAR(50);                       -- NULL for human-resolved
+</code></pre>
+<p>These let the admin tab filter agent vs. human resolutions and give the agent an audit trail.</p>
+<h3 id="52-the-debug-log-chat_debug_log-table">5.2 The debug log (<code>chat_debug_log</code> table)</h3>
+<p>The richest diagnostic signal for chat bugs. Keyed by <code>chat_debug_session_id</code>. Each entry captures the full Claude loop: per-loop API timing, the tool name and tool input, Claude's text, <code>stop_reason</code>, token counts, and <code>tool_result_error</code>. The diagnosis engine reads it for tells like <code>stop_reason: "end_turn"</code> on a loop that should have called a tool (Claude skipped the tool), non-null <code>tool_result_error</code> (tool execution failed), or a <code>loop_count</code> higher than expected (Claude going in circles).</p>
+<h3 id="53-agent-run-records-debug_agent_runs">5.3 Agent run records (<code>debug_agent_runs</code>)</h3>
+<p>Each scheduled run creates a run record (run ID format <code>debug-agent-&lt;module-slug&gt;-YYYY-MM-DD-HHMM</code>) and updates it on completion with counts (fetched / attempted / resolved / routed-to-PM / failed) and a <code>run_log</code> JSONB array of per-item outcomes. An Agent Runs dashboard lives inside Signal's Admin → System Jobs tab (sub-tabs: Lifecycle Jobs / Agent Runs) with a time-frame selector.</p>
+<hr />
+<h2 id="6-the-feedback-api-surface">6. The feedback API surface</h2>
+<p>Base URL: <code>https://rcdo-hierarchy-tool.replit.app</code>. Auth is an API-key header. <strong>Note a real inconsistency to resolve:</strong> the <code>feedback-triage</code> skill reads the key from env var <code>ADMIN_API_KEY</code>, while the <code>debug-agent</code> config block specifies <code>x-api-key: rcdo-cowork-2026</code>. Both appear in the docs; we should confirm the single source of truth before replicating.</p>
+<table>
+<thead>
+<tr>
+<th>Purpose</th>
+<th>Method + endpoint</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Fetch open feedback</td>
+<td><code>GET /api/feedback/export?status=open&amp;type=bug</code></td>
+<td>Supports <code>?type=</code>, <code>?status=</code>, <code>?since=</code>. Returns items incl. debug session IDs, attachment metadata, AI review.</td>
+</tr>
+<tr>
+<td>Resolve / won't-fix</td>
+<td><code>PUT /api/feedback/:id/resolve</code></td>
+<td>Body: <code>status</code>, <code>resolution_notes</code>, <code>resolved_by_name</code> (interactive) <strong>or</strong> <code>resolved_by_type:'agent'</code>, <code>agent_run_id</code>, <code>admin_notes</code> (agent). Terminal. Triggers submitter + admin notifications.</td>
+</tr>
+<tr>
+<td>Acknowledge / update</td>
+<td><code>PUT /api/feedback/:id</code></td>
+<td>Body: <code>status:'acknowledged'</code>, <code>admin_notes</code>.</td>
+</tr>
+<tr>
+<td>Agent review (route to human)</td>
+<td><code>PUT /api/feedback/agent-review/:id</code></td>
+<td>Sets status <code>pm_review</code>, writes full structured <code>admin_notes</code> JSON, links <code>agent_run_id</code>. Used for Assisted/Manual tiers.</td>
+</tr>
+<tr>
+<td>Create agent run</td>
+<td><code>POST /api/feedback/agent-runs</code></td>
+<td>Creates the run record. <em>(Known bug: a 2026-05-15 run got <code>{"error":"Run id required"}</code> — the endpoint may expect a different field name than <code>run_id</code>; flagged for fix.)</em></td>
+</tr>
+<tr>
+<td>Update agent run</td>
+<td><code>PUT /api/feedback/agent-runs/:id</code></td>
+<td>Final counts + <code>run_log</code>.</td>
+</tr>
+<tr>
+<td>Attachments</td>
+<td><code>GET /api/feedback/:id/attachments</code> and <code>/attachments/:attId</code></td>
+<td>List + fetch screenshots.</td>
+</tr>
+<tr>
+<td>Resolution screenshot</td>
+<td><code>POST /api/feedback/:id/resolution-screenshot</code></td>
+<td>Multipart upload of a "here's the fix" image.</td>
+</tr>
+<tr>
+<td>Agent runs / stats (admin UI)</td>
+<td><code>GET /api/feedback/agent-runs</code>, <code>/agent-runs/:id/items</code>, <code>/agent-stats</code></td>
+<td>Powers the Agent Runs dashboard.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Transport (from feedback-triage v3):</strong> the Cowork sandbox proxy blocks the Replit domain over plain curl, so the order is <strong>Chrome <code>javascript_tool</code> (preferred, runs <code>fetch()</code> same-origin) → curl → paste-based</strong> (generate the curl, user runs it in Replit Shell and pastes the JSON back).</p>
+<hr />
+<h2 id="7-the-debug-agent-pipeline-11-steps">7. The debug-agent pipeline (11 steps)</h2>
+<p>The agent is module-aware: every concrete URL, endpoint, screen-allowlist, and payload shape comes from a per-module config block in the skill. The step logic itself is module-agnostic.</p>
+<ol>
+<li><strong>Connect &amp; fetch</strong> — <code>repo-connect</code> clones/pulls the repo; fetch open bugs via the export endpoint (Chrome→curl→paste); generate a run ID; create the run record.</li>
+<li><strong>Filter candidates</strong> — keep an item only if it's a bug, newer than the <strong>max item age (14 days)</strong>, has screen attribution, and the screen is on the <strong>whitelist</strong> (Phase 1: Claude chat, My Week, Hierarchy Manager). Everything else is skipped (not escalated — just not agent-fixable yet).</li>
+<li><strong>Type reclassification (2.5)</strong> — an <code>enhancement</code> that passed screen whitelisting but reads like a bug (≥2 indicators: "doesn't work," "broken," contrasts wrong vs. expected behavior, implied fix changes existing logic) gets reclassified as a bug candidate.</li>
+<li><strong>Diagnose</strong> — parse evidence (description + <code>ai_review_result</code> + debug log if <code>chat_debug_session_id</code> exists), trace the code path, identify root cause file+line, classify the category.</li>
+<li><strong>Confidence gate</strong> — score 4 signals, route by tier (see §8).</li>
+<li><strong>Write fix</strong> (auto-fix tier only) — make the change; commit with the mandatory prefix <code>[debug-agent] Fix feedback #&lt;ID&gt;: &lt;one-line&gt;</code>; do <strong>not</strong> push yet.</li>
+<li><strong>Code audit</strong> — run <code>code-audit</code> against the staged diff and the relevant DD Verification Criteria. Any failure → undo the commit, route to PM review, stop.</li>
+<li><strong>Push to dev</strong> — <code>git push origin main</code>; poll the dev health endpoint for the rebuild (3-min timeout). Merge conflict → reset, skip, retry next run.</li>
+<li><strong>Smoke test</strong> — run the module's Smoke Test Manifest (every route → expected DOM selector). Any failure → <code>git revert</code>, push the revert, route to PM review.</li>
+<li><strong>Functional spot-check</strong> — exercise the specific feature the fix touched (e.g. send a chat message and confirm a response; load My Week and confirm the effort bar). Clean up any test data. Failure → revert, push, route to PM review.</li>
+<li><strong>Resolve &amp; report</strong> — call the resolve endpoint with <code>resolved_by_type:'agent'</code>, <code>agent_run_id</code>, and a structured <code>admin_notes</code> JSON (the 4-section diagnosis the admin UI renders); then update the run record and write a run summary. Resolving fires an <code>agent_resolution</code> notification to admins and a <code>feedback_response</code> to the submitter.</li>
+</ol>
+<p><strong>The fix order is fetch → filter → diagnose → gate → fix → audit → push → smoke → spot-check → resolve → report</strong>, and the gate is the hinge between "the agent fixes it" and "a human does."</p>
+<hr />
+<h2 id="8-confidence-model-routing">8. Confidence model &amp; routing</h2>
+<p>Four signals, each scored 1–3; the sum (4–12) sets the tier.</p>
+<table>
+<thead>
+<tr>
+<th>Signal</th>
+<th>3 (high)</th>
+<th>2 (medium)</th>
+<th>1 (low)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Root-cause clarity</td>
+<td>Single cause, exact file+line</td>
+<td>2–3 candidates, same area</td>
+<td>Unclear / scattered</td>
+</tr>
+<tr>
+<td>Fix scope</td>
+<td>1 file</td>
+<td>2–3 files</td>
+<td>4+ files or cross-cutting</td>
+</tr>
+<tr>
+<td>Fix category</td>
+<td>prompt-gap / data-issue</td>
+<td>logic-error / missing-validation</td>
+<td>race-condition, ui-rendering, model-behavior, api-contract</td>
+</tr>
+<tr>
+<td>Precedent</td>
+<td>3+ similar fixes succeeded</td>
+<td>1–2 similar</td>
+<td>none</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Score</th>
+<th>Tier</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>10–12</td>
+<td><strong>Auto-fix</strong></td>
+<td>Run the full fix→verify→resolve pipeline</td>
+</tr>
+<tr>
+<td>7–9</td>
+<td><strong>Assisted</strong></td>
+<td>Diagnosis + proposed fix written to PM review, agent stops</td>
+</tr>
+<tr>
+<td>≤6</td>
+<td><strong>Manual</strong></td>
+<td>Diagnosis only written to PM review, agent stops</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Override:</strong> a score of 9 with root-cause-clarity = 3 <strong>and</strong> fix-scope ≥ 2 is promoted to Auto-fix — high certainty about the cause plus a contained fix beats the category label alone.</p>
+<p>Items below the auto-fix line still get the <em>full structured diagnosis</em> via <code>PUT /api/feedback/agent-review/:id</code> (status <code>pm_review</code>), so the human inherits the agent's work rather than starting cold. The admin UI renders the same 4-section diagnosis panel for these in amber (vs. blue for resolved). Before go-live the model was meant to be <strong>backtested against all historical human-resolved items</strong> to calibrate the thresholds and measure the false-positive rate (Design Request §4).</p>
+<hr />
+<h2 id="9-safety-invariants">9. Safety invariants</h2>
+<ul>
+<li><strong>The agent never touches production.</strong> It pushes only to <code>main</code> (dev). Production promotion stays a human Republish click. Blank-screen risk in prod from the agent is zero.</li>
+<li><strong>Dev is never left broken.</strong> Every failure path that could break dev triggers an automatic <code>git revert</code> + push of the revert. After any failure the dev branch is either unchanged or restored to its pre-agent state.</li>
+<li><strong>Commits are identifiable.</strong> The <code>[debug-agent]</code> commit prefix makes agent changes obvious in git log and Replit publish history.</li>
+<li><strong>Bounded work.</strong> Max 3 attempts per bug, max 30 items per run, 14-day max item age.</li>
+<li><strong>Resolve is idempotent-ish.</strong> If the resolve API call fails, the fix stays on dev and the item stays open to be retried next run.</li>
+</ul>
+<hr />
+<h2 id="10-scheduling-howwhen-the-agent-actually-runs">10. Scheduling — how/when the agent actually runs</h2>
+<p><strong>This is the field to correct against the brief.</strong> The brief says "hourly during business hours," and the original Design Request (§11) said Phase 1 would run <strong>once per day at ~3 AM ET</strong> via the Cowork <code>schedule</code> skill. Neither is what's actually running.</p>
+<p>The authoritative decision is in <code>RCDO App/3-Sessions/2026-04-13-session-log.md</code>:</p>
+<ul>
+<li>Mark investigated whether the agent could run as a <strong>server-side cron</strong> and concluded <strong>it can't</strong> — the full pipeline needs Cowork-only capabilities (repo clone, code writes, git push). A server-side cron can't clone the repo and push fixes.</li>
+<li>Decision (2026-04-13): pause the server-side <code>deployment-check</code> cron and run the <strong>full pipeline as a Cowork scheduled task <code>debug-agent-rcdo</code>, every 2 hours from 9am to 11pm.</strong></li>
+</ul>
+<p>So the accurate statement is: <strong>a Cowork scheduled task named <code>debug-agent-rcdo</code>, firing every 2 hours between 9am and 11pm</strong> (≈8 runs/day across business + evening hours). It is <em>not</em> literally hourly, and it is <em>not</em> the once-daily 3 AM described in the design doc. The 2026-05-15 run record confirms the trigger ("Triggered by: Scheduled task (debug-agent-rcdo)").</p>
+<p>For Foundry we'll need to decide our own cadence — and remember the same constraint: the harness must run in Cowork (or an equivalent agent runtime), not as a plain server cron.</p>
+<hr />
+<h2 id="11-notifications">11. Notifications</h2>
+<p>Built on the DD-138 notification system. Resolving an item (agent or human) sends:
+- <strong>To the submitter</strong> — a <code>feedback_response</code> notification with the plain-language resolution note (no jargon; written for the person who filed it).
+- <strong>To admins</strong> — an <code>agent_resolution</code> notification: robot/gear icon, blue accent, expandable to show original item, diagnosis summary, confidence score, linkable commit hash, files changed, with "Looks good" (dismiss) and "Review in dev" (opens dev to the screen) actions. Desktop admins can revert a bad resolution from the notification; mobile is read-only for agent actions.</p>
+<hr />
+<h2 id="12-what-a-real-run-looks-like-2026-05-15-1604">12. What a real run looks like (2026-05-15, 16:04)</h2>
+<p>A concrete, instructive example of the <em>route-and-skip</em> behavior:
+- Fetched 3 open bugs + 1 enhancement.
+- <strong>0 eligible after filter</strong> — all 3 bugs had <code>screen: "admin"</code>, which is <strong>not</strong> in the Phase 1 whitelist, so all were skipped at Step 2 with no diagnosis attempted. The enhancement (also <code>admin</code>) wasn't reclassified because screen-whitelisting comes first.
+- The bugs were real (live-transcription issues, Loom evidence) — the agent simply isn't authorized for that screen yet.
+- Infra note: the Linux sandbox was down that run (disk exhaustion), so the agent fell back to Chrome MCP for API calls; repo clone wasn't possible but wasn't needed since nothing passed the filter.
+- The agent's own observation to the PM: either expand the whitelist to include <code>admin</code>, or triage these manually.</p>
+<p>The takeaway: <strong>the whitelist is doing real gatekeeping</strong>, and a run that fixes nothing is a normal, successful outcome.</p>
+<hr />
+<h2 id="13-gaps-rcdo-specific-assumptions-that-matter-for-foundry">13. Gaps &amp; RCDO-specific assumptions that matter for Foundry</h2>
+<p>These are the things that will bite us if we copy RCDO naively into Foundry:</p>
+<ol>
+<li><strong>Whitelist drift / screen naming.</strong> The agent's whitelist (chat, my-week, hierarchy) predates RCDO's current active screens (WorkspaceView, MyWeekPage, <strong>ExecutionDashboard</strong>). <code>ExecutionDashboard</code> (analytics) isn't whitelisted, and the <code>admin</code> screen — where real bugs are landing — is excluded. Foundry's whitelist (Mission Map, Mission Builder, Concept Bank, per debug-agent v1.5) needs to match Foundry's actual screens and be kept in sync.</li>
+<li><strong>API key inconsistency.</strong> <code>ADMIN_API_KEY</code> (feedback-triage) vs. <code>x-api-key: rcdo-cowork-2026</code> (debug-agent). Pin down one before replicating. Foundry already uses a distinct key (<code>FOUNDRY_AGENT_API_KEY</code> / <code>foundry-cowork-2026</code>).</li>
+<li><strong>Payload-shape divergence (already real).</strong> Foundry's agent-review endpoint takes a different shape than RCDO's: RCDO sends <code>admin_notes</code> as a JSON <strong>string</strong>; Foundry's <code>PUT /api/admin/bug-reports/:id/agent-review</code> takes <code>agent_diagnosis</code> as a JSON <strong>object</strong> plus <code>agent_status</code> enum, <code>agent_pr_url</code>, <code>close_status</code>. Foundry also stores confidence as a normalized 0–1 float, not RCDO's 4–12 score. The debug-agent skill already encodes both — but it's the #1 thing to get right, since a mismatch shows up as Zod parse errors on the receiving side.</li>
+<li><strong>agent-runs POST bug.</strong> RCDO's <code>POST /api/feedback/agent-runs</code> returned "Run id required" on 2026-05-15 — an unresolved field-name mismatch. Don't inherit the bug.</li>
+<li><strong>Smoke Test Manifest is module-specific.</strong> RCDO's selectors were left "TBD — verify against codebase" in the design doc. Foundry's own <code>5-Technical/Smoke Test Manifest v1.md</code> <strong>already exists</strong> (authored 2026-05-21, 7 sections covering Mission Map / Builder / Concept Bank, intake, agent-runs, migrations, corpus) — so this is built for Foundry, not a gap. RCDO's selectors still want a verification pass.</li>
+<li><strong>Calibration/backtest was a go-live gate that we should honor.</strong> The Design Request requires backtesting the confidence model against historical resolved feedback before enabling auto-resolution. Worth repeating for Foundry rather than enabling auto-fix cold.</li>
+<li><strong>Runtime constraint.</strong> The pipeline can't run as a server-side cron — it needs Cowork's repo/clone/push capabilities. Whatever schedules Foundry's agent has to provide those.</li>
+</ol>
+<hr />
+<h2 id="14-what-this-means-for-the-foundry-harness-preview-of-part-two">14. What this means for the Foundry harness (preview of part two)</h2>
+<p>Not for build yet — listed so Mark can sanity-check scope. Foundry already has a config block in <code>debug-agent</code> v1.5 (added 2026-05-21), a distinct repo (<code>ST6-Partners/Foundry</code>), its own admin bug-report endpoints, its own auth key, and a normalized-float confidence convention. The harness work is therefore mostly: (a) confirm/seed the Foundry feedback-capture + API surface, (b) author Foundry's Smoke Test Manifest with real selectors, (c) reconcile the whitelist to Foundry's real screens, (d) backtest/calibrate, (e) stand up the Cowork scheduled task with a chosen cadence. Details to follow once this doc is confirmed.</p>
+<hr />
+<h2 id="15-open-questions-resolved-sarah-2026-06-01">15. Open questions — resolved (Sarah, 2026-06-01)</h2>
+<ol>
+<li><strong>Cadence:</strong> ✅ Foundry runs <strong>every 2 hours, 9am–11pm</strong> (matches Signal). Note: supersedes Foundry's DD-AAF-04 (manual-only) — that DD needs a version bump.</li>
+<li><strong>Schedule wording:</strong> ✅ confirmed — the "hourly during business hours" framing was shorthand; the real cadence (Signal and now Foundry) is every 2 hours, 9am–11pm.</li>
+<li><strong>API key:</strong> ✅ Foundry uses its <strong>own</strong> key <code>foundry-cowork-2026</code> (env <code>FOUNDRY_AGENT_API_KEY</code>), never RCDO's. (The flagged item was an inconsistency inside RCDO's own docs — <code>ADMIN_API_KEY</code> in feedback-triage vs. <code>rcdo-cowork-2026</code> in debug-agent; still worth pinning down on the RCDO side, but moot for Foundry.)</li>
+<li><strong>Whitelist philosophy:</strong> ✅ whitelist the screens — Foundry whitelists Mission Map / Mission Builder / Concept Bank, widening later once runs are clean.</li>
+<li><strong>Auto-fix gate:</strong> ✅ no separate backtest/hold-back phase — arm auto-fix at high confidence (<code>≥0.8</code> float ≈ 10/12) from day one and tune live.</li>
+<li>Open for Mark: anything in §13 to re-frame or correct.</li>
+</ol>
+</body></html>

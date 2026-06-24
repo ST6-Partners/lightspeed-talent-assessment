@@ -1,0 +1,47 @@
+run = "npm run dev"
+entrypoint = "server.ts"
+modules = ["nodejs-20", "postgresql-16", "python-3.11"]
+hidden = [".config", "package-lock.json", "node_modules"]
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+build = ["sh", "-c", "npm ci --include=dev && npm run build"]
+run = ["npm", "start"]
+deploymentTarget = "cloudrun"
+
+[agent]
+expertMode = true
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "NODE_ENV=development npm run dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 3000
+externalPort = 3001
+
+[[ports]]
+localPort = 5000
+externalPort = 80
