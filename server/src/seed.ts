@@ -14,6 +14,7 @@
 
 import { db } from './db.js';
 import { appSettings, screenInventory } from './db/schema/core.js';
+import { seedHiring } from './seedHiring.js';
 
 async function seed() {
   console.log('Seeding Template App database...');
@@ -54,6 +55,9 @@ async function seed() {
     { screenKey: 'sysadmin-jobs', name: 'Sysadmin: System Jobs', routePattern: '/sysadmin/jobs', sortOrder: 21 },
     { screenKey: 'sysadmin-backups', name: 'Sysadmin: Backups', routePattern: '/sysadmin/backups', sortOrder: 22 },
   ]).onConflictDoNothing();
+
+  // Hiring pipeline sample/demo data (idempotent; RESEED=1 to wipe & reseed)
+  await seedHiring();
 
   console.log('Seed complete.');
   process.exit(0);
