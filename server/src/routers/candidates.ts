@@ -13,7 +13,9 @@ import {
   emailApplicationReceived,
   emailNewApplicationHR,
   dispatchStageEmail,
+  emailInterviewerQuestions,
 } from '../services/email.js';
+import { generateInterviewQuestions } from '../services/ai.js';
 
 const STAGES = [
   'Applied',
@@ -181,8 +183,51 @@ export const candidatesRouter = router({
         email: existing.email,
         jobTitle,
         workSampleInstructions: jd?.workSampleInstructions ?? undefined,
-        interviewerName: existing.interviewerName,
+        interviewerName: (existing as any).interviewerName,
       }).catch(() => {});
+
+      // When advancing to Interview Scheduled:
+      // 1. Generate tailored interview questions (AI)
+      // 2. Email questions to the interviewer
+      if (input.toStage === 'Interview Scheduled') {
+        (async () => {
+          try {
+            const questions = await generateInterviewQuestions({
+              firstName: existing.firstName,
+              lastName: existing.lastName,
+              jobTitle: jobTitle ?? undefined,
+              eppProfile: (existing as any).eppProfile,
+              eppValuesMatchScore: (existing as any).eppValuesMatchScore,
+              resumeReviewNotes: (existing as any).resumeReviewNotes,
+              resumeReviewScore: (existing as any).resumeReviewScore,
+              referenceCheckNotes: (existing as any).referenceCheckNotes,
+              referenceCheckScore: (existing as any).referenceCheckScore,
+              workSampleScore: (existing as any).workSampleScore,
+              ccatScore: (existing as any).ccatScore,
+            });
+
+            // Store questions on candidate record
+            await ctx.db.update(candidates)
+              .set({ interviewQuestions: questions, updatedAt: new Date() } as any)
+              .where(eq(candidates.id, input.id));
+
+            // Email questions to interviewer if email is set
+            const interviewerEmail = (existing as any).interviewerEmail;
+            if (interviewerEmail) {
+              await emailInterviewerQuestions({
+                interviewerEmail,
+                interviewerName: (existing as any).interviewerName ?? 'Interviewer',
+                candidateFirstName: existing.firstName,
+                candidateLastName: existing.lastName,
+                jobTitle: jobTitle ?? 'the role',
+                questions,
+              });
+            }
+          } catch (err) {
+            console.error('[AI] Interview question generation failed:', err);
+          }
+        })();
+      }
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'advance_stage', 'candidates', {

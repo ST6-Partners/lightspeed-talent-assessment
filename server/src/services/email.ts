@@ -383,6 +383,48 @@ export async function emailCandidateHiredHR(data: CandidateEmailData) {
   });
 }
 
+// 18. Interview questions → interviewer
+export async function emailInterviewerQuestions(data: {
+  interviewerEmail: string;
+  interviewerName: string;
+  candidateFirstName: string;
+  candidateLastName: string;
+  jobTitle: string;
+  questions: Array<{ category: string; question: string; rationale: string }>;
+}) {
+  const questionRows = data.questions.map((q, i) => `
+    <tr>
+      <td style="padding: 10px 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px; color: #555; white-space: nowrap;">${q.category}</td>
+      <td style="padding: 10px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px;">
+        <strong>${i + 1}. ${q.question}</strong>
+        ${q.rationale ? `<br/><span style="font-size: 12px; color: #888;">${q.rationale}</span>` : ''}
+      </td>
+    </tr>
+  `).join('');
+
+  await sendEmail({
+    to: data.interviewerEmail,
+    templateId: 'interviewer_questions',
+    subject: `Interview prep: ${data.candidateFirstName} ${data.candidateLastName} — ${data.jobTitle}`,
+    html: wrap(`
+      ${h1('AI-Generated Interview Questions')}
+      ${p(`Hi ${data.interviewerName},`)}
+      ${p(`Here are tailored interview questions for <strong>${data.candidateFirstName} ${data.candidateLastName}</strong> applying for <strong>${data.jobTitle}</strong>. These were generated based on their CCAT results, EPP profile, resume review, and reference checks.`)}
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0 24px;">
+        <thead>
+          <tr style="background: #f5f5f5;">
+            <th style="padding: 8px 12px; text-align: left; font-size: 12px; text-transform: uppercase; color: #888; width: 130px;">Category</th>
+            <th style="padding: 8px 12px; text-align: left; font-size: 12px; text-transform: uppercase; color: #888;">Question</th>
+          </tr>
+        </thead>
+        <tbody>${questionRows}</tbody>
+      </table>
+      ${p('You don\'t need to ask every question — use these as a guide. Focus on areas where the candidate showed lower scores or where the notes flagged something to probe.')}
+      ${p('Questions or concerns? Reply to this email or reach out to the hiring team.')}
+    `),
+  });
+}
+
 // ── Stage-transition dispatcher ────────────────────────────
 // Called by the candidates router on every stage change.
 
