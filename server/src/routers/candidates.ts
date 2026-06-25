@@ -116,7 +116,11 @@ export const candidatesRouter = router({
       workSampleScore: z.number().int().optional(),
       resumeReviewScore: z.number().int().optional(),
       referenceCheckScore: z.number().int().optional(),
+      resumeReviewNotes: z.string().optional(),
+      referenceCheckNotes: z.string().optional(),
+      valuesMatchNotes: z.string().optional(),
       interviewerName: z.string().max(200).optional(),
+      interviewerEmail: z.string().email().max(300).optional(),
       zoomMeetingId: z.string().max(100).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -229,6 +233,58 @@ export const candidatesRouter = router({
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'reject_candidate', 'candidates', { candidateId: input.id }).catch(() => {});
+      return candidate;
+    }),
+
+  // Mark assessment as sent (called when CCAT link is dispatched)
+  markAssessmentSent: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [candidate] = await ctx.db.update(candidates)
+        .set({ assessmentSentAt: new Date(), updatedAt: new Date() })
+        .where(eq(candidates.id, input.id))
+        .returning();
+      return candidate;
+    }),
+
+  // Store AI-generated interview questions
+  setInterviewQuestions: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      questions: z.array(z.object({
+        category: z.string(),
+        question: z.string(),
+        rationale: z.string().optional(),
+      })),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const [candidate] = await ctx.db.update(candidates)
+        .set({ interviewQuestions: input.questions, updatedAt: new Date() })
+        .where(eq(candidates.id, input.id))
+        .returning();
+      return candidate;
+    }),
+
+  // Store Zoom transcript + AI feedback after interview
+  setInterviewFeedback: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      transcript: z.string().optional(),
+      feedbackHr: z.string(),
+      feedbackCandidate: z.string(),
+      interviewScore: z.number().int().min(0).max(100),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const [candidate] = await ctx.db.update(candidates)
+        .set({
+          interviewTranscript: input.transcript,
+          interviewFeedbackHr: input.feedbackHr,
+          interviewFeedbackCandidate: input.feedbackCandidate,
+          interviewScore: input.interviewScore,
+          updatedAt: new Date(),
+        })
+        .where(eq(candidates.id, input.id))
+        .returning();
       return candidate;
     }),
 });

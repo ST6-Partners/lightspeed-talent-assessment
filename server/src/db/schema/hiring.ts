@@ -110,9 +110,23 @@ export const candidates = pgTable('candidates', {
   workSampleScore: integer('work_sample_score'),
   resumeReviewScore: integer('resume_review_score'),
   referenceCheckScore: integer('reference_check_score'),
+  // Work sample + resume + reference check notes
+  resumeReviewNotes: text('resume_review_notes'),
+  referenceCheckNotes: text('reference_check_notes'),
+  valuesMatchNotes: text('values_match_notes'),
+  // Assessment timing (for reminder + auto-reject scheduler)
+  assessmentSentAt: timestamp('assessment_sent_at', { withTimezone: true }),
+  assessmentCompletedAt: timestamp('assessment_completed_at', { withTimezone: true }),
   // Interview
   interviewerName: varchar('interviewer_name', { length: 200 }),
+  interviewerEmail: varchar('interviewer_email', { length: 300 }),
   zoomMeetingId: varchar('zoom_meeting_id', { length: 100 }),
+  // AI-generated interview content
+  interviewQuestions: jsonb('interview_questions'),
+  interviewTranscript: text('interview_transcript'),
+  interviewFeedbackHr: text('interview_feedback_hr'),
+  interviewFeedbackCandidate: text('interview_feedback_candidate'),
+  interviewScore: integer('interview_score'),
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
