@@ -15,6 +15,13 @@
       "when": 1750870000000,
       "tag": "0001_hiring_pipeline",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1750871000000,
+      "tag": "0002_hiring_pipeline_ifnotexists",
+      "breakpoints": true
     }
   ]
 }
