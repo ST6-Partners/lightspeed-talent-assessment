@@ -1,14 +1,19 @@
 // ============================================================
-// CANDIDATES ROUTER — CRUD + stage management
+// CANDIDATES ROUTER — CRUD + stage management + email triggers
 // ============================================================
 
 import { z } from 'zod';
 import { eq, desc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
-import { candidates, candidateStageHistory } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
+import {
+  emailApplicationReceived,
+  emailNewApplicationHR,
+  dispatchStageEmail,
+} from '../services/email.js';
 
 const STAGES = [
   'Applied',
@@ -35,6 +40,15 @@ const CandidateInput = z.object({
   source: z.string().max(100).optional(),
   notes: z.string().optional(),
 });
+
+// Helper: fetch job title for email context
+async function getJobTitle(db: any, jdId: string | null | undefined): Promise<string | undefined> {
+  if (!jdId) return undefined;
+  const jd = await db.query.jobDescriptions.findFirst({
+    where: eq(jobDescriptions.id, jdId),
+  });
+  return jd?.jobTitle;
+}
 
 export const candidatesRouter = router({
   list: protectedProcedure
@@ -85,6 +99,11 @@ export const candidatesRouter = router({
         reason: 'Application received',
       });
 
+      // Fire emails (non-blocking)
+      const jobTitle = await getJobTitle(ctx.db, input.jdId);
+      emailApplicationReceived({ ...input, jobTitle }).catch(() => {});
+      emailNewApplicationHR({ ...input, jobTitle }).catch(() => {});
+
       await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'create');
       trackActivity(ctx.db, ctx.user.id, 'create_candidate', 'candidates', { candidateId: candidate.id }).catch(() => {});
       return candidate;
@@ -117,7 +136,7 @@ export const candidatesRouter = router({
       return candidate;
     }),
 
-  // Advance a candidate to the next stage (or any stage HR specifies)
+  // Advance a candidate to the next stage
   advanceStage: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
@@ -147,6 +166,20 @@ export const candidatesRouter = router({
         reason: input.reason,
       });
 
+      // Fire emails (non-blocking)
+      const jobTitle = await getJobTitle(ctx.db, existing.jdId);
+      const jd = existing.jdId
+        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, existing.jdId) })
+        : null;
+      dispatchStageEmail(input.toStage, existing.currentStage, {
+        firstName: existing.firstName,
+        lastName: existing.lastName,
+        email: existing.email,
+        jobTitle,
+        workSampleInstructions: jd?.workSampleInstructions ?? undefined,
+        interviewerName: existing.interviewerName,
+      }).catch(() => {});
+
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'advance_stage', 'candidates', {
         candidateId: input.id,
@@ -157,7 +190,7 @@ export const candidatesRouter = router({
       return candidate;
     }),
 
-  // Reject a candidate — moves to Rejected + logs reason
+  // Reject a candidate
   reject: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
@@ -184,6 +217,15 @@ export const candidatesRouter = router({
         changedBy: ctx.user.id,
         reason: input.reason,
       });
+
+      // Fire rejection email (non-blocking)
+      const jobTitle = await getJobTitle(ctx.db, existing.jdId);
+      dispatchStageEmail('Rejected', existing.currentStage, {
+        firstName: existing.firstName,
+        lastName: existing.lastName,
+        email: existing.email,
+        jobTitle,
+      }).catch(() => {});
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'reject_candidate', 'candidates', { candidateId: input.id }).catch(() => {});
