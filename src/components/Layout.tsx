@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Database, Settings, MessageSquare, LogOut, Bot } from 'lucide-react';
+import { Home, Database, Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
@@ -18,6 +18,13 @@ const navItems = [
   { path: '/admin/settings', label: 'Settings', icon: Settings },
 ];
 
+const hiringNavItems = [
+  { path: '/hiring', label: 'Overview', icon: LayoutDashboard },
+  { path: '/hiring/requisitions', label: 'Requisitions', icon: ClipboardList },
+  { path: '/hiring/jobs', label: 'Job Descriptions', icon: FileText },
+  { path: '/hiring/candidates', label: 'Candidates', icon: Users },
+];
+
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -28,9 +35,6 @@ export default function Layout() {
   const logoutMutation = trpc.auth.logout.useMutation();
 
   const handleLogout = async () => {
-    // Clear BOTH auth channels: the localStorage bearer token (primary path
-    // in the Replit iframe) and the server-side session + cookie (first-party
-    // path). The tRPC logout destroys req.session and clears tmpl.sid.
     localStorage.removeItem('auth_token');
     try {
       await logoutMutation.mutateAsync();
@@ -63,6 +67,8 @@ export default function Layout() {
     );
   }
 
+  const isHiringSection = location.pathname.startsWith('/hiring');
+
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
@@ -71,8 +77,33 @@ export default function Layout() {
           <h1 className="text-lg font-semibold text-white">Lightspeed Talent Assessment</h1>
           <p className="text-xs text-gray-400 mt-1">Talent Assessment</p>
         </div>
-        <nav className="flex-1 py-4 space-y-1 px-2">
+        <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+                  isActive
+                    ? 'bg-gray-700 text-white font-medium'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}
+              >
+                <Icon size={18} />
+                {item.label}
+              </Link>
+            );
+          })}
+
+          {/* Hiring Pipeline section */}
+          <div className="pt-3 pb-1">
+            <div className="px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+              Hiring Pipeline
+            </div>
+          </div>
+          {hiringNavItems.map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
             return (

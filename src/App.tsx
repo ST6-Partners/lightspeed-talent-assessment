@@ -5,6 +5,11 @@ import Entities from './pages/Entities';
 import Chat from './pages/Chat';
 import Login from './pages/Login';
 import AdminSettings from './pages/AdminSettings';
+// Hiring Pipeline
+import HiringDashboard from './pages/hiring/HiringDashboard';
+import Requisitions from './pages/hiring/Requisitions';
+import JobDescriptions from './pages/hiring/JobDescriptions';
+import Candidates from './pages/hiring/Candidates';
 
 export default function App() {
   return (
@@ -15,6 +20,11 @@ export default function App() {
         <Route path="/entities" element={<Entities />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
+        {/* Hiring Pipeline */}
+        <Route path="/hiring" element={<HiringDashboard />} />
+        <Route path="/hiring/requisitions" element={<Requisitions />} />
+        <Route path="/hiring/jobs" element={<JobDescriptions />} />
+        <Route path="/hiring/candidates" element={<Candidates />} />
       </Route>
     </Routes>
   );

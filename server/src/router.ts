@@ -18,6 +18,10 @@ import { systemRouter } from './routers/system.js';
 import { releasesRouter } from './routers/releases.js';
 import { onboardingVideosRouter } from './routers/onboardingVideos.js';
 import { chatRouter } from './routers/chat.js';
+// Hiring Pipeline
+import { requisitionsRouter } from './routers/requisitions.js';
+import { jobDescriptionsRouter } from './routers/jobDescriptions.js';
+import { candidatesRouter } from './routers/candidates.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -27,14 +31,18 @@ export const appRouter = router({
   notifications: notificationsRouter,
   telemetry: telemetryRouter,
   feedbackAdmin: feedbackAdminRouter,
-  feedbackReview: feedbackReviewRouter,   // pre-submit AI review (SC-002 / Contract §5)
+  feedbackReview: feedbackReviewRouter,
   agent: agentRouter,
-  feedbackApprove: feedbackApproveRouter,                     // propose-and-approve auto-fix harness (SC-034)
+  feedbackApprove: feedbackApproveRouter,
   prompts: promptsRouter,
   system: systemRouter,
   releases: releasesRouter,
   onboardingVideos: onboardingVideosRouter,
   chat: chatRouter,
+  // Hiring Pipeline
+  requisitions: requisitionsRouter,
+  jobDescriptions: jobDescriptionsRouter,
+  candidates: candidatesRouter,
 });
 
 export type AppRouter = typeof appRouter;

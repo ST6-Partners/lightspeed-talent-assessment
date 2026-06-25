@@ -27,4 +27,17 @@ export { systemJobs, backupLog, onboardingVideos } from './system.js';
 // Sample Domain Entity (1 table) — adopters replace with their domain
 export { sampleEntities } from './sampleEntity.js';
 
-// Total: 23 tables (22 infrastructure + 1 sample domain)
+// Hiring Pipeline (5 tables)
+export {
+  jobRequisitions,
+  jobDescriptions,
+  candidates,
+  candidateStageHistory,
+  emailLog,
+  candidateStageEnum,
+  requisitionStatusEnum,
+  jdStatusEnum,
+  emailStatusEnum,
+} from './hiring.js';
+
+// Total: 28 tables (22 infrastructure + 1 sample domain + 5 hiring pipeline)
