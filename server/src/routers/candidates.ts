@@ -6,14 +6,18 @@ import { z } from 'zod';
 import { eq, desc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
-import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, jobDescriptions, emailLog } from '../db/schema/hiring.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
+import { analyzeEpp } from '../services/eppAnalyzer.js';
+import { analyzeInterviewTranscript } from '../services/ai.js';
+import { sendAssessment, getScores } from '../services/criteriaCorp.js';
 import {
   emailApplicationReceived,
   emailNewApplicationHR,
   dispatchStageEmail,
   emailInterviewerQuestions,
+  sendEmail,
 } from '../services/email.js';
 import { generateInterviewQuestions } from '../services/ai.js';
 
@@ -308,6 +312,237 @@ export const candidatesRouter = router({
         .where(eq(candidates.id, input.id))
         .returning();
       return candidate;
+    }),
+
+  // Send CCAT + EPP assessment invitation via Criteria Corp
+  sendAssessment: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({
+        where: eq(candidates.id, input.id),
+      });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      if (candidate.criteriaCorpId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Assessment already sent — use refreshScores to pull latest results',
+        });
+      }
+
+      const jd = candidate.jdId
+        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null;
+
+      const result = await sendAssessment({
+        candidateId: candidate.id,
+        firstName:   candidate.firstName,
+        lastName:    candidate.lastName,
+        email:       candidate.email,
+        jobTitle:    jd?.jobTitle ?? 'Unknown',
+      });
+
+      // Store the Criteria Corp applicant ID + mark assessment as sent
+      await ctx.db.update(candidates)
+        .set({
+          criteriaCorpId:  result.criteriaApplicantId,
+          assessmentSentAt: new Date(),
+          updatedAt:        new Date(),
+        })
+        .where(eq(candidates.id, input.id));
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      return { ...result, candidateId: input.id };
+    }),
+
+  // Pull latest CCAT + EPP scores from Criteria Corp
+  refreshScores: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({
+        where: eq(candidates.id, input.id),
+      });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      if (!candidate.criteriaCorpId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'No assessment sent yet — send assessment first',
+        });
+      }
+
+      const scores = await getScores(candidate.criteriaCorpId);
+
+      // Only update if assessment is actually completed
+      if (scores.status !== 'completed') {
+        return { status: scores.status, message: 'Assessment not yet completed', scores: null };
+      }
+
+      await ctx.db.update(candidates)
+        .set({
+          ccatScore:             scores.ccatScore ?? undefined,
+          eppProfile:            scores.eppProfile ?? undefined,
+          assessmentCompletedAt: scores.assessmentCompletedAt ? new Date(scores.assessmentCompletedAt) : undefined,
+          updatedAt:             new Date(),
+        })
+        .where(eq(candidates.id, input.id));
+
+      // Auto-run EPP analysis if we got an EPP profile back
+      if (scores.eppProfile) {
+        const jd = candidate.jdId
+          ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+          : null;
+        const requiredValues: string[] = Array.isArray(jd?.eppValues) ? jd.eppValues as string[] : [];
+
+        const { analyzeEpp: runEpp } = await import('../services/eppAnalyzer.js');
+        const analysis = runEpp(scores.eppProfile, requiredValues);
+
+        await ctx.db.update(candidates)
+          .set({ eppValuesMatchScore: analysis.score ?? undefined, updatedAt: new Date() })
+          .where(eq(candidates.id, input.id));
+      }
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      return { status: 'completed', scores };
+    }),
+
+  // Run EPP vs. values analysis for a candidate
+  analyzeEpp: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({
+        where: eq(candidates.id, input.id),
+      });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      if (!candidate.eppProfile) {
+        return { skipped: true, reason: 'No EPP profile on record — run after Criteria Corp EPP results are received' };
+      }
+
+      const jd = candidate.jdId
+        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null;
+
+      const requiredValues: string[] = Array.isArray(jd?.eppValues) ? jd.eppValues as string[] : [];
+      const analysis = analyzeEpp(candidate.eppProfile as Record<string, number>, requiredValues);
+
+      // Persist the score
+      await ctx.db.update(candidates)
+        .set({ eppValuesMatchScore: analysis.score ?? undefined, updatedAt: new Date() })
+        .where(eq(candidates.id, input.id));
+
+      // If in Work Sample stage and passes → advance to Values Review
+      let stageAction: string | null = null;
+      if (candidate.currentStage === 'Work Sample' && analysis.score !== null) {
+        if (analysis.pass) {
+          await ctx.db.update(candidates)
+            .set({ currentStage: 'Values Review', updatedAt: new Date() })
+            .where(eq(candidates.id, input.id));
+          await ctx.db.insert(candidateStageHistory).values({
+            candidateId: input.id,
+            fromStage: 'Work Sample',
+            toStage: 'Values Review',
+            changedBy: ctx.user.id,
+            reason: `EPP values match score ${analysis.score} met threshold of ${analysis.threshold}`,
+          });
+          stageAction = 'advanced_to_values_review';
+        } else {
+          stageAction = 'held_at_work_sample';
+        }
+      }
+
+      return { analysis, stageAction };
+    }),
+
+  // Process interview transcript through AI and store feedback
+  processInterviewFeedback: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      transcript: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({
+        where: eq(candidates.id, input.id),
+      });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const jd = candidate.jdId
+        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null;
+
+      // Store transcript if provided
+      if (input.transcript) {
+        await ctx.db.update(candidates)
+          .set({ interviewTranscript: input.transcript, updatedAt: new Date() })
+          .where(eq(candidates.id, input.id));
+      }
+
+      const transcript = input.transcript ?? candidate.interviewTranscript ?? undefined;
+
+      // Run AI feedback analysis
+      const feedback = await analyzeInterviewTranscript({
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        jobTitle: jd?.jobTitle ?? undefined,
+        transcript,
+        interviewQuestions: candidate.interviewQuestions as any ?? null,
+        ccatScore: candidate.ccatScore,
+        eppValuesMatchScore: candidate.eppValuesMatchScore,
+        workSampleScore: candidate.workSampleScore,
+        resumeReviewScore: candidate.resumeReviewScore,
+        referenceCheckScore: candidate.referenceCheckScore,
+      });
+
+      // Store results
+      await ctx.db.update(candidates)
+        .set({
+          interviewFeedbackHr: feedback.feedbackHr,
+          interviewFeedbackCandidate: feedback.feedbackCandidate,
+          interviewScore: feedback.interviewScore,
+          updatedAt: new Date(),
+        })
+        .where(eq(candidates.id, input.id));
+
+      // HR feedback email
+      const hrSubject = `Interview debrief: ${candidate.firstName} ${candidate.lastName} — ${jd?.jobTitle ?? 'candidate'}`;
+      await sendEmail({
+        to: process.env.HR_EMAIL ?? 'jade.friedman@lsscorp.net',
+        subject: hrSubject,
+        templateId: 'interview_feedback_hr',
+        html: `
+          <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1a1a1a;">
+            <h2>Interview Feedback — ${candidate.firstName} ${candidate.lastName}</h2>
+            <p><strong>Role:</strong> ${jd?.jobTitle ?? 'Unknown'} &nbsp;|&nbsp; <strong>Score:</strong> ${feedback.interviewScore}/100</p>
+            <hr style="border:none;border-top:1px solid #e5e5e5;margin:20px 0;"/>
+            <pre style="white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.6;">${feedback.feedbackHr}</pre>
+          </div>
+        `,
+      });
+
+      // Candidate feedback email (if in Interviewed stage)
+      if (candidate.currentStage === 'Interviewed') {
+        const candSubject = `Your interview feedback — ${jd?.jobTitle ?? 'Lightspeed Systems'}`;
+        await sendEmail({
+          to: candidate.email,
+          subject: candSubject,
+          templateId: 'interview_feedback_candidate',
+          html: `
+            <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#1a1a1a;">
+              <h2>Interview feedback</h2>
+              <p>Hi ${candidate.firstName},</p>
+              <p>Thank you for interviewing for <strong>${jd?.jobTitle ?? 'the position'}</strong>. Here's a summary of your interview feedback:</p>
+              <div style="background:#f5f5f5;border-radius:8px;padding:16px 20px;font-size:14px;line-height:1.6;">
+                ${feedback.feedbackCandidate}
+              </div>
+              <p style="margin-top:20px;">We'll be in touch with next steps shortly.</p>
+              <p>Best,<br/>Lightspeed Systems Recruiting</p>
+            </div>
+          `,
+        });
+      }
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      return { feedback, candidateId: input.id };
     }),
 
   // Store Zoom transcript + AI feedback after interview

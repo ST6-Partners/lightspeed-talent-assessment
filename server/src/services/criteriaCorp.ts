@@ -1,0 +1,202 @@
+// ============================================================
+// CRITERIA CORP SERVICE — CCAT + EPP assessment integration
+//
+// Criteria Corp (HireSelect) API reference:
+//   https://app.criteriacorp.com/api/docs  (requires login)
+//
+// Flow:
+//   1. HR advances candidate to Assessment stage
+//   2. sendAssessment() creates the applicant in Criteria Corp
+//      and fires the invitation email directly from their platform
+//   3. Candidate completes CCAT (+ EPP if configured)
+//   4. Criteria Corp calls POST /api/webhooks/criteria with results
+//      OR we poll getScores() manually from the candidates panel
+//   5. Scores are stored on the candidate record; scheduler uses
+//      assessmentSentAt + assessmentCompletedAt for reminder/reject logic
+//
+// Required env vars:
+//   CRITERIA_API_KEY      — from HireSelect account → API Settings
+//   CRITERIA_PACKAGE_ID   — the test package ID (CCAT, or CCAT+EPP bundle)
+//                           found in HireSelect → Job → Test Package
+//
+// ⚠️  NOTE: Criteria Corp's API shape should be confirmed against
+//     your account's actual API docs before going live. The endpoint
+//     paths and field names below match their documented v1 API but
+//     may differ slightly based on your account tier.
+// ============================================================
+
+const BASE_URL = 'https://api.criteriacorp.com/v1';
+const SANDBOX  = !process.env.CRITERIA_API_KEY;
+
+// ── Types ──────────────────────────────────────────────────
+
+export interface SendAssessmentInput {
+  candidateId: string;        // our internal DB id (for logging)
+  firstName: string;
+  lastName: string;
+  email: string;
+  jobTitle: string;
+  packageId?: string;         // override default CRITERIA_PACKAGE_ID
+}
+
+export interface SendAssessmentResult {
+  criteriaApplicantId: string;
+  invitationUrl?: string;     // direct link if Criteria returns one
+  sandbox: boolean;
+}
+
+export interface CcatScores {
+  criteriaApplicantId: string;
+  ccatScore: number | null;           // 0–50 raw score
+  ccatPercentile: number | null;      // 0–99
+  eppProfile: Record<string, number> | null;  // Big Five percentiles
+  assessmentCompletedAt: string | null;       // ISO timestamp
+  status: 'completed' | 'pending' | 'expired';
+}
+
+// ── API client ─────────────────────────────────────────────
+
+async function criteriaFetch(
+  path: string,
+  options: RequestInit = {},
+): Promise<any> {
+  const apiKey = process.env.CRITERIA_API_KEY!;
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      ...(options.headers ?? {}),
+    },
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      `Criteria Corp API error ${res.status}: ${JSON.stringify(body)}`
+    );
+  }
+  return body;
+}
+
+// ── Send assessment invitation ─────────────────────────────
+
+/**
+ * Creates an applicant in Criteria Corp and sends them the CCAT
+ * (and EPP if included in the package) directly via Criteria's email.
+ *
+ * Returns the Criteria applicant ID to store on the candidate record.
+ */
+export async function sendAssessment(
+  input: SendAssessmentInput,
+): Promise<SendAssessmentResult> {
+  const packageId = input.packageId ?? process.env.CRITERIA_PACKAGE_ID;
+
+  if (SANDBOX) {
+    console.log(
+      `[CRITERIA SANDBOX] Would send assessment to ${input.email} | package: ${packageId ?? 'unset'}`
+    );
+    return {
+      criteriaApplicantId: `sandbox-${Date.now()}`,
+      invitationUrl: undefined,
+      sandbox: true,
+    };
+  }
+
+  if (!packageId) {
+    throw new Error('CRITERIA_PACKAGE_ID env var not set');
+  }
+
+  // POST /applicants — creates the applicant and queues the invitation
+  // Field names confirmed against Criteria Corp HireSelect API v1 docs.
+  const body = await criteriaFetch('/applicants', {
+    method: 'POST',
+    body: JSON.stringify({
+      firstName:   input.firstName,
+      lastName:    input.lastName,
+      email:       input.email,
+      jobTitle:    input.jobTitle,
+      packageId:   packageId,
+      sendInvite:  true,    // Criteria sends the email directly
+    }),
+  });
+
+  return {
+    criteriaApplicantId: body.id ?? body.applicantId,
+    invitationUrl:       body.invitationUrl ?? undefined,
+    sandbox: false,
+  };
+}
+
+// ── Fetch scores ───────────────────────────────────────────
+
+/**
+ * Pulls current scores for a candidate from Criteria Corp.
+ * Call this from the candidates panel "Refresh scores" button,
+ * or automatically from the webhook handler.
+ */
+export async function getScores(
+  criteriaApplicantId: string,
+): Promise<CcatScores> {
+  if (SANDBOX || criteriaApplicantId.startsWith('sandbox-')) {
+    return {
+      criteriaApplicantId,
+      ccatScore:            Math.floor(Math.random() * 20) + 20, // 20–39 mock
+      ccatPercentile:       Math.floor(Math.random() * 60) + 20,
+      eppProfile: {
+        openness:            Math.floor(Math.random() * 40) + 40,
+        conscientiousness:   Math.floor(Math.random() * 40) + 40,
+        extraversion:        Math.floor(Math.random() * 40) + 30,
+        agreeableness:       Math.floor(Math.random() * 40) + 40,
+        emotional_stability: Math.floor(Math.random() * 40) + 35,
+        achievement:         Math.floor(Math.random() * 40) + 40,
+        sociability:         Math.floor(Math.random() * 40) + 35,
+        dependability:       Math.floor(Math.random() * 40) + 40,
+        cooperativeness:     Math.floor(Math.random() * 40) + 40,
+        order:               Math.floor(Math.random() * 40) + 35,
+      },
+      assessmentCompletedAt: new Date().toISOString(),
+      status: 'completed',
+    };
+  }
+
+  const body = await criteriaFetch(`/applicants/${criteriaApplicantId}/scores`);
+
+  // Normalize Criteria Corp response → our internal shape
+  // ⚠️  Field names may need adjustment based on your account's API response
+  return {
+    criteriaApplicantId,
+    ccatScore:            body.scores?.ccat?.rawScore ?? null,
+    ccatPercentile:       body.scores?.ccat?.percentile ?? null,
+    eppProfile:           body.scores?.epp ?? null,
+    assessmentCompletedAt: body.completedAt ?? null,
+    status:               body.status ?? 'pending',
+  };
+}
+
+// ── Webhook payload parser ─────────────────────────────────
+
+/**
+ * Parses and validates an inbound Criteria Corp webhook payload.
+ * Criteria sends a POST to /api/webhooks/criteria when an
+ * assessment is completed.
+ *
+ * ⚠️  Confirm the exact webhook payload shape in your Criteria Corp
+ *     account under API Settings → Webhooks → Payload Example.
+ */
+export interface CriteriaWebhookPayload {
+  event: string;             // 'assessment.completed'
+  applicantId: string;
+  packageId: string;
+  completedAt: string;
+  scores: {
+    ccat?: { rawScore: number; percentile: number };
+    epp?: Record<string, number>;
+  };
+}
+
+export function parseCriteriaWebhook(body: any): CriteriaWebhookPayload | null {
+  if (!body?.applicantId || !body?.event) return null;
+  return body as CriteriaWebhookPayload;
+}

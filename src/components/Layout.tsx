@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Database, Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard } from 'lucide-react';
+import { Home, Database, Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
@@ -23,6 +23,7 @@ const hiringNavItems = [
   { path: '/hiring/requisitions', label: 'Requisitions', icon: ClipboardList },
   { path: '/hiring/jobs', label: 'Job Descriptions', icon: FileText },
   { path: '/hiring/candidates', label: 'Candidates', icon: Users },
+  { path: '/hiring/insights', label: 'Insights', icon: BarChart2 },
 ];
 
 export default function Layout() {

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -13,7 +14,10 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { inspect } from 'node:util';
 import { env } from './server/src/env.js';
 import { getSessionMiddleware, verifyToken } from './server/src/auth.js';
-import { registerBuiltInJobs } from './server/src/services/job-runner.js';
+import { registerBuiltInJobs, startCronJobs } from './server/src/services/job-runner.js';
+import { registerHiringJobs } from './server/src/services/hiring-scheduler.js';
+import { verifyZoomWebhook, handleZoomRecordingReady } from './server/src/services/zoomService.js';
+import { parseCriteriaWebhook } from './server/src/services/criteriaCorp.js';
 import { uploadFile, downloadFile, deleteFile } from './server/src/services/storage.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -95,7 +99,7 @@ async function main() {
 
   // Skip JSON body parsing for file upload routes (handled by express.raw inline)
   app.use((req, res, next) => {
-    if (req.path === '/api/upload/video') return next();
+    if (req.path === '/api/upload/video' || req.path === '/api/webhooks/zoom') return next();
     express.json()(req, res, next);
   });
 
@@ -225,6 +229,93 @@ async function main() {
     }
   });
 
+
+  // ── Criteria Corp webhook — assessment completed ──────────
+  app.post('/api/webhooks/criteria', async (req, res) => {
+    const payload = parseCriteriaWebhook(req.body);
+    if (!payload || payload.event !== 'assessment.completed') {
+      return res.json({ received: true, skipped: true });
+    }
+
+    res.json({ received: true }); // Acknowledge immediately
+
+    // Find candidate by criteriaCorpId and store scores
+    import('./server/src/db.js').then(async ({ db }) => {
+      const { eq } = await import('drizzle-orm');
+      const { candidates } = await import('./server/src/db/schema/hiring.js');
+
+      const candidate = await db.query.candidates.findFirst({
+        where: eq(candidates.criteriaCorpId, payload.applicantId),
+      });
+
+      if (!candidate) {
+        console.warn('[Criteria] No candidate found for applicantId:', payload.applicantId);
+        return;
+      }
+
+      const { analyzeEpp } = await import('./server/src/services/eppAnalyzer.js');
+      const jd = candidate.jdId
+        ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null;
+      const requiredValues = Array.isArray(jd?.eppValues) ? jd.eppValues : [];
+
+      const eppAnalysis = payload.scores.epp
+        ? analyzeEpp(payload.scores.epp, requiredValues as string[])
+        : null;
+
+      await db.update(candidates).set({
+        ccatScore:             payload.scores.ccat?.rawScore ?? undefined,
+        eppProfile:            payload.scores.epp ?? undefined,
+        eppValuesMatchScore:   eppAnalysis?.score ?? undefined,
+        assessmentCompletedAt: new Date(payload.completedAt),
+        updatedAt:             new Date(),
+      }).where(eq(candidates.id, candidate.id));
+
+      console.log('[Criteria] Scores saved for candidate:', candidate.id);
+    }).catch((err) => console.error('[Criteria] Webhook handler error:', err));
+  });
+
+  // ── Zoom webhook — recording ready ────────────────────────
+  app.post('/api/webhooks/zoom', express.raw({ type: '*/*' }), async (req, res) => {
+    const secret = process.env.ZOOM_WEBHOOK_SECRET_TOKEN;
+
+    // Handle Zoom URL validation challenge (one-time setup ping)
+    const rawBody = req.body.toString('utf8');
+    let parsed: any;
+    try { parsed = JSON.parse(rawBody); } catch { return res.status(400).json({ error: 'Invalid JSON' }); }
+
+    if (parsed.event === 'endpoint.url_validation') {
+      const hashForValidate = crypto
+        .createHmac('sha256', secret ?? '')
+        .update(parsed.payload.plainToken)
+        .digest('hex');
+      return res.json({ plainToken: parsed.payload.plainToken, encryptedToken: hashForValidate });
+    }
+
+    // Verify signature on all other events
+    if (secret) {
+      const timestamp = req.headers['x-zm-request-timestamp'] as string;
+      const signature = req.headers['x-zm-signature'] as string;
+      if (!timestamp || !signature || !verifyZoomWebhook(rawBody, timestamp, signature, secret)) {
+        console.warn('[Zoom] Webhook signature verification failed');
+        return res.status(401).json({ error: 'Invalid signature' });
+      }
+    } else {
+      console.warn('[Zoom] ZOOM_WEBHOOK_SECRET_TOKEN not set — skipping signature check');
+    }
+
+    // Only handle recording.completed events
+    if (parsed.event !== 'recording.completed') {
+      return res.json({ received: true, skipped: true });
+    }
+
+    res.json({ received: true }); // Acknowledge immediately before async work
+
+    handleZoomRecordingReady(parsed).catch((err) => {
+      console.error('[Zoom] handleZoomRecordingReady error:', err);
+    });
+  });
+
   app.use('/api/trpc', createExpressMiddleware({ router: appRouter, createContext }));
 
   // ── Frontend serving ─────────────────────────────────────────
@@ -264,6 +355,8 @@ async function main() {
   });
 
   registerBuiltInJobs();
+  registerHiringJobs();
+  startCronJobs(db);
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Template App running on port ${PORT} [${isProduction ? 'production' : 'development'}]`);

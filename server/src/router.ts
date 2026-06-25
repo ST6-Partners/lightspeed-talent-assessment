@@ -22,6 +22,7 @@ import { chatRouter } from './routers/chat.js';
 import { requisitionsRouter } from './routers/requisitions.js';
 import { jobDescriptionsRouter } from './routers/jobDescriptions.js';
 import { candidatesRouter } from './routers/candidates.js';
+import { insightsRouter } from './routers/insights.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -43,6 +44,7 @@ export const appRouter = router({
   requisitions: requisitionsRouter,
   jobDescriptions: jobDescriptionsRouter,
   candidates: candidatesRouter,
+  insights: insightsRouter,
 });
 
 export type AppRouter = typeof appRouter;
