@@ -155,11 +155,11 @@ export const insightsRouter = router({
         source: r.source ?? 'Unknown',
         count: Number(r.count),
       })).sort((a, b) => b.count - a.count),
-      timeInStage: (timeInStageRows as any[]).map(r => ({
+      timeInStage: ((timeInStageRows as any).rows as any[]).map(r => ({
         stage: r.stage as string,
         avgDays: parseFloat(r.avg_days as string) || 0,
       })),
-      weeklyVolume: (weeklyVolumeRows as any[]).map(r => ({
+      weeklyVolume: ((weeklyVolumeRows as any).rows as any[]).map(r => ({
         week: r.week as string,
         count: Number(r.count),
       })),
