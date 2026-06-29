@@ -62,14 +62,14 @@ export default function Login() {
           <button
             type="button"
             onClick={() => { setMode('login'); setError(null); }}
-            className={`flex-1 py-2 font-medium ${mode === 'login' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            className={`flex-1 py-2 font-medium ${mode === 'login' ? 'bg-ls-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
           >
             Sign in
           </button>
           <button
             type="button"
             onClick={() => { setMode('register'); setError(null); }}
-            className={`flex-1 py-2 font-medium ${mode === 'register' ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+            className={`flex-1 py-2 font-medium ${mode === 'register' ? 'bg-ls-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
           >
             Create account
           </button>
@@ -118,7 +118,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={busy}
-            className="w-full bg-gray-900 text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-gray-800 disabled:opacity-50 transition-colors"
+            className="w-full bg-ls-primary text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50 transition-colors"
           >
             {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
           </button>

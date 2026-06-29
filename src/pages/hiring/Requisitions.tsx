@@ -60,7 +60,7 @@ export default function Requisitions() {
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-ls-primary text-white rounded-lg text-sm font-medium hover:bg-ls-primary-600"
         >
           <Plus size={16} />
           New Requisition
@@ -81,7 +81,7 @@ export default function Requisitions() {
               <select
                 value={form.department}
                 onChange={(e) => setForm({ ...form, department: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               >
                 <option value="">Select department</option>
                 {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
@@ -94,7 +94,7 @@ export default function Requisitions() {
                 value={form.hiringManager}
                 onChange={(e) => setForm({ ...form, hiringManager: e.target.value })}
                 placeholder="e.g. Wes Anderson"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div>
@@ -103,7 +103,7 @@ export default function Requisitions() {
                 type="number" min={1}
                 value={form.numOpenings}
                 onChange={(e) => setForm({ ...form, numOpenings: parseInt(e.target.value) || 1 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div>
@@ -111,7 +111,7 @@ export default function Requisitions() {
               <select
                 value={form.employmentType}
                 onChange={(e) => setForm({ ...form, employmentType: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               >
                 {['Full-Time', 'Part-Time', 'Contract', 'Internship'].map((t) => (
                   <option key={t} value={t}>{t}</option>
@@ -125,7 +125,7 @@ export default function Requisitions() {
                 value={form.location}
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
                 placeholder="e.g. Austin, TX"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div>
@@ -133,7 +133,7 @@ export default function Requisitions() {
               <select
                 value={form.priority}
                 onChange={(e) => setForm({ ...form, priority: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               >
                 {['Low', 'Medium', 'High', 'Critical'].map((p) => (
                   <option key={p} value={p}>{p}</option>
@@ -147,7 +147,7 @@ export default function Requisitions() {
                 value={form.salaryMin}
                 onChange={(e) => setForm({ ...form, salaryMin: e.target.value })}
                 placeholder="e.g. 80000"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div>
@@ -157,7 +157,7 @@ export default function Requisitions() {
                 value={form.salaryMax}
                 onChange={(e) => setForm({ ...form, salaryMax: e.target.value })}
                 placeholder="e.g. 120000"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div className="col-span-2">
@@ -167,7 +167,7 @@ export default function Requisitions() {
                 onChange={(e) => setForm({ ...form, reason: e.target.value })}
                 rows={2}
                 placeholder="e.g. Backfill for departure, new headcount for Q3 growth..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div className="col-span-2 flex items-center gap-2">
@@ -185,7 +185,7 @@ export default function Requisitions() {
             <button
               onClick={handleSubmit}
               disabled={!form.department || !form.hiringManager || createMutation.isLoading}
-              className="px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+              className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50"
             >
               {createMutation.isLoading ? 'Creating...' : 'Create Requisition'}
             </button>

@@ -67,7 +67,7 @@ export default function JobDescriptions() {
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-ls-primary text-white rounded-lg text-sm font-medium hover:bg-ls-primary-600"
         >
           <Plus size={16} />
           New Job Description
@@ -88,7 +88,7 @@ export default function JobDescriptions() {
               <select
                 value={form.reqId}
                 onChange={(e) => setForm({ ...form, reqId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               >
                 <option value="">Select requisition</option>
                 {(requisitions ?? []).map((r) => (
@@ -103,7 +103,7 @@ export default function JobDescriptions() {
                 value={form.jobTitle}
                 onChange={(e) => setForm({ ...form, jobTitle: e.target.value })}
                 placeholder="e.g. Senior Software Engineer"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div className="col-span-2">
@@ -113,7 +113,7 @@ export default function JobDescriptions() {
                 onChange={(e) => setForm({ ...form, summary: e.target.value })}
                 rows={2}
                 placeholder="Brief overview of the role..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div className="col-span-2">
@@ -123,7 +123,7 @@ export default function JobDescriptions() {
                 onChange={(e) => setForm({ ...form, responsibilities: e.target.value })}
                 rows={3}
                 placeholder="Key responsibilities..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div>
@@ -132,7 +132,7 @@ export default function JobDescriptions() {
                 value={form.requiredQualifications}
                 onChange={(e) => setForm({ ...form, requiredQualifications: e.target.value })}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div>
@@ -141,7 +141,7 @@ export default function JobDescriptions() {
                 value={form.preferredQualifications}
                 onChange={(e) => setForm({ ...form, preferredQualifications: e.target.value })}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div>
@@ -152,7 +152,7 @@ export default function JobDescriptions() {
                 type="number" min={0} max={50}
                 value={form.ccatThreshold}
                 onChange={(e) => setForm({ ...form, ccatThreshold: parseInt(e.target.value) || 30 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div>
@@ -162,7 +162,7 @@ export default function JobDescriptions() {
                 onChange={(e) => setForm({ ...form, workSampleInstructions: e.target.value })}
                 rows={3}
                 placeholder="Instructions sent to candidates for the work sample..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
             <div className="col-span-2">
@@ -177,7 +177,7 @@ export default function JobDescriptions() {
                     onClick={() => toggleValue(v)}
                     className={`px-3 py-1 text-xs rounded-full border transition-colors ${
                       form.eppValues.includes(v)
-                        ? 'bg-gray-900 text-white border-gray-900'
+                        ? 'bg-ls-primary text-white border-gray-900'
                         : 'bg-white text-gray-600 border-gray-300 hover:border-gray-500'
                     }`}
                   >
@@ -191,7 +191,7 @@ export default function JobDescriptions() {
             <button
               onClick={() => createMutation.mutate(form)}
               disabled={!form.reqId || !form.jobTitle || createMutation.isLoading}
-              className="px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+              className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50"
             >
               {createMutation.isLoading ? 'Creating...' : 'Save as Draft'}
             </button>

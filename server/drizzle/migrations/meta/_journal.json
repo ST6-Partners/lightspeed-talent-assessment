@@ -29,6 +29,13 @@
       "when": 1799999999999,
       "tag": "0003_add_candidate_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1800000000000,
+      "tag": "0004_company_values",
+      "breakpoints": true
     }
   ]
 }

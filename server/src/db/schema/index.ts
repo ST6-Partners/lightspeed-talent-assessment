@@ -41,3 +41,6 @@ export {
 } from './hiring.js';
 
 // Total: 28 tables (22 infrastructure + 1 sample domain + 5 hiring pipeline)
+
+// Company Values (2 tables)
+export { companyValues, candidateValueScores, valuePillarEnum } from './values.js';

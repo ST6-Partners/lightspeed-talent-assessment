@@ -85,7 +85,7 @@ export default function Candidates() {
           </div>
           <button
             onClick={() => setShowForm(!showForm)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-ls-primary text-white rounded-lg text-sm font-medium hover:bg-ls-primary-600"
           >
             <Plus size={16} />
             Add Candidate
@@ -96,7 +96,7 @@ export default function Candidates() {
         <div className="flex gap-2 mb-4 flex-wrap">
           <button
             onClick={() => setStageFilter('')}
-            className={`px-3 py-1 text-xs rounded-full border ${!stageFilter ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300 text-gray-600 hover:border-gray-500'}`}
+            className={`px-3 py-1 text-xs rounded-full border ${!stageFilter ? 'bg-ls-primary text-white border-gray-900' : 'border-gray-300 text-gray-600 hover:border-gray-500'}`}
           >
             All
           </button>
@@ -104,7 +104,7 @@ export default function Candidates() {
             <button
               key={s}
               onClick={() => setStageFilter(s)}
-              className={`px-3 py-1 text-xs rounded-full border transition-colors ${stageFilter === s ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300 text-gray-600 hover:border-gray-500'}`}
+              className={`px-3 py-1 text-xs rounded-full border transition-colors ${stageFilter === s ? 'bg-ls-primary text-white border-gray-900' : 'border-gray-300 text-gray-600 hover:border-gray-500'}`}
             >
               {s}
             </button>
@@ -124,30 +124,30 @@ export default function Candidates() {
                 <label className="block text-xs font-medium text-gray-600 mb-1">First Name *</label>
                 <input type="text" value={form.firstName}
                   onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Last Name *</label>
                 <input type="text" value={form.lastName}
                   onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Email *</label>
                 <input type="email" value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
                 <input type="tel" value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Job Description</label>
                 <select value={form.jdId} onChange={(e) => setForm({ ...form, jdId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan">
                   <option value="">— Not linked yet —</option>
                   {(jobDescriptions ?? []).map((j) => (
                     <option key={j.id} value={j.id}>{j.jobTitle}</option>
@@ -157,7 +157,7 @@ export default function Candidates() {
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Source</label>
                 <select value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan">
                   <option value="">Select source</option>
                   {['LinkedIn', 'Indeed', 'Referral', 'Company Website', 'Recruiter', 'Other'].map((s) => (
                     <option key={s} value={s}>{s}</option>
@@ -169,28 +169,28 @@ export default function Candidates() {
                 <input type="url" value={form.linkedinUrl}
                   onChange={(e) => setForm({ ...form, linkedinUrl: e.target.value })}
                   placeholder="https://linkedin.com/in/..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Resume URL</label>
                 <input type="url" value={form.resumeUrl}
                   onChange={(e) => setForm({ ...form, resumeUrl: e.target.value })}
                   placeholder="https://..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
                 <textarea value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900" />
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
               </div>
             </div>
             <div className="flex gap-2 mt-4">
               <button
                 onClick={() => createMutation.mutate({ ...form, jdId: form.jdId || undefined })}
                 disabled={!form.firstName || !form.lastName || !form.email || createMutation.isLoading}
-                className="px-4 py-2 bg-gray-900 text-white rounded-md text-sm font-medium hover:bg-gray-800 disabled:opacity-50"
+                className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50"
               >
                 {createMutation.isLoading ? 'Adding...' : 'Add Candidate'}
               </button>
@@ -207,7 +207,7 @@ export default function Candidates() {
               <label className="block text-xs font-medium text-gray-600 mb-1">Reason *</label>
               <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
                 rows={3} placeholder="e.g. CCAT score below threshold, not the right fit..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 mb-3" />
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan mb-3" />
               <div className="flex gap-2">
                 <button
                   onClick={() => rejectMutation.mutate({ id: rejectingId, reason: rejectReason })}
@@ -431,9 +431,9 @@ function EditableField({ label, value, onSave }: { label: string; value: string;
           <input
             value={val}
             onChange={(e) => setVal(e.target.value)}
-            className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-gray-900"
+            className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-ls-cyan"
           />
-          <button onClick={() => { onSave(val); setEditing(false); }} className="text-xs px-2 py-1 bg-gray-900 text-white rounded">Save</button>
+          <button onClick={() => { onSave(val); setEditing(false); }} className="text-xs px-2 py-1 bg-ls-primary text-white rounded">Save</button>
           <button onClick={() => { setVal(value); setEditing(false); }} className="text-xs px-2 py-1 text-gray-500">✕</button>
         </div>
       ) : (
@@ -460,10 +460,10 @@ function EditableTextarea({ label, value, onSave }: { label: string; value: stri
             value={val}
             onChange={(e) => setVal(e.target.value)}
             rows={3}
-            className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-gray-900"
+            className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-ls-cyan"
           />
           <div className="flex gap-1 mt-1">
-            <button onClick={() => { onSave(val); setEditing(false); }} className="text-xs px-2 py-1 bg-gray-900 text-white rounded">Save</button>
+            <button onClick={() => { onSave(val); setEditing(false); }} className="text-xs px-2 py-1 bg-ls-primary text-white rounded">Save</button>
             <button onClick={() => { setVal(value); setEditing(false); }} className="text-xs px-2 py-1 text-gray-500">Cancel</button>
           </div>
         </div>

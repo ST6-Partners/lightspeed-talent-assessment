@@ -1,11 +1,11 @@
 // ============================================================
-// LAYOUT — sidebar + top bar with NotificationBell + FeedbackDrawer
+// LAYOUT — Lightspeed-branded shell: slate sidebar + topbar
 // Auth guard: redirects to /login if not authenticated
 // ============================================================
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Database, Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2 } from 'lucide-react';
+import { Home, Database, Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2, Award, ClipboardCheck, Search, Bell } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
@@ -23,8 +23,23 @@ const hiringNavItems = [
   { path: '/hiring/requisitions', label: 'Requisitions', icon: ClipboardList },
   { path: '/hiring/jobs', label: 'Job Descriptions', icon: FileText },
   { path: '/hiring/candidates', label: 'Candidates', icon: Users },
+  { path: '/hiring/values', label: 'Company Values', icon: Award },
+  { path: '/hiring/score-values', label: 'Score Values', icon: ClipboardCheck },
   { path: '/hiring/insights', label: 'Insights', icon: BarChart2 },
 ];
+
+function BrandMark({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" stroke="#4FA9D6" strokeWidth="3.6" strokeLinecap="round">
+      <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5" />
+      <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5" />
+      <line x1="5" y1="14" x2="11.5" y2="14" />
+      <line x1="28.5" y1="26" x2="35" y2="26" />
+    </svg>
+  );
+}
+
+const allNav = [...navItems, ...hiringNavItems];
 
 export default function Layout() {
   const location = useLocation();
@@ -37,22 +52,14 @@ export default function Layout() {
 
   const handleLogout = async () => {
     localStorage.removeItem('auth_token');
-    try {
-      await logoutMutation.mutateAsync();
-    } catch {
-      // ignore — we redirect to /login regardless
-    }
+    try { await logoutMutation.mutateAsync(); } catch { /* redirect regardless */ }
     window.location.href = '/login';
   };
 
-  // Redirect to login if not authenticated
   useEffect(() => {
-    if (!isLoading && !user) {
-      navigate('/login', { replace: true });
-    }
+    if (!isLoading && !user) navigate('/login', { replace: true });
   }, [isLoading, user, navigate]);
 
-  // Sync browser timezone on every app load
   useEffect(() => {
     if (user) {
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -62,103 +69,86 @@ export default function Layout() {
 
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-sm text-gray-400">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-ls-bg">
+        <div className="text-sm text-ls-ink-3">Loading…</div>
       </div>
     );
   }
 
-  const isHiringSection = location.pathname.startsWith('/hiring');
+  const crumb = allNav.find((n) => n.path === location.pathname)?.label
+    ?? (location.pathname.startsWith('/hiring') ? 'Hiring' : 'Home');
+
+  const renderLink = (item: { path: string; label: string; icon: any }) => {
+    const isActive = location.pathname === item.path;
+    const Icon = item.icon;
+    return (
+      <Link
+        key={item.path}
+        to={item.path}
+        className={`flex items-center gap-3 px-3 py-2 rounded-[9px] text-sm font-medium mb-0.5 transition-colors ${
+          isActive
+            ? 'ls-accent-grad text-white shadow-[0_4px_14px_rgba(79,169,214,.3)]'
+            : 'text-[#B9C3CB] hover:bg-ls-slate-2 hover:text-white'
+        }`}
+      >
+        <Icon size={18} className={isActive ? 'opacity-100' : 'opacity-85'} />
+        {item.label}
+      </Link>
+    );
+  };
 
   return (
     <div className="min-h-screen flex">
       {/* Sidebar */}
-      <aside className="w-56 bg-gray-900 text-gray-200 flex flex-col">
-        <div className="px-4 py-5 border-b border-gray-700">
-          <h1 className="text-lg font-semibold text-white">Lightspeed Talent Assessment</h1>
-          <p className="text-xs text-gray-400 mt-1">Talent Assessment</p>
+      <aside className="w-60 bg-ls-slate text-[#B9C3CB] flex flex-col px-3.5 py-4">
+        <div className="flex items-center gap-3 px-2 pb-4">
+          <BrandMark />
+          <div className="leading-tight">
+            <div className="text-white font-bold text-[15px] tracking-tight">Lightspeed</div>
+            <div className="text-[11px] text-[#7E8B94]">Talent Assessment</div>
+          </div>
         </div>
-        <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                  isActive
-                    ? 'bg-gray-700 text-white font-medium'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                }`}
-              >
-                <Icon size={18} />
-                {item.label}
-              </Link>
-            );
-          })}
 
-          {/* Hiring Pipeline section */}
-          <div className="pt-3 pb-1">
-            <div className="px-3 text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
-              Hiring Pipeline
-            </div>
-          </div>
-          {hiringNavItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                  isActive
-                    ? 'bg-gray-700 text-white font-medium'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                }`}
-              >
-                <Icon size={18} />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto">
+          <div className="px-2.5 pt-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Workspace</div>
+          {navItems.map(renderLink)}
+
+          <div className="px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Hiring Pipeline</div>
+          {hiringNavItems.map(renderLink)}
         </nav>
-        {user && (
-          <div className="px-4 py-3 border-t border-gray-700">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs font-medium">
-                {user.name?.charAt(0) || '?'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium text-gray-200 truncate">{user.name}</div>
-                <div className="text-[10px] text-gray-500">{user.role}</div>
-              </div>
+
+        <div className="mt-auto border-t border-[#36424B] pt-3">
+          <div className="flex items-center gap-2.5 px-2 py-1.5">
+            <div className="w-8 h-8 rounded-full ls-accent-grad text-white flex items-center justify-center text-xs font-bold">
+              {user.name?.charAt(0) || '?'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-semibold text-[#E3E7EA] truncate">{user.name}</div>
+              <div className="text-[11px] text-[#7E8B94]">{user.role}</div>
             </div>
           </div>
-        )}
-        <div className="px-4 py-2 border-t border-gray-700 text-xs text-gray-500">
-          v0.1.0
         </div>
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col">
-        {/* Top bar */}
-        <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6">
-          <div />
+      <div className="flex-1 flex flex-col bg-ls-bg">
+        <header className="h-14 bg-white/70 backdrop-blur border-b border-ls-line flex items-center justify-between px-6">
+          <div className="text-[13px] text-ls-ink-3">
+            <span className="text-ls-ink font-semibold">{crumb}</span>
+          </div>
           <div className="flex items-center gap-2">
             <WhatsNew />
             <NotificationBell />
             <button
               onClick={() => setShowFeedback(true)}
-              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors"
               title="Submit Feedback"
             >
               <MessageSquare className="w-5 h-5" />
             </button>
             <button
               onClick={handleLogout}
-              className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+              className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors"
               title="Sign out"
             >
               <LogOut className="w-[18px] h-[18px]" />
@@ -166,13 +156,11 @@ export default function Layout() {
           </div>
         </header>
 
-        {/* Page content */}
         <main className="flex-1 p-6 overflow-auto">
           <Outlet />
         </main>
       </div>
 
-      {/* Feedback drawer */}
       <FeedbackDrawer open={showFeedback} onClose={() => setShowFeedback(false)} />
     </div>
   );
