@@ -12,6 +12,8 @@ import JobDescriptions from './pages/hiring/JobDescriptions';
 import Candidates from './pages/hiring/Candidates';
 import Insights from './pages/hiring/Insights';
 import Values from './pages/hiring/Values';
+import Departments from './pages/hiring/Departments';
+import TaskLibrary from './pages/hiring/TaskLibrary';
 import ScoreValues from './pages/hiring/ScoreValues';
 
 export default function App() {
@@ -28,6 +30,8 @@ export default function App() {
         <Route path="/hiring/requisitions" element={<Requisitions />} />
         <Route path="/hiring/jobs" element={<JobDescriptions />} />
         <Route path="/hiring/candidates" element={<Candidates />} />
+        <Route path="/hiring/departments" element={<Departments />} />
+        <Route path="/hiring/tasks" element={<TaskLibrary />} />
         <Route path="/hiring/values" element={<Values />} />
         <Route path="/hiring/score-values" element={<ScoreValues />} />
         <Route path="/hiring/insights" element={<Insights />} />

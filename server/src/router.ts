@@ -24,6 +24,8 @@ import { jobDescriptionsRouter } from './routers/jobDescriptions.js';
 import { candidatesRouter } from './routers/candidates.js';
 import { insightsRouter } from './routers/insights.js';
 import { valuesRouter } from './routers/values.js';
+import { departmentsRouter } from './routers/departments.js';
+import { assessmentTasksRouter } from './routers/assessmentTasks.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -47,6 +49,8 @@ export const appRouter = router({
   candidates: candidatesRouter,
   insights: insightsRouter,
   values: valuesRouter,
+  departments: departmentsRouter,
+  tasks: assessmentTasksRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -44,3 +44,9 @@ export {
 
 // Company Values (2 tables)
 export { companyValues, candidateValueScores, valuePillarEnum } from './values.js';
+
+// Departments (1 table) — curated org functions; scope source for the task library
+export { departments } from './departments.js';
+
+// Assessment Task Library (1 table) — work-product / AI-skill tasks
+export { assessmentTasks, taskDifficultyEnum, taskStatusEnum } from './assessmentTasks.js';

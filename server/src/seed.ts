@@ -16,6 +16,8 @@ import { db } from './db.js';
 import { appSettings, screenInventory } from './db/schema/core.js';
 import { seedHiring } from './seedHiring.js';
 import { seedValues } from './seedValues.js';
+import { seedDepartments } from './seedDepartments.js';
+import { seedTasks } from './seedTasks.js';
 
 async function seed() {
   console.log('Seeding Template App database...');
@@ -60,6 +62,8 @@ async function seed() {
   // Hiring pipeline sample/demo data (idempotent; RESEED=1 to wipe & reseed)
   await seedHiring();
   await seedValues();
+  await seedDepartments();
+  await seedTasks();
 
   console.log('Seed complete.');
   process.exit(0);

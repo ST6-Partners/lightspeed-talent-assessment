@@ -36,6 +36,20 @@
       "when": 1800000000000,
       "tag": "0004_company_values",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1800000100000,
+      "tag": "0005_departments",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1800000200000,
+      "tag": "0006_assessment_tasks",
+      "breakpoints": true
     }
   ]
 }
