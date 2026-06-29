@@ -18,6 +18,7 @@ import { seedHiring } from './seedHiring.js';
 import { seedValues } from './seedValues.js';
 import { seedDepartments } from './seedDepartments.js';
 import { seedTasks } from './seedTasks.js';
+import { seedPackages } from './seedPackages.js';
 
 async function seed() {
   console.log('Seeding Template App database...');
@@ -64,6 +65,7 @@ async function seed() {
   await seedValues();
   await seedDepartments();
   await seedTasks();
+  await seedPackages();
 
   console.log('Seed complete.');
   process.exit(0);

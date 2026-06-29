@@ -50,3 +50,6 @@ export { departments } from './departments.js';
 
 // Assessment Task Library (1 table) — work-product / AI-skill tasks
 export { assessmentTasks, taskDifficultyEnum, taskStatusEnum } from './assessmentTasks.js';
+
+// Assessment Packages (1 table) — General + functional task pairings (assignments)
+export { assessmentPackages } from './assessmentPackages.js';

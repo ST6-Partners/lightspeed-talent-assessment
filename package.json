@@ -20,7 +20,8 @@
     "db:seed:hiring": "tsx server/src/seedHiring.ts",
     "db:seed:values": "tsx server/src/seedValues.ts",
     "db:seed:departments": "tsx server/src/seedDepartments.ts",
-    "db:seed:tasks": "tsx server/src/seedTasks.ts"
+    "db:seed:tasks": "tsx server/src/seedTasks.ts",
+    "db:seed:packages": "tsx server/src/seedPackages.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.64",
