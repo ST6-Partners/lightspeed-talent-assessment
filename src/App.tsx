@@ -13,6 +13,7 @@ import Candidates from './pages/hiring/Candidates';
 import Insights from './pages/hiring/Insights';
 import Values from './pages/hiring/Values';
 import ScoreValues from './pages/hiring/ScoreValues';
+import EppProfiles from './pages/hiring/EppProfiles';
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/hiring/jobs" element={<JobDescriptions />} />
         <Route path="/hiring/candidates" element={<Candidates />} />
         <Route path="/hiring/values" element={<Values />} />
+        <Route path="/hiring/epp" element={<EppProfiles />} />
         <Route path="/hiring/score-values" element={<ScoreValues />} />
         <Route path="/hiring/insights" element={<Insights />} />
       </Route>

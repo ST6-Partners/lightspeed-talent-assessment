@@ -44,3 +44,6 @@ export {
 
 // Company Values (2 tables)
 export { companyValues, candidateValueScores, valuePillarEnum } from './values.js';
+
+// EPP (1 table)
+export { candidateEppScores } from './epp.js';

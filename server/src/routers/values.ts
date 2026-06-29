@@ -7,6 +7,7 @@ import { eq, asc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { companyValues, candidateValueScores } from '../db/schema/values.js';
+import { candidateEppScores } from '../db/schema/epp.js';
 import { auditChange } from '../services/audit.js';
 
 const PILLARS = ['Mission-Driven', 'Customer-Obsessed', 'Results-Focused'] as const;
@@ -56,6 +57,15 @@ export const valuesRouter = router({
       await ctx.db.delete(companyValues).where(eq(companyValues.id, input.id));
       await auditChange(ctx.db, ctx.user.id, input.id, 'company_values', 'delete');
       return { ok: true };
+    }),
+
+  // ── EPP ──
+  getCandidateEpp: protectedProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.query.candidateEppScores.findMany({
+        where: eq(candidateEppScores.candidateId, input.candidateId),
+      });
     }),
 
   // ── Candidate scoring ──

@@ -18,7 +18,8 @@
     "test:dom": "npx playwright test --grep @dom",
     "typecheck": "tsc --noEmit",
     "db:seed:hiring": "tsx server/src/seedHiring.ts",
-    "db:seed:values": "tsx server/src/seedValues.ts"
+    "db:seed:values": "tsx server/src/seedValues.ts",
+    "db:seed:epp": "tsx server/src/seedEpp.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.64",
