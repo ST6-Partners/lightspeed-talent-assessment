@@ -25,6 +25,7 @@ import {
   SatisfactionDashboard,
   ReleaseNotesAdmin,
   EmailTestPanel,
+  DocumentIndexPanel,
 } from './admin';
 
 // ── Feature flags panel (simple settings table) ──────────────
@@ -103,6 +104,7 @@ const SYSTEM_TABS = [
   { id: 'sync', label: 'Sync' },
   { id: 'database', label: 'Database' },
   { id: 'emailtest', label: 'Email Test' },
+  { id: 'docindex', label: 'Document Index' },
 ];
 
 // ── Styles — matches RCDO AdminSettings.jsx inline styles ────
@@ -252,6 +254,7 @@ export default function AdminSettings() {
         {activeSection === 'sync' && showSystem && <SnapshotSync />}
         {activeSection === 'database' && showSystem && <DatabaseViews />}
         {activeSection === 'emailtest' && showSystem && <EmailTestPanel />}
+        {activeSection === 'docindex' && showSystem && <DocumentIndexPanel />}
       </div>
     </div>
   );

@@ -15,3 +15,4 @@ export { default as ChatLogs } from './ChatLogs';
 export { default as SatisfactionDashboard } from './SatisfactionDashboard';
 export { default as ReleaseNotesAdmin } from './ReleaseNotesAdmin';
 export { default as EmailTestPanel } from './EmailTestPanel';
+export { default as DocumentIndexPanel } from './DocumentIndexPanel';

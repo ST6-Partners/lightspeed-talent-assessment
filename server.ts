@@ -11,6 +11,9 @@ import { feedbackApiRouter } from './server/src/http/feedbackApi.js';
 import { createContext } from './server/src/trpc.js';
 import { db } from './server/src/db.js';
 import { inboundEmails } from './server/src/db/schema/email.js';
+import { users } from './server/src/db/schema/index.js';
+import { readDoc } from './server/src/services/dropboxDocs.js';
+import { eq } from 'drizzle-orm';
 import { pool, db } from './server/src/db.js';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { inspect } from 'node:util';
@@ -340,6 +343,25 @@ async function main() {
       console.error('[inbound-email] failed to store:', err);
     }
     res.status(200).json({ ok: true }); // always 200 so SendGrid does not retry-storm
+  });
+
+  // ── Document Index: serve a module doc fetched live from Dropbox ──
+  // Renders HTML in the browser. Admin-only (session role check). The path is
+  // validated against the module base inside readDoc().
+  app.get('/api/admin/doc-index/file', async (req, res) => {
+    try {
+      const userId = (req.session as any)?.userId;
+      if (!userId) return res.status(401).send('Not signed in.');
+      const u = await db.query.users.findFirst({ where: eq(users.id, userId) });
+      if (!u || !['admin', 'sysadmin'].includes((u as any).role)) return res.status(403).send('Admins only.');
+      const p = typeof req.query.path === 'string' ? req.query.path : '';
+      if (!p) return res.status(400).send('Missing path.');
+      const content = await readDoc(p);
+      res.set('Content-Type', 'text/html; charset=utf-8');
+      res.send(content);
+    } catch (err: any) {
+      res.status(502).send('Failed to load document: ' + (err?.message ?? 'error'));
+    }
   });
 
   app.use('/api/trpc', createExpressMiddleware({ router: appRouter, createContext }));

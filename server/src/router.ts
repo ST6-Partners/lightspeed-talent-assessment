@@ -19,6 +19,7 @@ import { releasesRouter } from './routers/releases.js';
 import { onboardingVideosRouter } from './routers/onboardingVideos.js';
 import { chatRouter } from './routers/chat.js';
 import { emailTestRouter } from './routers/emailTest.js';
+import { docIndexRouter } from './routers/docIndex.js';
 // Hiring Pipeline
 import { requisitionsRouter } from './routers/requisitions.js';
 import { jobDescriptionsRouter } from './routers/jobDescriptions.js';
@@ -43,6 +44,7 @@ export const appRouter = router({
   onboardingVideos: onboardingVideosRouter,
   chat: chatRouter,
   emailTest: emailTestRouter,
+  docIndex: docIndexRouter,
   // Hiring Pipeline
   requisitions: requisitionsRouter,
   jobDescriptions: jobDescriptionsRouter,
