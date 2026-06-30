@@ -48,3 +48,6 @@ export { employees } from './employees.js';
 
 // EPP (1 table)
 export { candidateEppScores } from './epp.js';
+
+// Email (1 table) — inbound/test inbox
+export { inboundEmails } from './email.js';

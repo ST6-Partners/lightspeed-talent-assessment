@@ -9,6 +9,8 @@ import { fileURLToPath } from 'url';
 import { appRouter } from './server/src/router.js';
 import { feedbackApiRouter } from './server/src/http/feedbackApi.js';
 import { createContext } from './server/src/trpc.js';
+import { db } from './server/src/db.js';
+import { inboundEmails } from './server/src/db/schema/email.js';
 import { pool, db } from './server/src/db.js';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { inspect } from 'node:util';
@@ -314,6 +316,30 @@ async function main() {
     handleZoomRecordingReady(parsed).catch((err) => {
       console.error('[Zoom] handleZoomRecordingReady error:', err);
     });
+  });
+
+  // ── SendGrid Inbound Parse → test inbox (real candidate replies: later phase) ──
+  // Accepts JSON or urlencoded posts now (simulate + curl/Postman). Real
+  // SendGrid multipart Inbound Parse adds a multipart parser in the receiving
+  // phase, once the reply subdomain + MX record are live.
+  app.post('/api/webhooks/inbound-email', express.urlencoded({ extended: true, limit: '15mb' }), async (req, res) => {
+    try {
+      const b: any = req.body || {};
+      const to: string | null = b.to || b.envelope_to || null;
+      const tag = typeof to === 'string' && to.includes('+') ? (to.split('+')[1]?.split('@')[0] ?? null) : null;
+      await db.insert(inboundEmails).values({
+        fromEmail: (b.from || 'unknown@unknown').toString().slice(0, 320),
+        toEmail: to ? to.toString().slice(0, 320) : null,
+        subject: (b.subject || '(no subject)').toString().slice(0, 500),
+        body: (b.text || b.html || '').toString(),
+        replyTag: tag,
+        source: 'webhook',
+        raw: b,
+      });
+    } catch (err) {
+      console.error('[inbound-email] failed to store:', err);
+    }
+    res.status(200).json({ ok: true }); // always 200 so SendGrid does not retry-storm
   });
 
   app.use('/api/trpc', createExpressMiddleware({ router: appRouter, createContext }));

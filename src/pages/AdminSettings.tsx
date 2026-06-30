@@ -24,6 +24,7 @@ import {
   ChatLogs,
   SatisfactionDashboard,
   ReleaseNotesAdmin,
+  EmailTestPanel,
 } from './admin';
 
 // ── Feature flags panel (simple settings table) ──────────────
@@ -101,6 +102,7 @@ const SYSTEM_TABS = [
   { id: 'backups', label: 'Backups' },
   { id: 'sync', label: 'Sync' },
   { id: 'database', label: 'Database' },
+  { id: 'emailtest', label: 'Email Test' },
 ];
 
 // ── Styles — matches RCDO AdminSettings.jsx inline styles ────
@@ -249,6 +251,7 @@ export default function AdminSettings() {
         {activeSection === 'backups' && showSystem && <BackupAdmin />}
         {activeSection === 'sync' && showSystem && <SnapshotSync />}
         {activeSection === 'database' && showSystem && <DatabaseViews />}
+        {activeSection === 'emailtest' && showSystem && <EmailTestPanel />}
       </div>
     </div>
   );

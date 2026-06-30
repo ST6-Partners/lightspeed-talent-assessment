@@ -18,6 +18,7 @@ import { systemRouter } from './routers/system.js';
 import { releasesRouter } from './routers/releases.js';
 import { onboardingVideosRouter } from './routers/onboardingVideos.js';
 import { chatRouter } from './routers/chat.js';
+import { emailTestRouter } from './routers/emailTest.js';
 // Hiring Pipeline
 import { requisitionsRouter } from './routers/requisitions.js';
 import { jobDescriptionsRouter } from './routers/jobDescriptions.js';
@@ -41,6 +42,7 @@ export const appRouter = router({
   releases: releasesRouter,
   onboardingVideos: onboardingVideosRouter,
   chat: chatRouter,
+  emailTest: emailTestRouter,
   // Hiring Pipeline
   requisitions: requisitionsRouter,
   jobDescriptions: jobDescriptionsRouter,

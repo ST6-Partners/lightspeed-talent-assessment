@@ -14,3 +14,4 @@ export { default as GettingStarted } from './GettingStarted';
 export { default as ChatLogs } from './ChatLogs';
 export { default as SatisfactionDashboard } from './SatisfactionDashboard';
 export { default as ReleaseNotesAdmin } from './ReleaseNotesAdmin';
+export { default as EmailTestPanel } from './EmailTestPanel';

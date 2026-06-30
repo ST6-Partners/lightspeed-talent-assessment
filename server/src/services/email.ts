@@ -1,27 +1,23 @@
 // ============================================================
 // EMAIL SERVICE — 17 automated hiring pipeline emails
 //
-// SANDBOX MODE (default): emails are logged to console only.
-// No emails are sent, no Resend account needed.
+// Transport: SendGrid REST API (https://api.sendgrid.com/v3/mail/send),
+// called directly via fetch with a Bearer token — mirrors the Dreadnought
+// Command Center implementation (server/lib/email.ts / daily-pulse.ts).
+// No SDK/package dependency. Migrated from Resend 2026-06-29 (DD: SendGrid swap).
 //
-// TO GO LIVE: set RESEND_API_KEY in Railway environment variables.
+// SANDBOX MODE (default): emails are logged to console only.
+// No emails are sent, no SendGrid account needed.
+//
+// TO GO LIVE: set SENDGRID_API_KEY in Railway environment variables
+// (and EMAIL_FROM if the default from-address should change).
 // All 17 templates will fire automatically on stage changes.
 // ============================================================
 
-const SANDBOX = !process.env.RESEND_API_KEY;
+const SENDGRID_SEND_URL = 'https://api.sendgrid.com/v3/mail/send';
 const FROM_ADDRESS = process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com';
+const FROM_NAME = process.env.EMAIL_FROM_NAME ?? 'Lightspeed Systems';
 const HR_EMAIL = process.env.HR_EMAIL ?? 'jade.friedman@lsscorp.net';
-
-// Lazy-load Resend so the app boots fine even without the package installed
-let resend: any = null;
-async function getResend() {
-  if (SANDBOX) return null;
-  if (!resend) {
-    const { Resend } = await import('resend');
-    resend = new Resend(process.env.RESEND_API_KEY);
-  }
-  return resend;
-}
 
 // ── Core send function ─────────────────────────────────────
 
@@ -30,21 +26,68 @@ interface EmailPayload {
   subject: string;
   html: string;
   templateId: string;
+  /** Optional reply-to address; defaults to EMAIL_REPLY_TO when set. */
+  replyTo?: string;
 }
 
-export async function sendEmail(payload: EmailPayload): Promise<void> {
-  if (SANDBOX) {
+/** True when a SendGrid key is configured (i.e. emails actually send). */
+export function isEmailConfigured(): boolean {
+  return Boolean(process.env.SENDGRID_API_KEY);
+}
+
+/** Current email configuration — used by the admin test surface. */
+export function emailConfig() {
+  return {
+    configured: isEmailConfigured(),
+    from: process.env.EMAIL_FROM ?? FROM_ADDRESS,
+    fromName: process.env.EMAIL_FROM_NAME ?? FROM_NAME,
+    replyTo: process.env.EMAIL_REPLY_TO ?? null,
+  };
+}
+
+function buildSendGridBody(payload: EmailPayload) {
+  const replyTo = payload.replyTo ?? process.env.EMAIL_REPLY_TO;
+  const body: Record<string, unknown> = {
+    personalizations: [{ to: [{ email: payload.to }] }],
+    from: { email: process.env.EMAIL_FROM ?? FROM_ADDRESS, name: process.env.EMAIL_FROM_NAME ?? FROM_NAME },
+    subject: payload.subject,
+    content: [{ type: 'text/html', value: payload.html }],
+  };
+  if (replyTo) body.reply_to = { email: replyTo };
+  return body;
+}
+
+/**
+ * Send an email and THROW on failure. Returns { sandbox } so callers (e.g. the
+ * admin test form) can tell the user whether it really went out or was logged.
+ */
+export async function sendEmailOrThrow(payload: EmailPayload): Promise<{ sandbox: boolean }> {
+  if (!isEmailConfigured()) {
     console.log(`[EMAIL SANDBOX] Template: ${payload.templateId} | To: ${payload.to} | Subject: ${payload.subject}`);
-    return;
+    return { sandbox: true };
   }
+  const response = await fetch(SENDGRID_SEND_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(buildSendGridBody(payload)),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`SendGrid rejected email (${response.status}): ${text || response.statusText}`);
+  }
+  return { sandbox: false };
+}
+
+/**
+ * Fire-and-forget send used by the automated pipeline emails. Never throws —
+ * logs and continues so a delivery hiccup cannot break a stage transition.
+ */
+export async function sendEmail(payload: EmailPayload): Promise<void> {
   try {
-    const client = await getResend();
-    await client.emails.send({
-      from: FROM_ADDRESS,
-      to: payload.to,
-      subject: payload.subject,
-      html: payload.html,
-    });
+    await sendEmailOrThrow(payload);
   } catch (err) {
     console.error(`[EMAIL ERROR] Failed to send ${payload.templateId} to ${payload.to}:`, err);
   }
