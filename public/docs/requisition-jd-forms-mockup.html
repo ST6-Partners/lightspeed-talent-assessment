@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lightspeed Talent Assessment — Requisition & Job Description Forms (Mockup v1)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ls-cyan:#4FA9D6; --ls-cyan-bright:#6FBCE0;
+  --ls-primary:#2E89B8; --ls-primary-600:#246F97; --ls-primary-50:#EAF4FA;
+  --ls-ink:#2E3942; --ls-ink-2:#51606A; --ls-ink-3:#8A969E;
+  --ls-line:#E3E8EB; --ls-surface:#fff; --ls-bg:#F6F9FA; --ls-bg-2:#EEF3F5;
+  --ls-slate:#28323A; --ls-slate-2:#323D46;
+  --ls-thrive:#2E9E7B; --ls-thrive-bg:#E6F4EF;
+  --ls-watch:#C99300; --ls-watch-bg:#FBF2DC;
+  --ls-risk:#C2615A; --ls-risk-bg:#F8EAE8;
+  --grad:linear-gradient(92deg,var(--ls-primary),var(--ls-cyan));
+  --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);color:var(--ls-ink);background:var(--ls-bg);-webkit-font-smoothing:antialiased;line-height:1.5}
+.app{display:flex;min-height:100vh}
+
+/* ---------- SIDEBAR ---------- */
+.side{width:240px;flex:none;background:var(--ls-slate);color:#B9C3CB;display:flex;flex-direction:column;padding:16px 14px}
+.brand{display:flex;align-items:center;gap:12px;padding:6px 8px 16px}
+.brand .nm{color:#fff;font-weight:700;font-size:15px;letter-spacing:-.01em;line-height:1.15}
+.brand .nm small{display:block;font-weight:500;font-size:11px;color:#7E8B94}
+.navlbl{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#677480;font-weight:700;padding:14px 10px 6px}
+.nav a{display:flex;align-items:center;gap:12px;padding:8px 11px;border-radius:9px;color:#B9C3CB;text-decoration:none;font-size:14px;font-weight:500;margin-bottom:2px;cursor:pointer}
+.nav a svg{width:18px;height:18px;flex:none;opacity:.85}
+.nav a:hover{background:var(--ls-slate-2);color:#fff}
+.nav a.active{background:var(--grad);color:#fff;box-shadow:0 4px 14px rgba(79,169,214,.3)}
+.nav a.active svg{opacity:1}
+.side .foot{margin-top:auto;border-top:1px solid #36424B;padding-top:12px}
+.userchip{display:flex;align-items:center;gap:10px;padding:6px 8px}
+.userchip .av{width:32px;height:32px;border-radius:50%;background:var(--grad);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex:none}
+.userchip .un{font-size:13px;color:#E3E7EA;font-weight:600}
+.userchip .ur{font-size:11px;color:#7E8B94}
+
+/* ---------- MAIN ---------- */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.topbar{height:56px;flex:none;background:rgba(255,255,255,.7);backdrop-filter:blur(8px);border-bottom:1px solid var(--ls-line);display:flex;align-items:center;justify-content:space-between;padding:0 24px}
+.crumb{font-size:13px;color:var(--ls-ink-3)}
+.crumb b{color:var(--ls-ink);font-weight:600}
+.topbar .right{display:flex;align-items:center;gap:8px}
+.iconbtn{width:34px;height:34px;border-radius:9px;border:none;background:transparent;color:var(--ls-ink-3);display:flex;align-items:center;justify-content:center;cursor:pointer}
+.iconbtn:hover{color:var(--ls-ink);background:var(--ls-bg-2)}
+.mock-tag{font-size:11px;font-weight:700;color:var(--ls-primary);background:var(--ls-primary-50);border:1px solid #C9E7F3;border-radius:999px;padding:4px 10px}
+.content{flex:1;overflow:auto;padding:24px 26px 120px}
+
+/* ---------- SHARED ---------- */
+.view{display:none;max-width:920px}
+.view.on{display:block}
+.phead{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}
+.phead h1{font-size:24px;font-weight:700;color:var(--ls-ink);letter-spacing:-.02em}
+.phead .sub{font-size:14px;color:var(--ls-ink-3);margin-top:3px}
+.btn{font-family:var(--font);font-size:14px;font-weight:600;border-radius:10px;padding:9px 16px;border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.btn svg{width:16px;height:16px}
+.btn-primary{background:var(--ls-primary);color:#fff}
+.btn-primary:hover{background:var(--ls-primary-600)}
+.btn-ghost{background:#fff;color:var(--ls-ink-2);border-color:var(--ls-line)}
+.btn-ghost:hover{background:var(--ls-bg-2)}
+.btn-text{background:transparent;color:var(--ls-ink-2);border:none;padding:9px 12px}
+.btn-text:hover{color:var(--ls-ink)}
+
+/* form card / sections */
+.section{background:#fff;border:1px solid var(--ls-line);border-radius:14px;padding:22px 24px;margin-bottom:18px;box-shadow:0 1px 2px rgba(40,50,58,.05)}
+.section.internal{background:#FAFCFD;border-color:#D6E6F0}
+.sec-head{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.sec-num{width:24px;height:24px;border-radius:7px;background:var(--ls-primary-50);color:var(--ls-primary);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.sec-head h2{font-size:15px;font-weight:700;color:var(--ls-ink)}
+.sec-head .hint{font-size:12.5px;color:var(--ls-ink-3);font-weight:500}
+.int-flag{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ls-watch);background:var(--ls-watch-bg);padding:3px 9px;border-radius:999px;margin-left:auto}
+
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.field{display:flex;flex-direction:column}
+.field.full{grid-column:1 / -1}
+label{font-size:12px;font-weight:600;color:var(--ls-ink-2);margin-bottom:6px;display:flex;gap:5px;align-items:center}
+label .req{color:var(--ls-risk)}
+label .opt{color:var(--ls-ink-3);font-weight:400}
+.input,select.input,textarea.input{font-family:var(--font);font-size:14px;border:1px solid #D3DBE0;border-radius:9px;padding:9px 12px;width:100%;background:#fff;color:var(--ls-ink)}
+textarea.input{resize:vertical;min-height:64px}
+.input::placeholder{color:#AEB8BF}
+.input:focus{outline:none;border-color:var(--ls-cyan);box-shadow:0 0 0 3px var(--ls-primary-50)}
+.helper{font-size:11.5px;color:var(--ls-ink-3);margin-top:5px}
+
+/* segmented (priority) */
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{font-family:var(--font);font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;border:1px solid #D3DBE0;background:#fff;color:var(--ls-ink-2);cursor:pointer}
+.seg button:hover{border-color:var(--ls-cyan)}
+.seg button.on{background:var(--ls-primary);border-color:var(--ls-primary);color:#fff}
+.seg button.on.crit{background:var(--ls-risk);border-color:var(--ls-risk)}
+.seg button.on.high{background:var(--ls-watch);border-color:var(--ls-watch)}
+
+/* range */
+.range{display:flex;align-items:center;gap:10px}
+.range .dash{color:var(--ls-ink-3);font-weight:600}
+.affix{position:relative;flex:1}
+.affix .pre{position:absolute;left:11px;top:9px;color:var(--ls-ink-3);font-size:14px}
+.affix .input{padding-left:24px}
+
+/* toggle */
+.toggle{display:flex;align-items:center;gap:10px}
+.tg{width:42px;height:24px;border-radius:999px;background:#CBD5DB;position:relative;cursor:pointer;transition:background .15s;flex:none}
+.tg::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:left .15s}
+.tg.on{background:var(--ls-primary)}
+.tg.on::after{left:20px}
+.tg-lbl{font-size:14px;color:var(--ls-ink)}
+
+/* chips */
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font-family:var(--font);font-size:12.5px;font-weight:600;padding:6px 13px;border-radius:999px;border:1px solid #D3DBE0;background:#fff;color:var(--ls-ink-2);cursor:pointer}
+.chip:hover{border-color:var(--ls-cyan)}
+.chip.on{background:var(--ls-primary);border-color:var(--ls-primary);color:#fff}
+.vgroup{margin-bottom:14px}
+.vgroup:last-child{margin-bottom:0}
+.vgroup .vg-lbl{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ls-ink-3);margin-bottom:8px}
+
+/* sticky action bar */
+.actionbar{position:sticky;bottom:0;margin:18px -26px -120px;padding:14px 26px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-top:1px solid var(--ls-line);display:flex;align-items:center;gap:12px}
+.actionbar .status-wrap{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ls-ink-3)}
+.actionbar .spacer{flex:1}
+.pill{font-size:12px;font-weight:600;padding:3px 11px;border-radius:999px;display:inline-flex;align-items:center;gap:6px}
+.pill .dot{width:7px;height:7px;border-radius:50%}
+.p-draft{background:#EEF1F3;color:#5B6770}
+.p-pending{background:var(--ls-watch-bg);color:#9A7400}
+.p-approved{background:var(--ls-primary-50);color:var(--ls-primary-600)}
+.p-open{background:var(--ls-thrive-bg);color:#1F7C5F}
+.p-published{background:var(--ls-thrive-bg);color:#1F7C5F}
+.p-closed{background:var(--ls-risk-bg);color:#A24840}
+
+/* ---------- LIBRARY ---------- */
+.libbar{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.search{position:relative;flex:1;min-width:220px}
+.search svg{position:absolute;left:11px;top:9px;width:16px;height:16px;color:var(--ls-ink-3)}
+.search input{width:100%;font-size:13.5px;padding:9px 12px 9px 34px;border:1px solid #D3DBE0;border-radius:9px;background:#fff}
+.search input:focus{outline:none;border-color:var(--ls-cyan);box-shadow:0 0 0 3px var(--ls-primary-50)}
+.selbox{font-family:var(--font);font-size:13.5px;padding:9px 12px;border:1px solid #D3DBE0;border-radius:9px;background:#fff;color:var(--ls-ink-2)}
+.deptgroup{margin-bottom:22px}
+.dept-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.dept-head h3{font-size:14px;font-weight:700;color:var(--ls-ink)}
+.dept-head .count{font-size:12px;color:var(--ls-ink-3);font-weight:500}
+.dept-head .line{flex:1;height:1px;background:var(--ls-line)}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.jdcard{background:#fff;border:1px solid var(--ls-line);border-radius:13px;padding:18px;box-shadow:0 1px 2px rgba(40,50,58,.05);display:flex;flex-direction:column;gap:10px;cursor:pointer;transition:box-shadow .15s,border-color .15s}
+.jdcard:hover{box-shadow:0 8px 22px rgba(40,50,58,.10);border-color:#CFDCE3}
+.jdcard .top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.jdcard .ttl{font-size:15.5px;font-weight:700;color:var(--ls-ink);line-height:1.25}
+.jdcard .dept{font-size:12px;color:var(--ls-ink-3);margin-top:2px}
+.jdcard .summ{font-size:13px;color:var(--ls-ink-2);line-height:1.45}
+.jdcard .facts{display:flex;flex-wrap:wrap;gap:14px;padding-top:10px;border-top:1px solid #EFF3F5;font-size:12px;color:var(--ls-ink-3)}
+.jdcard .facts b{color:var(--ls-ink-2);font-weight:600}
+.jdcard .acts{display:flex;gap:6px;padding-top:4px}
+.minibtn{font-size:12px;font-weight:600;padding:5px 11px;border-radius:8px;border:1px solid var(--ls-line);background:#fff;color:var(--ls-ink-2);cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.minibtn svg{width:13px;height:13px}
+.minibtn:hover{background:var(--ls-bg-2);border-color:#CFDCE3}
+a.minibtn{text-decoration:none}
+.doclink{color:var(--ls-primary);font-weight:600;text-decoration:none}
+.doclink:hover{text-decoration:underline}
+.minibtn.pub{color:var(--ls-thrive);border-color:#CDE7DD}
+.minibtn.pub:hover{background:var(--ls-thrive-bg)}
+
+/* ---------- TABLE (Job Titles) ---------- */
+.tablecard{background:#fff;border:1px solid var(--ls-line);border-radius:13px;overflow:hidden;box-shadow:0 1px 2px rgba(40,50,58,.05)}
+table.tbl{width:100%;border-collapse:collapse}
+table.tbl thead th{text-align:left;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ls-ink-3);padding:12px 16px;border-bottom:1px solid var(--ls-line);background:#FBFCFD}
+table.tbl tbody td{padding:12px 16px;border-bottom:1px solid #F1F4F6;font-size:13.5px;color:var(--ls-ink-2)}
+table.tbl tbody tr:last-child td{border-bottom:none}
+table.tbl tbody tr:hover{background:#F8FAFB}
+table.tbl .t-name{font-weight:600;color:var(--ls-ink)}
+.tag{font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--ls-bg-2);color:var(--ls-ink-2)}
+.lvl{font-size:12.5px;color:var(--ls-ink-2)}
+.rowact{display:flex;gap:4px}
+.rowact button{width:28px;height:28px;border-radius:7px;border:none;background:transparent;color:var(--ls-ink-3);cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.rowact button svg{width:15px;height:15px}
+.rowact button:hover{background:var(--ls-bg-2);color:var(--ls-ink)}
+.addrow{background:#FAFCFD;border:1px solid #D6E6F0;border-radius:13px;padding:18px 20px;margin-bottom:18px}
+.addrow .ar-grid{display:grid;grid-template-columns:2fr 1.3fr 1.3fr auto;gap:12px;align-items:end}
+@media(max-width:820px){
+  .side{display:none}
+  .grid,.cards{grid-template-columns:1fr}
+  .addrow .ar-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ================= SIDEBAR ================= -->
+  <aside class="side">
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 40 40" fill="none" stroke="#4FA9D6" stroke-width="3.6" stroke-linecap="round">
+        <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5"/>
+        <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5"/>
+        <line x1="5" y1="14" x2="11.5" y2="14"/>
+        <line x1="28.5" y1="26" x2="35" y2="26"/>
+      </svg>
+      <div class="nm">Lightspeed<small>Talent Assessment</small></div>
+    </div>
+
+    <nav class="nav">
+      <div class="navlbl">Workspace</div>
+      <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>Home</a>
+      <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>Entities</a>
+      <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>AI Chat</a>
+      <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Settings</a>
+      <a data-nav="docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>Document Index</a>
+
+      <div class="navlbl">Hiring Pipeline</div>
+      <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>Overview</a>
+      <a data-nav="req"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>Requisitions</a>
+      <a data-nav="lib"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M16 13H8M16 17H8M10 9H8"/></svg>Job Descriptions</a>
+      <a data-nav="titles"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg>Job Titles</a>
+      <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Candidates</a>
+      <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>Company Values</a>
+      <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12H3M16 6H3M16 18H3M18 9l3 3-3 3"/></svg>Score Values</a>
+      <a><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="m19 9-5 5-4-4-3 3"/></svg>Insights</a>
+    </nav>
+
+    <div class="foot">
+      <div class="userchip"><span class="av">J</span><div><div class="un">Jade</div><div class="ur">Admin</div></div></div>
+    </div>
+  </aside>
+
+  <!-- ================= MAIN ================= -->
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb"><b id="crumb">Requisitions</b></div>
+      <div class="right">
+        <span class="mock-tag">Mockup · sample data</span>
+        <button class="iconbtn" title="What's new"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg></button>
+        <button class="iconbtn" title="Notifications"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></button>
+        <button class="iconbtn" title="Sign out"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ============ VIEW: REQUISITION FORM ============ -->
+      <section class="view on" id="view-req">
+        <div class="phead">
+          <div>
+            <h1>New Job Requisition</h1>
+            <div class="sub">Open a headcount request and route it for approval.</div>
+          </div>
+        </div>
+
+        <!-- Group 1 -->
+        <div class="section">
+          <div class="sec-head"><span class="sec-num">1</span><h2>The role</h2></div>
+          <div class="grid">
+            <div class="field">
+              <label>Department <span class="req">*</span></label>
+              <select class="input">
+                <option>Engineering</option><option>Product</option><option>Sales</option>
+                <option>Marketing</option><option>Operations</option><option>Finance</option>
+                <option>HR</option><option>Customer Success</option><option>Legal</option><option>Other</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Job description <span class="opt">— from library, optional</span></label>
+              <select class="input">
+                <option value="">Attach later</option>
+                <option selected>Senior Software Engineer · Engineering</option>
+                <option>Staff Engineer · Engineering</option>
+                <option>Product Manager · Product</option>
+                <option>Account Executive · Sales</option>
+              </select>
+              <div class="helper">Pick an existing role, or leave blank and link one later.</div>
+            </div>
+            <div class="field">
+              <label>Hiring manager <span class="req">*</span></label>
+              <input class="input" placeholder="e.g. Wes Anderson">
+            </div>
+            <div class="field">
+              <label>Number of openings <span class="req">*</span></label>
+              <input class="input" type="number" min="1" value="2">
+            </div>
+            <div class="field full">
+              <label>Priority <span class="req">*</span></label>
+              <div class="seg" data-seg="priority">
+                <button type="button">Low</button>
+                <button type="button" class="on">Medium</button>
+                <button type="button" data-tone="high">High</button>
+                <button type="button" data-tone="crit">Critical</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Group 2 -->
+        <div class="section">
+          <div class="sec-head"><span class="sec-num">2</span><h2>Employment details</h2></div>
+          <div class="grid">
+            <div class="field">
+              <label>Employment type</label>
+              <select class="input"><option>Full-Time</option><option>Part-Time</option><option>Contract</option><option>Internship</option></select>
+            </div>
+            <div class="field">
+              <label>Target start date</label>
+              <input class="input" type="date" value="2026-09-01">
+            </div>
+            <div class="field">
+              <label>Location</label>
+              <input class="input" placeholder="e.g. Austin, TX">
+            </div>
+            <div class="field" style="justify-content:flex-end">
+              <label>Remote eligible</label>
+              <div class="toggle"><span class="tg on" data-toggle></span><span class="tg-lbl">Yes — open to remote</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Group 3 -->
+        <div class="section">
+          <div class="sec-head"><span class="sec-num">3</span><h2>Compensation</h2><span class="hint">Budget &amp; salary range</span></div>
+          <div class="field full" style="margin-bottom:18px">
+            <label>Is this role budgeted? <span class="req">*</span></label>
+            <div class="seg" data-seg="budget">
+              <button type="button" class="on">Budgeted</button>
+              <button type="button" data-tone="high">Not budgeted</button>
+              <button type="button">Pending approval</button>
+            </div>
+            <div class="helper">Whether headcount for this role is already in the approved budget. Helps approvers prioritize.</div>
+          </div>
+          <div class="field full" style="max-width:420px">
+            <label>Salary range (USD)</label>
+            <div class="range">
+              <div class="affix"><span class="pre">$</span><input class="input" type="number" placeholder="80,000" value="120000"></div>
+              <span class="dash">–</span>
+              <div class="affix"><span class="pre">$</span><input class="input" type="number" placeholder="120,000" value="160000"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Group 4 -->
+        <div class="section">
+          <div class="sec-head"><span class="sec-num">4</span><h2>Why we're hiring</h2></div>
+          <div class="field full">
+            <label>Reason</label>
+            <div class="chips" data-chips="reason" style="margin-bottom:10px">
+              <span class="chip on">New headcount</span><span class="chip">Backfill</span>
+              <span class="chip">Growth</span><span class="chip">Replacement</span>
+            </div>
+            <textarea class="input" rows="2" placeholder="Add any context for the approver…">New headcount approved in the Q3 plan to support the platform roadmap.</textarea>
+          </div>
+        </div>
+
+        <div class="actionbar">
+          <div class="status-wrap">Status <span class="pill p-draft"><span class="dot" style="background:#5B6770"></span>Draft</span></div>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost">Save draft</button>
+          <button class="btn btn-primary">Submit for approval</button>
+        </div>
+      </section>
+
+      <!-- ============ VIEW: JD LIBRARY ============ -->
+      <section class="view" id="view-lib">
+        <div class="phead">
+          <div>
+            <h1>Job Descriptions</h1>
+            <div class="sub">Your reusable library of roles — group by department, publish, and reuse.</div>
+          </div>
+          <button class="btn btn-primary" data-go="edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5v14"/></svg>New job description</button>
+        </div>
+
+        <div class="libbar">
+          <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input placeholder="Search roles…"></div>
+          <select class="selbox"><option>All departments</option><option>Engineering</option><option>Product</option><option>Sales</option><option>Customer Success</option></select>
+          <select class="selbox"><option>All statuses</option><option>Published</option><option>Draft</option><option>Closed</option></select>
+        </div>
+
+        <!-- Engineering -->
+        <div class="deptgroup">
+          <div class="dept-head"><h3>Engineering</h3><span class="count">2 roles</span><span class="line"></span></div>
+          <div class="cards">
+            <div class="jdcard" data-go="edit">
+              <div class="top"><div><div class="ttl">Senior Software Engineer</div><div class="dept">Engineering · Senior</div></div><span class="pill p-published"><span class="dot" style="background:#2E9E7B"></span>Published</span></div>
+              <div class="summ">Build and own services across the Lightspeed platform, from API to data layer.</div>
+              <div class="facts"><span>CCAT pass <b>32</b></span><span><b>5</b> values matched</span><span>Updated <b>Jun 24</b></span></div>
+              <div class="acts"><span class="minibtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>Edit</span><span class="minibtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>Duplicate</span></div>
+            </div>
+            <div class="jdcard" data-go="edit">
+              <div class="top"><div><div class="ttl">Staff Engineer</div><div class="dept">Engineering · Lead</div></div><span class="pill p-draft"><span class="dot" style="background:#5B6770"></span>Draft</span></div>
+              <div class="summ">Technical leadership across teams; set architecture direction and raise the bar.</div>
+              <div class="facts"><span>CCAT pass <b>35</b></span><span><b>6</b> values matched</span><span>Updated <b>Jun 28</b></span></div>
+              <div class="acts"><span class="minibtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>Edit</span><span class="minibtn pub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>Publish</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Product -->
+        <div class="deptgroup">
+          <div class="dept-head"><h3>Product</h3><span class="count">1 role</span><span class="line"></span></div>
+          <div class="cards">
+            <div class="jdcard" data-go="edit">
+              <div class="top"><div><div class="ttl">Product Manager</div><div class="dept">Product · Mid</div></div><span class="pill p-published"><span class="dot" style="background:#2E9E7B"></span>Published</span></div>
+              <div class="summ">Own a product area end to end — discovery, roadmap, and delivery with engineering.</div>
+              <div class="facts"><span>CCAT pass <b>30</b></span><span><b>4</b> values matched</span><span>Updated <b>Jun 20</b></span></div>
+              <div class="acts"><span class="minibtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>Edit</span><span class="minibtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>Duplicate</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sales -->
+        <div class="deptgroup">
+          <div class="dept-head"><h3>Sales</h3><span class="count">1 role</span><span class="line"></span></div>
+          <div class="cards">
+            <div class="jdcard" data-go="edit">
+              <div class="top"><div><div class="ttl">Account Executive</div><div class="dept">Sales · Mid</div></div><span class="pill p-published"><span class="dot" style="background:#2E9E7B"></span>Published</span></div>
+              <div class="summ">Run the full sales cycle for mid-market accounts and hit quarterly targets.</div>
+              <div class="facts"><span>CCAT pass <b>28</b></span><span><b>4</b> values matched</span><span>Updated <b>Jun 18</b></span></div>
+              <div class="acts"><span class="minibtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>Edit</span><span class="minibtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>Duplicate</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ VIEW: JD EDITOR ============ -->
+      <section class="view" id="view-edit">
+        <div class="phead">
+          <div>
+            <button class="btn btn-text" data-go="lib" style="padding-left:0;margin-bottom:4px"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7M19 12H5"/></svg>Back to library</button>
+            <h1>New Job Description</h1>
+            <div class="sub">Define the role for the library — candidate-facing details plus internal screening.</div>
+          </div>
+        </div>
+
+        <!-- Section A -->
+        <div class="section">
+          <div class="sec-head"><span class="sec-num">A</span><h2>Basics</h2></div>
+          <div class="grid">
+            <div class="field">
+              <label>Job title <span class="req">*</span></label>
+              <select class="input">
+                <option value="">Select a title…</option>
+                <option selected>Senior Software Engineer</option>
+                <option>Software Engineer</option><option>Staff Engineer</option>
+                <option>Engineering Manager</option><option>Product Manager</option>
+                <option>Product Designer</option><option>Data Scientist</option>
+                <option>Account Executive</option><option>Customer Success Manager</option>
+              </select>
+              <div class="helper">Choose from the <a href="#" data-go="titles" style="color:var(--ls-primary);font-weight:600">Job Titles</a> list. Picking a title fills in its department and level.</div>
+            </div>
+            <div class="field">
+              <label>Department <span class="req">*</span></label>
+              <select class="input"><option>Engineering</option><option>Product</option><option>Sales</option><option>Marketing</option><option>Operations</option><option>Finance</option><option>HR</option><option>Customer Success</option><option>Legal</option><option>Other</option></select>
+            </div>
+            <div class="field">
+              <label>Seniority <span class="opt">— from the title, editable</span></label>
+              <select class="input"><option>Intern</option><option>Junior</option><option>Mid</option><option selected>Senior</option><option>Lead</option><option>Manager</option><option>Director</option></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section B -->
+        <div class="section">
+          <div class="sec-head"><span class="sec-num">B</span><h2>The role</h2><span class="hint">What a candidate reads</span></div>
+          <div class="grid">
+            <div class="field full">
+              <label>Summary</label>
+              <textarea class="input" rows="2" placeholder="A short overview of the role…"></textarea>
+            </div>
+            <div class="field full">
+              <label>Key responsibilities</label>
+              <textarea class="input" rows="3" placeholder="What this person will do day to day…"></textarea>
+            </div>
+            <div class="field">
+              <label>Required qualifications</label>
+              <textarea class="input" rows="3" placeholder="Must-haves…"></textarea>
+            </div>
+            <div class="field">
+              <label>Preferred qualifications</label>
+              <textarea class="input" rows="3" placeholder="Nice-to-haves…"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section C -->
+        <div class="section internal">
+          <div class="sec-head"><span class="sec-num">C</span><h2>How candidates are screened</h2><span class="int-flag">Internal only</span></div>
+          <div class="grid">
+            <div class="field">
+              <label>CCAT pass score</label>
+              <input class="input" type="number" min="0" max="50" value="32" style="max-width:140px">
+              <div class="helper">Cognitive aptitude cutoff (0–50). Applicants below this are screened out automatically. Default 30.</div>
+            </div>
+            <div class="field">
+              <label>Work sample instructions</label>
+              <textarea class="input" rows="3" placeholder="The task sent to candidates who pass the assessment…"></textarea>
+            </div>
+            <div class="field full">
+              <label>Company values to match <span class="opt">— pick what matters most for this role</span></label>
+              <div data-chips="values">
+                <div class="vgroup"><div class="vg-lbl">Approach</div><div class="chips"><span class="chip on">Coachable</span><span class="chip">Purposeful</span><span class="chip on">Resilient</span></div></div>
+                <div class="vgroup"><div class="vg-lbl">Team</div><div class="chips"><span class="chip on">Collaborative</span><span class="chip">Humble</span><span class="chip">Transparent</span></div></div>
+                <div class="vgroup"><div class="vg-lbl">Individual</div><div class="chips"><span class="chip on">Accountable</span><span class="chip">Courageous</span><span class="chip">Creative</span><span class="chip on">Driven</span><span class="chip">Focused</span><span class="chip">High Standards</span><span class="chip">Self-Aware</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="actionbar">
+          <div class="status-wrap">Status <span class="pill p-draft"><span class="dot" style="background:#5B6770"></span>Draft</span></div>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost">Save draft</button>
+          <button class="btn btn-primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/></svg>Publish</button>
+        </div>
+      </section>
+
+      <!-- ============ VIEW: JOB TITLES ============ -->
+      <section class="view" id="view-titles">
+        <div class="phead">
+          <div>
+            <h1>Job Titles</h1>
+            <div class="sub">The master list of titles used across job descriptions and requisitions.</div>
+          </div>
+          <button class="btn btn-primary" id="addTitleBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5v14"/></svg>Add title</button>
+        </div>
+
+        <!-- inline add form -->
+        <div class="addrow" id="addTitleForm" style="display:none">
+          <div class="ar-grid">
+            <div class="field"><label>Title <span class="req">*</span></label><input class="input" placeholder="e.g. Site Reliability Engineer"></div>
+            <div class="field"><label>Department <span class="req">*</span></label><select class="input"><option>Engineering</option><option>Product</option><option>Design</option><option>Data</option><option>Sales</option><option>Marketing</option><option>Operations</option><option>Customer Success</option><option>Finance</option><option>HR</option></select></div>
+            <div class="field"><label>Level</label><select class="input"><option>Intern</option><option>Junior</option><option selected>Mid</option><option>Senior</option><option>Lead</option><option>Manager</option><option>Director</option><option>VP</option></select></div>
+            <div class="field"><button class="btn btn-primary" id="saveTitleBtn">Add</button></div>
+          </div>
+        </div>
+
+        <div class="tablecard">
+          <table class="tbl">
+            <thead><tr><th>Title</th><th>Department</th><th>Level</th><th>Used by</th><th>Status</th><th style="width:80px"></th></tr></thead>
+            <tbody id="titlesBody">
+              <tr><td class="t-name">Software Engineer</td><td><span class="tag">Engineering</span></td><td class="lvl">Mid</td><td>3 JDs</td><td><span class="pill p-open"><span class="dot" style="background:#2E9E7B"></span>Active</span></td><td><div class="rowact"><button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button><button title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg></button></div></td></tr>
+              <tr><td class="t-name">Senior Software Engineer</td><td><span class="tag">Engineering</span></td><td class="lvl">Senior</td><td>2 JDs</td><td><span class="pill p-open"><span class="dot" style="background:#2E9E7B"></span>Active</span></td><td><div class="rowact"><button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button><button title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg></button></div></td></tr>
+              <tr><td class="t-name">Staff Engineer</td><td><span class="tag">Engineering</span></td><td class="lvl">Lead</td><td>1 JD</td><td><span class="pill p-open"><span class="dot" style="background:#2E9E7B"></span>Active</span></td><td><div class="rowact"><button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button><button title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg></button></div></td></tr>
+              <tr><td class="t-name">Engineering Manager</td><td><span class="tag">Engineering</span></td><td class="lvl">Manager</td><td>1 JD</td><td><span class="pill p-open"><span class="dot" style="background:#2E9E7B"></span>Active</span></td><td><div class="rowact"><button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button><button title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg></button></div></td></tr>
+              <tr><td class="t-name">DevOps Engineer</td><td><span class="tag">Engineering</span></td><td class="lvl">Senior</td><td>0 JDs</td><td><span class="pill p-open"><span class="dot" style="background:#2E9E7B"></span>Active</span></td><td><div class="rowact"><button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button><button title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg></button></div></td></tr>
+              <tr><td class="t-name">Product Manager</td><td><span class="tag">Product</span></td><td class="lvl">Mid</td><td>1 JD</td><td><span class="pill p-open"><span class="dot" style="background:#2E9E7B"></span>Active</span></td><td><div class="rowact"><button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button><button title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg></button></div></td></tr>
+              <tr><td class="t-name">Product Designer</td><td><span class="tag">Design</span></td><td class="lvl">Mid</td><td>0 JDs</td><td><span class="pill p-open"><span class="dot" style="background:#2E9E7B"></span>Active</span></td><td><div class="rowact"><button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button><button title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg></button></div></td></tr>
+              <tr><td class="t-name">Data Scientist</td><td><span class="tag">Data</span></td><td class="lvl">Senior</td><td>0 JDs</td><td><span class="pill p-open"><span class="dot" style="background:#2E9E7B"></span>Active</span></td><td><div class="rowact"><button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button><button title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg></button></div></td></tr>
+              <tr><td class="t-name">Account Executive</td><td><span class="tag">Sales</span></td><td class="lvl">Mid</td><td>1 JD</td><td><span class="pill p-open"><span class="dot" style="background:#2E9E7B"></span>Active</span></td><td><div class="rowact"><button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button><button title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg></button></div></td></tr>
+              <tr><td class="t-name">Customer Success Manager</td><td><span class="tag">Customer Success</span></td><td class="lvl">Mid</td><td>0 JDs</td><td><span class="pill p-open"><span class="dot" style="background:#2E9E7B"></span>Active</span></td><td><div class="rowact"><button title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg></button><button title="Archive"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/></svg></button></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="helper" style="margin-top:12px">Sample titles for a software company. Each title can be reused by many job descriptions; "Used by" shows how many reference it. Archiving a title keeps existing job descriptions intact but hides it from new ones.</p>
+      </section>
+
+      <!-- ============ VIEW: DOCUMENT INDEX ============ -->
+      <section class="view" id="view-docs">
+        <div class="phead">
+          <div>
+            <h1>Document Index</h1>
+            <div class="sub">Table of contents for the project's documents — latest version of each. Admin reference.</div>
+          </div>
+        </div>
+
+        <div class="deptgroup">
+          <div class="dept-head"><h3>Overviews &amp; plans</h3><span class="line"></span></div>
+          <div class="tablecard">
+            <table class="tbl">
+              <thead><tr><th style="width:32%">Name</th><th>Description</th><th style="width:90px"></th></tr></thead>
+              <tbody>
+                <tr><td class="t-name"><a class="doclink" target="_blank" href="../../1-User Summary/2x Talent Assessment — Plain-English Overview.html">2x Talent Assessment — Plain-English Overview</a></td><td>Plain-language summary of the proposed hiring system and how it works.</td><td><a class="minibtn" target="_blank" href="../../1-User Summary/2x Talent Assessment — Plain-English Overview.html">Open ↗</a></td></tr>
+                <tr><td class="t-name"><a class="doclink" target="_blank" href="../../1-User Summary/2x Talent Assessment Design and Build Plan.html">2x Talent Assessment — Design &amp; Build Plan</a></td><td>The funnel, value, costs, phasing, and build plan for the 2x design.</td><td><a class="minibtn" target="_blank" href="../../1-User Summary/2x Talent Assessment Design and Build Plan.html">Open ↗</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="deptgroup">
+          <div class="dept-head"><h3>Design</h3><span class="line"></span></div>
+          <div class="tablecard">
+            <table class="tbl">
+              <thead><tr><th style="width:32%">Name</th><th>Description</th><th style="width:90px"></th></tr></thead>
+              <tbody>
+                <tr><td class="t-name"><a class="doclink" target="_blank" href="../lightspeed-style-nav-guide-v1.html">Lightspeed Style &amp; Navigation Guide</a></td><td>Brand colors, typography, components, and navigation patterns for the app.</td><td><a class="minibtn" target="_blank" href="../lightspeed-style-nav-guide-v1.html">Open ↗</a></td></tr>
+                <tr><td class="t-name"><a class="doclink" target="_blank" href="../Email &amp; Messaging — Design Spec v2.html">Email &amp; Messaging — Design Spec v2</a></td><td>Design for the candidate-facing emails and messages across the funnel.</td><td><a class="minibtn" target="_blank" href="../Email &amp; Messaging — Design Spec v2.html">Open ↗</a></td></tr>
+                <tr><td class="t-name"><a class="doclink" target="_blank" href="requisition-jd-forms-mockup-v1.html">Requisition &amp; Job Description Forms — Mockup v1</a> <span class="tag" style="margin-left:6px">this page</span></td><td>Interactive mockup of the requisition form, job description library, job titles, and this index.</td><td><a class="minibtn" target="_blank" href="requisition-jd-forms-mockup-v1.html">Open ↗</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="deptgroup">
+          <div class="dept-head"><h3>Working drafts</h3><span class="line"></span></div>
+          <div class="tablecard">
+            <table class="tbl">
+              <thead><tr><th style="width:32%">Name</th><th>Description</th><th style="width:90px"></th></tr></thead>
+              <tbody>
+                <tr><td class="t-name"><a class="doclink" target="_blank" href="../../x.working documents/10x design v2.html">10x Design v2</a></td><td>The 10x reimagining of hiring compared with the Lightspeed 2x plan.</td><td><a class="minibtn" target="_blank" href="../../x.working documents/10x design v2.html">Open ↗</a></td></tr>
+                <tr><td class="t-name"><a class="doclink" target="_blank" href="../../x.working documents/10x design v2 — Plain English v2.html">10x Design v2 — Plain English</a></td><td>Plain-language version of the 10x design: our system vs. the Lightspeed plan.</td><td><a class="minibtn" target="_blank" href="../../x.working documents/10x design v2 — Plain English v2.html">Open ↗</a></td></tr>
+                <tr><td class="t-name"><a class="doclink" target="_blank" href="../../x.working documents/2x-finalized-flowchart-v1.html">2x Finalized Flowchart</a></td><td>The final funnel flowchart for the 2x design.</td><td><a class="minibtn" target="_blank" href="../../x.working documents/2x-finalized-flowchart-v1.html">Open ↗</a></td></tr>
+                <tr><td class="t-name"><a class="doclink" target="_blank" href="../../x.working documents/2x-plus-integrated-flowchart-v1.html">2x+ Integrated Flowchart</a></td><td>Funnel flowchart with the integrated additions to the 2x design.</td><td><a class="minibtn" target="_blank" href="../../x.working documents/2x-plus-integrated-flowchart-v1.html">Open ↗</a></td></tr>
+                <tr><td class="t-name"><a class="doclink" target="_blank" href="../../x.working documents/PA2 TA Outbound workflow v5.html">PA2 TA Outbound Workflow v5</a></td><td>Diagram of the outbound candidate workflow.</td><td><a class="minibtn" target="_blank" href="../../x.working documents/PA2 TA Outbound workflow v5.html">Open ↗</a></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  const views = {req:'view-req', lib:'view-lib', edit:'view-edit', titles:'view-titles', docs:'view-docs'};
+  const crumbs = {req:'Requisitions', lib:'Job Descriptions', edit:'Job Descriptions', titles:'Job Titles', docs:'Document Index'};
+  function show(v){
+    Object.values(views).forEach(id=>document.getElementById(id).classList.remove('on'));
+    document.getElementById(views[v]).classList.add('on');
+    document.getElementById('crumb').textContent = crumbs[v];
+    const navMatch = v==='edit' ? 'lib' : v;
+    document.querySelectorAll('.nav a[data-nav]').forEach(a=>a.classList.toggle('active', a.dataset.nav===navMatch));
+    document.querySelector('.content').scrollTop = 0;
+  }
+  // sidebar nav
+  document.querySelectorAll('.nav a[data-nav]').forEach(a=>a.addEventListener('click',()=>show(a.dataset.nav)));
+  // buttons / cards with data-go
+  document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',e=>{e.stopPropagation();show(el.dataset.go)}));
+  // segmented selects
+  document.querySelectorAll('[data-seg]').forEach(seg=>{
+    seg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+      seg.querySelectorAll('button').forEach(x=>x.classList.remove('on','high','crit'));
+      b.classList.add('on'); if(b.dataset.tone) b.classList.add(b.dataset.tone);
+    }));
+  });
+  // chips
+  document.querySelectorAll('[data-chips] .chip').forEach(c=>c.addEventListener('click',()=>c.classList.toggle('on')));
+  // toggle
+  document.querySelectorAll('[data-toggle]').forEach(t=>t.addEventListener('click',()=>{
+    t.classList.toggle('on'); t.nextElementSibling.textContent = t.classList.contains('on')?'Yes — open to remote':'No — on-site only';
+  }));
+  // job titles: show add form + append a row
+  const atBtn=document.getElementById('addTitleBtn'), atForm=document.getElementById('addTitleForm');
+  if(atBtn) atBtn.addEventListener('click',()=>{atForm.style.display = atForm.style.display==='none'?'block':'none'; if(atForm.style.display==='block') atForm.querySelector('input').focus();});
+  const saveT=document.getElementById('saveTitleBtn');
+  if(saveT) saveT.addEventListener('click',()=>{
+    const inp=atForm.querySelectorAll('.input'); const title=inp[0].value.trim(); if(!title) return;
+    const dept=inp[1].value, lvl=inp[2].value;
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td class="t-name">'+title+'</td><td><span class="tag">'+dept+'</span></td><td class="lvl">'+lvl+'</td><td>0 JDs</td><td><span class="pill p-open"><span class="dot" style="background:#2E9E7B"></span>Active</span></td><td><div class="rowact"><button title="Edit">✎</button></div></td>';
+    document.getElementById('titlesBody').prepend(tr);
+    inp[0].value=''; atForm.style.display='none';
+  });
+  // set initial active nav
+  show('req');
+</script>
+</body>
+</html>

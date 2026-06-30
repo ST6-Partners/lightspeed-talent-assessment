@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2x Talent Assessment — Finalized Flowchart v1</title>
+<style>
+  :root{
+    --ink:#1f2733; --muted:#5b6675; --line:#d8dee8; --bg:#f7f9fc;
+    --email:#dbe7ff; --emailB:#9bb5e8;
+    --reject:#f6d2d2; --rejectB:#df9a9a;
+    --success:#cdeac0; --successB:#94c47e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 24px 60px}
+  header{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:8px}
+  .eyebrow{letter-spacing:.16em;text-transform:uppercase;font-size:.7rem;color:#3b82f6;font-weight:700}
+  h1{font-size:1.7rem;margin:.25em 0 .15em;letter-spacing:-.3px}
+  .meta{color:var(--muted);font-size:.85rem}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:16px 0 4px;font-size:.8rem;color:var(--muted)}
+  .legend .chip{display:inline-flex;align-items:center;gap:7px}
+  .sw{width:14px;height:14px;border-radius:4px;border:1px solid var(--line)}
+  .sw.white{background:#fff}
+  .sw.email{background:var(--email);border-color:var(--emailB)}
+  .sw.reject{background:var(--reject);border-color:var(--rejectB)}
+  .sw.success{background:var(--success);border-color:var(--successB)}
+  .diagram{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;overflow:auto;
+    box-shadow:0 6px 22px rgba(20,40,80,.06)}
+  .mermaid{font-size:14px}
+  footer{color:var(--muted);font-size:.78rem;margin-top:22px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Lightspeed · AI Talent Assessment</div>
+    <h1>2x Talent Assessment — Finalized Funnel Flowchart</h1>
+    <div class="meta">Version 1 (finalized) · 2026-06-25 · Supersedes the original and 2x-plus integrated flowchart drafts (both v1).</div>
+  </header>
+
+  <div class="legend">
+    <span class="chip"><span class="sw white"></span> Process / decision step</span>
+    <span class="chip"><span class="sw email"></span> Automated email / notification</span>
+    <span class="chip"><span class="sw reject"></span> Rejection</span>
+    <span class="chip"><span class="sw success"></span> Hire</span>
+  </div>
+
+  <div class="diagram">
+    <pre class="mermaid">
+flowchart TD
+  A["Job Posting"] --> B["Send in resume"]
+  B --> C["Email — take assessment"]:::email
+  C --> D["(1 week) Email reminder — take assessment"]:::email
+  D --> E1["Doesn't complete assessment within 2 weeks of email"]
+  D --> E2["Score &lt; 30"]
+  D --> E3["Score 30+"]
+  E1 --> R1["Rejected"]:::reject
+  R1 --> N1["Notified through email"]:::email
+  E2 --> R2["Rejected"]:::reject
+  R2 --> N2["Notified through email"]:::email
+  E3 --> F["Notified through email + work sample"]:::email
+  F --> G["Work Sample + resume + reference checks"]
+  G --> R3["Not up to standard — rejected and notified by email"]:::reject
+  G --> N3["Notified through email"]:::email
+  N3 --> H["EPP vs. company values"]
+  H --> R4["Values don't fit — rejected"]:::reject
+  R4 --> N4["Notified through email"]:::email
+  H --> I["Values fit"]
+  I --> J["Email + schedule interview"]:::email
+  J --> K["Interview with HR"]
+  TQ["Results tailor interview questions"] --> K
+  TQ --> TI["Email to interviewer"]:::email
+  K --> L["Transcript processed — feedback for interviewer and candidate"]
+  L --> M["Email feedback to interviewer"]:::email
+  M --> R5["Rejected"]:::reject
+  R5 --> N5["Notified through email"]:::email
+  M --> O["Email feedback to candidate"]:::email
+  O --> P["Bingo"]:::success
+  P --> Q["Email + offer letter"]:::email
+  Q --> Z["Insights"]
+
+  subgraph ST1["Stage 1 · 1000 → 200"]
+    A
+    B
+    C
+    D
+    E1
+    E2
+    E3
+    R1
+    N1
+    R2
+    N2
+    F
+  end
+  subgraph ST2["Stage 2 · 200 → 20 · Week 2"]
+    G
+    R3
+    N3
+  end
+  subgraph ST3["Stage 3 · 20 → 5 · Week 3"]
+    H
+    R4
+    N4
+    I
+    J
+    TQ
+    TI
+    K
+  end
+  subgraph ST4["Stage 4 · 5 → 1 · Week 4"]
+    L
+    M
+    R5
+    N5
+    O
+    P
+    Q
+    Z
+  end
+
+  classDef email fill:#dbe7ff,stroke:#9bb5e8,color:#16284a;
+  classDef reject fill:#f6d2d2,stroke:#df9a9a,color:#5a1717;
+  classDef success fill:#cdeac0,stroke:#94c47e,color:#1f3d17;
+    </pre>
+  </div>
+
+  <footer>
+    Funnel stages: 1000 → 200 (assessment auto-reject) · 200 → 20 (work sample, Week 2) ·
+    20 → 5 (EPP values + interview, Week 3) · 5 → 1 (interview feedback + offer, Week 4).
+    Reminder / auto-reject cadence (1-week nudge, 2-week auto-reject) matches the deployed hiring-scheduler.
+  </footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad:true, theme:'base',
+    themeVariables:{ fontFamily:'system-ui, sans-serif', primaryColor:'#ffffff',
+      primaryBorderColor:'#9aa6b6', primaryTextColor:'#1f2733', lineColor:'#8a96a8',
+      clusterBkg:'#f2f6fc', clusterBorder:'#c7d2e2' },
+    flowchart:{ useMaxWidth:true, htmlLabels:true, nodeSpacing:34, rankSpacing:42 }
+  });
+</script>
+</body>
+</html>

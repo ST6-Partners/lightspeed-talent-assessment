@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PA2 TA Outbound Workflow</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242836;
+    --border: #2e3345;
+    --text: #e2e4eb;
+    --text-dim: #8b8fa3;
+    --accent: #6c8cff;
+    --accent-dim: rgba(108,140,255,0.12);
+    --green: #4ade80;
+    --amber: #fbbf24;
+    --rose: #f87171;
+    --cyan: #22d3ee;
+    --purple: #a78bfa;
+    --orange: #fb923c;
+    --pink: #f472b6;
+    --teal: #2dd4bf;
+    --lane-recruiter: rgba(108,140,255,0.06);
+    --lane-admin: rgba(167,139,250,0.06);
+    --lane-hm: rgba(251,191,36,0.06);
+    --lane-candidate: rgba(74,222,128,0.06);
+    --lane-system: rgba(139,143,163,0.04);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+
+  /* Header */
+  .header { padding: 32px 40px 0; max-width: 1400px; margin: 0 auto; }
+  .header h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+  .header .meta { font-size: 13px; color: var(--text-dim); }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; padding: 24px 40px 0; max-width: 1400px; margin: 0 auto; border-bottom: 1px solid var(--border); }
+  .tab { padding: 10px 20px; font-size: 14px; font-weight: 500; color: var(--text-dim); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; user-select: none; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Content */
+  .content { max-width: 1400px; margin: 0 auto; padding: 28px 40px 60px; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── SCREEN LIST TAB ── */
+  .screen-section { margin-bottom: 32px; }
+  .screen-section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .surface-badge { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+  .screen-section-header h2 { font-size: 17px; font-weight: 600; }
+  .screen-section-header .subtitle { font-size: 13px; color: var(--text-dim); margin-left: auto; }
+  .screen-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .screen-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; transition: border-color 0.15s; }
+  .screen-card:hover { border-color: var(--accent); }
+  .screen-card .name { font-size: 14px; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .screen-card .desc { font-size: 13px; color: var(--text-dim); line-height: 1.45; }
+  .screen-card .users { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .user-tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+  .user-tag.to { background: var(--accent-dim); color: var(--accent); }
+  .user-tag.hm { background: rgba(251,191,36,0.12); color: var(--amber); }
+  .user-tag.ca { background: rgba(74,222,128,0.12); color: var(--green); }
+  .user-tag.sys { background: rgba(139,143,163,0.1); color: var(--text-dim); }
+  .product-tag { font-size: 10px; padding: 2px 7px; border-radius: 3px; font-weight: 700; letter-spacing: 0.04em; }
+  .product-tag.pa { background: rgba(251,146,60,0.15); color: var(--orange); }
+  .product-tag.pb { background: rgba(45,212,191,0.15); color: var(--teal); }
+  .product-tag.plat { background: rgba(139,143,163,0.12); color: var(--text-dim); }
+
+  .screen-count { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 14px; margin-bottom: 24px; }
+  .screen-count strong { color: var(--text); font-weight: 600; }
+
+  /* Color coding per surface */
+  .s1 { background: rgba(108,140,255,0.15); color: var(--accent); }
+  .s2 { background: rgba(34,211,238,0.15); color: var(--cyan); }
+  .s3 { background: rgba(251,191,36,0.15); color: var(--amber); }
+  .s4 { background: rgba(74,222,128,0.15); color: var(--green); }
+  .s5 { background: rgba(167,139,250,0.15); color: var(--purple); }
+  .s6 { background: rgba(248,113,113,0.15); color: var(--rose); }
+  .s7 { background: rgba(244,114,182,0.15); color: var(--pink); }
+
+  .border-s1 { border-left: 3px solid var(--accent); }
+  .border-s2 { border-left: 3px solid var(--cyan); }
+  .border-s3 { border-left: 3px solid var(--amber); }
+  .border-s4 { border-left: 3px solid var(--green); }
+  .border-s5 { border-left: 3px solid var(--purple); }
+  .border-s6 { border-left: 3px solid var(--rose); }
+  .border-s7 { border-left: 3px solid var(--pink); }
+
+  /* ── SWIMLANE TAB ── */
+  .swimlane-container { overflow-x: auto; overflow-y: auto; padding-bottom: 40px; }
+  .swimlane-wrapper { position: relative; }
+  .swimlane { display: grid; grid-template-columns: 160px repeat(9, 280px); min-width: 2680px; }
+
+  /* Stage headers */
+  .stage-col-header { padding: 16px 12px; font-size: 12px; font-weight: 700; text-align: center; border-bottom: 2px solid var(--border); border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .stage-col-header .stage-num { font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+  .stage-col-header .stage-name { font-size: 13px; font-weight: 600; line-height: 1.3; }
+
+  /* Role labels */
+  .role-label { padding: 16px 14px; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); border-right: 2px solid var(--border); display: flex; align-items: center; background: var(--bg); position: sticky; left: 0; z-index: 3; }
+  .role-label.rl-corner { border-bottom: 2px solid var(--border); }
+  .role-label.rl-admin { color: var(--purple); }
+  .role-label.rl-recruiter { color: var(--accent); }
+  .role-label.rl-hm { color: var(--amber); }
+  .role-label.rl-candidate { color: var(--green); }
+
+  /* Cells — much more vertical space */
+  .lane-cell { padding: 20px 16px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); min-height: 200px; display: flex; flex-direction: column; gap: 12px; justify-content: center; }
+  .lane-cell.la { background: var(--lane-admin); }
+  .lane-cell.lr { background: var(--lane-recruiter); }
+  .lane-cell.lh { background: var(--lane-hm); }
+  .lane-cell.lc { background: var(--lane-candidate); }
+
+  .swim-node { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; font-size: 12px; line-height: 1.45; transition: border-color 0.15s; position: relative; z-index: 2; }
+  .swim-node:hover { border-color: var(--accent); }
+  .swim-node .node-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .swim-node .node-detail { color: var(--text-dim); font-size: 11.5px; }
+  .swim-node.automated { border-left: 3px solid var(--cyan); }
+  .swim-node.human { border-left: 3px solid var(--amber); }
+  .swim-node.moat { border-left: 3px solid var(--rose); }
+  .swim-node.passive { border-left: 3px solid var(--text-dim); opacity: 0.7; }
+
+  .empty-cell { display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 12px; font-style: italic; opacity: 0.4; text-align: center; min-height: 200px; }
+
+  /* SVG overlay */
+  .flow-overlay { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 1; }
+
+  /* Legend */
+  .legend { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); }
+  .legend-swatch { width: 20px; height: 4px; border-radius: 2px; }
+
+  /* Summary stats */
+  .stats-row { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 20px; min-width: 140px; }
+  .stat-card .num { font-size: 24px; font-weight: 700; }
+  .stat-card .label { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+  /* Stage header → screen modal */
+  .stage-col-header { cursor: pointer; transition: background 0.15s; }
+  .stage-col-header:hover { background: var(--surface2); }
+  .screen-badge { margin-top: 6px; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; padding: 2px 9px; border-radius: 10px; background: var(--accent-dim); color: var(--accent); }
+  .screen-badge.tbd { background: rgba(139,143,163,0.12); color: var(--text-dim); }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: none; align-items: flex-start; justify-content: center; z-index: 100; padding: 90px 20px 40px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; max-width: 540px; width: 100%; padding: 26px 28px; max-height: 78vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+  .modal-title { font-size: 17px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .modal-count { font-size: 12px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em; }
+  .modal-close { font-size: 24px; line-height: 1; color: var(--text-dim); cursor: pointer; padding: 0 4px; user-select: none; }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { display: flex; flex-direction: column; gap: 12px; }
+  .screen-item { display: flex; gap: 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .screen-num { width: 24px; height: 24px; flex-shrink: 0; border-radius: 6px; background: var(--accent-dim); color: var(--accent); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .screen-name { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  .screen-desc { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+  .screen-empty { font-size: 13px; color: var(--text-dim); font-style: italic; }
+
+  /* Total Screens tab */
+  .screens-total { display: flex; align-items: baseline; gap: 12px; margin-bottom: 32px; }
+  .screens-total-num { font-size: 44px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .screens-total-label { font-size: 14px; color: var(--text-dim); }
+  .screens-stage { margin-bottom: 26px; }
+  .screens-stage-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .screens-stage-num { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+  .screens-stage-name { font-size: 15px; font-weight: 600; color: var(--text); }
+  .screens-stage-count { margin-left: auto; font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 10px; background: var(--accent-dim); color: var(--accent); }
+  .screens-stage-count.tbd { background: rgba(139,143,163,0.12); color: var(--text-dim); }
+  .screens-list { display: flex; flex-direction: column; gap: 10px; }
+
+  /* In-place column screen list (replaces modal) */
+  .stage-col-header.header-open { background: var(--accent-dim); }
+  .stage-col-header.header-open .screen-badge { background: var(--accent); color: #0f1117; }
+  .col-screens { position: absolute; z-index: 6; box-sizing: border-box; background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: 14px 14px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 34px rgba(0,0,0,0.5); }
+  .col-screens .cs-head { font-size: 12px; font-weight: 700; color: var(--accent); line-height: 1.3; }
+  .col-screens .cs-count { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>PA2 TA Outbound Workflow</h1>
+  <div class="meta">Module: Talent Acquisition (PA-2) &middot; v6 &middot; 2026-06-30 &middot; Design session artifact</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('overview')">Overview</div>
+  <div class="tab" onclick="switchTab('swimlane')">Workflow Swimlanes</div>
+  <div class="tab" onclick="switchTab('screens')">Total Screens</div>
+</div>
+
+<div class="content">
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- TAB 0: OVERVIEW                              -->
+<!-- ═══════════════════════════════════════════ -->
+<div id="overview" class="tab-panel active">
+
+  <div style="max-width:960px;">
+
+    <!-- On-ramp -->
+    <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:28px 32px; margin-bottom:28px;">
+      <div style="font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-bottom:12px;">Where we started</div>
+      <p style="font-size:15px; color:var(--text); line-height:1.7; margin-bottom:12px;">
+        PA-2 was built as a requisition-centric hiring tool &mdash; a manager says &ldquo;I need a hire,&rdquo; we post a job, screen applicants, interview, decide. That's the same pipeline every ATS on the market optimizes. It works, but it doesn't compound, and it doesn't ask the harder question: <em style="color:var(--amber);">should we even be hiring for this?</em>
+      </p>
+      <div style="font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-bottom:12px; margin-top:20px;">Where we landed</div>
+      <p style="font-size:15px; color:var(--text); line-height:1.7; margin-bottom:0;">
+        A capability-centered system built on two products and one shared foundation. The first product identifies what&rsquo;s actually missing. The second finds and proves the right person. The foundation &mdash; a single capability model authored from ST6&rsquo;s judgment &mdash; connects everything and makes it defensible.
+      </p>
+    </div>
+
+    <!-- Two layers -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
+
+      <div style="background:rgba(251,146,60,0.08); border:1px solid rgba(251,146,60,0.25); border-radius:10px; padding:24px;">
+        <div style="font-size:11px; font-weight:700; letter-spacing:0.06em; color:var(--orange); text-transform:uppercase; margin-bottom:4px;">Compass <span style="font-weight:500; opacity:0.7;">&mdash; Demand &amp; Gap Intelligence</span></div>
+        <div style="font-size:18px; font-weight:600; color:var(--text); margin-bottom:12px;">&ldquo;What do we actually need?&rdquo;</div>
+        <p style="font-size:13px; color:var(--text-dim); line-height:1.6; margin-bottom:14px;">
+          Before posting a job, ask: is there a real capability gap? Is hiring the right way to close it &mdash; or should we train, redeploy, or restructure?
+        </p>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:6px; height:6px; border-radius:50%; background:var(--orange); flex-shrink:0;"></div>
+            <span style="font-size:12px; color:var(--text-dim);">The unit is the <strong style="color:var(--text);">gap</strong>, not the requisition</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:6px; height:6px; border-radius:50%; background:var(--orange); flex-shrink:0;"></div>
+            <span style="font-size:12px; color:var(--text-dim);">Hiring is one <strong style="color:var(--text);">closure path</strong> among several</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:6px; height:6px; border-radius:50%; background:var(--orange); flex-shrink:0;"></div>
+            <span style="font-size:12px; color:var(--text-dim);">AI diagnoses whether it's a hiring, training, or process gap</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:rgba(45,212,191,0.08); border:1px solid rgba(45,212,191,0.25); border-radius:10px; padding:24px;">
+        <div style="font-size:11px; font-weight:700; letter-spacing:0.06em; color:var(--teal); text-transform:uppercase; margin-bottom:4px;">Lens <span style="font-weight:500; opacity:0.7;">&mdash; Talent Evaluation Engine</span></div>
+        <div style="font-size:18px; font-weight:600; color:var(--text); margin-bottom:12px;">&ldquo;How do we find and prove it?&rdquo;</div>
+        <p style="font-size:13px; color:var(--text-dim); line-height:1.6; margin-bottom:14px;">
+          Once we know we're hiring: continuous sourcing, observed-work evaluation, structured interviews, and evidence-based decisions.
+        </p>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:6px; height:6px; border-radius:50%; background:var(--teal); flex-shrink:0;"></div>
+            <span style="font-size:12px; color:var(--text-dim);"><strong style="color:var(--text);">Observed work</strong> at the center, not resume proxies</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:6px; height:6px; border-radius:50%; background:var(--teal); flex-shrink:0;"></div>
+            <span style="font-size:12px; color:var(--text-dim);">AI sources, scores, and manages logistics at scale</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:6px; height:6px; border-radius:50%; background:var(--teal); flex-shrink:0;"></div>
+            <span style="font-size:12px; color:var(--text-dim);">Humans own interviews, references, and final judgment</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Platform -->
+    <div style="background:rgba(139,143,163,0.06); border:1px solid rgba(139,143,163,0.15); border-radius:10px; padding:20px 24px; margin-bottom:32px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+        <div style="font-size:11px; font-weight:700; letter-spacing:0.06em; color:var(--text-dim); text-transform:uppercase;">Shared Foundation</div>
+        <span style="font-size:11px; color:var(--text-dim);">&mdash; The Capability Model</span>
+      </div>
+      <p style="font-size:13px; color:var(--text-dim); line-height:1.6;">
+        One explicit model of what &ldquo;good&rdquo; looks like &mdash; authored from ST6's judgment, projected into every surface. Sourcing scans for it. Work trials test for it. Interviews probe it. Performance monitoring measures whether it predicted correctly. Both layers inherit the same model. That's what makes the parts multiply rather than add.
+      </p>
+    </div>
+
+    <!-- Build principle -->
+    <div style="background:var(--surface2); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; padding:16px 20px; margin-bottom:36px;">
+      <p style="font-size:14px; color:var(--text); line-height:1.6; font-style:italic; margin-bottom:6px;">
+        &ldquo;Build on Compass's ontology. Ship Lens first.&rdquo;
+      </p>
+      <p style="font-size:12px; color:var(--text-dim); line-height:1.5;">
+        The schema is gap-rooted from day one, but Lens ships first &mdash; it serves Solovis and ST6 now, and it's where the pain lives. Gap diagnosis initially resolves to &ldquo;hire&rdquo; almost every time, because it's the only closure path wired up. The others light up as sister modules mature.
+      </p>
+    </div>
+
+    <!-- 10x visual -->
+    <h2 style="font-size:16px; font-weight:600; margin-bottom:20px; color:var(--text);">Why this workflow is 10x</h2>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:24px;">
+
+      <!-- Old way -->
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:20px;">
+        <div style="font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--rose); margin-bottom:14px;">Traditional TA workflow</div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:6px; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; color:var(--rose);">1</div>
+            <div><div style="font-size:12px; font-weight:600; color:var(--text);">Manager says &ldquo;I need a hire&rdquo;</div><div style="font-size:10px; color:var(--text-dim);">No diagnosis &mdash; hiring assumed</div></div>
+          </div>
+          <div style="width:1px; height:6px; background:var(--border); margin-left:16px;"></div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:6px; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; color:var(--rose);">2</div>
+            <div><div style="font-size:12px; font-weight:600; color:var(--text);">Post job, wait for applicants</div><div style="font-size:10px; color:var(--text-dim);">Burst-then-screen model</div></div>
+          </div>
+          <div style="width:1px; height:6px; background:var(--border); margin-left:16px;"></div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:6px; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; color:var(--rose);">3</div>
+            <div><div style="font-size:12px; font-weight:600; color:var(--text);">Screen resumes</div><div style="font-size:10px; color:var(--text-dim);">Proxy-based &mdash; degrades as AI polishes resumes</div></div>
+          </div>
+          <div style="width:1px; height:6px; background:var(--border); margin-left:16px;"></div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:6px; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; color:var(--rose);">4</div>
+            <div><div style="font-size:12px; font-weight:600; color:var(--text);">Interview panel</div><div style="font-size:10px; color:var(--text-dim);">Unstandardized &mdash; quality depends on who's in the room</div></div>
+          </div>
+          <div style="width:1px; height:6px; background:var(--border); margin-left:16px;"></div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:6px; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.2); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; color:var(--rose);">5</div>
+            <div><div style="font-size:12px; font-weight:600; color:var(--text);">Gut-feel decision</div><div style="font-size:10px; color:var(--text-dim);">No performance follow-up &mdash; same mistakes repeat</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- New way -->
+      <div style="background:var(--surface); border:1px solid var(--accent); border-radius:10px; padding:20px; box-shadow:0 0 20px rgba(108,140,255,0.08);">
+        <div style="font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); margin-bottom:14px;">This workflow <span style="font-size:11px;">&#8594; see Workflow tab</span></div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:6px; background:rgba(251,146,60,0.1); border:1px solid rgba(251,146,60,0.25); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; color:var(--orange);">1</div>
+            <div><div style="font-size:12px; font-weight:600; color:var(--text);">AI detects demand &amp; diagnoses the gap</div><div style="font-size:10px; color:var(--text-dim);">Always-on signal detection plus diagnosis &mdash; hiring gap? training gap? process gap?</div></div>
+          </div>
+          <div style="width:1px; height:6px; background:var(--border); margin-left:16px;"></div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:6px; background:rgba(45,212,191,0.1); border:1px solid rgba(45,212,191,0.25); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; color:var(--teal);">2</div>
+            <div><div style="font-size:12px; font-weight:600; color:var(--text);">AI matches from a candidate pool</div><div style="font-size:10px; color:var(--text-dim);">Continuous sourcing &mdash; candidates already profiled before the opening exists</div></div>
+          </div>
+          <div style="width:1px; height:6px; background:var(--border); margin-left:16px;"></div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:6px; background:rgba(45,212,191,0.1); border:1px solid rgba(45,212,191,0.25); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; color:var(--teal);">3</div>
+            <div><div style="font-size:12px; font-weight:600; color:var(--text);">Candidates do real work</div><div style="font-size:10px; color:var(--text-dim);">Observed work, not resume proxies &mdash; gets stronger as AI gets better</div></div>
+          </div>
+          <div style="width:1px; height:6px; background:var(--border); margin-left:16px;"></div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:6px; background:rgba(45,212,191,0.1); border:1px solid rgba(45,212,191,0.25); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; color:var(--teal);">4</div>
+            <div><div style="font-size:12px; font-weight:600; color:var(--text);">Humans own judgment moments</div><div style="font-size:10px; color:var(--text-dim);">Interviews + references &mdash; AI-briefed, methodology-enforced, human-decided</div></div>
+          </div>
+          <div style="width:1px; height:6px; background:var(--border); margin-left:16px;"></div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:32px; height:32px; border-radius:6px; background:rgba(167,139,250,0.1); border:1px solid rgba(167,139,250,0.25); display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; color:var(--purple);">5</div>
+            <div><div style="font-size:12px; font-weight:600; color:var(--text);">Monitor performance data</div><div style="font-size:10px; color:var(--text-dim);">30/60/90/180-day observations validate the hire &mdash; the workflow's measured endpoint</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Key shifts -->
+    <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:12px;">
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px; text-align:center;">
+        <div style="font-size:20px; font-weight:700; color:var(--accent); margin-bottom:4px;">AI-first</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.4;">Sourcing, matching, scoring, logistics run continuously in the AI lane &mdash; humans step in only for judgment</div>
+      </div>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px; text-align:center;">
+        <div style="font-size:20px; font-weight:700; color:var(--orange); margin-bottom:4px;">Gap-rooted</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.4;">Every hire traces back to a diagnosed gap &mdash; not a req. As Foundry and Signal/RCDO wire up, non-hire paths open with no re-architecture</div>
+      </div>
+      <div style="background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px; text-align:center;">
+        <div style="font-size:20px; font-weight:700; color:var(--teal); margin-bottom:4px;">Performance-monitored</div>
+        <div style="font-size:11px; color:var(--text-dim); line-height:1.4;">30/60/90/180-day outcomes validate every hire and surface where predictions held &mdash; closing the loop on quality</div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- TAB 2: SWIMLANE WORKFLOW                    -->
+<!-- ═══════════════════════════════════════════ -->
+<div id="swimlane" class="tab-panel">
+
+  <div class="legend" style="margin-bottom:8px;">
+    <span style="font-size:11px;font-weight:600;color:var(--text-dim);margin-right:4px;">NODES:</span>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--cyan)"></div> Automated</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--amber)"></div> Human judgment</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--rose)"></div> Moat (protected alpha)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--text-dim)"></div> Passive</div>
+  </div>
+  <div class="legend" style="margin-bottom:20px;">
+    <span style="font-size:11px;font-weight:600;color:var(--text-dim);margin-right:4px;">ARROWS:</span>
+    <div class="legend-item"><div class="legend-swatch" style="background:#6c8cff"></div> Same-lane flow</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#fbbf24"></div> Handoff down</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#22d3ee"></div> Handoff up</div>
+  </div>
+
+  <div class="swimlane-container">
+  <div class="swimlane-wrapper">
+  <svg class="flow-overlay" id="flowOverlay"></svg>
+  <div class="swimlane" id="swimlaneGrid">
+
+    <!-- Row 1: Stage headers -->
+    <div class="role-label rl-corner" style="border-bottom: 2px solid var(--border);"><span style="color:var(--text-dim); font-size:11px;">ROLE / STAGE &rarr;</span></div>
+    <div class="stage-col-header" onclick="toggleStageColumn(1)"><span class="stage-num">Stage 1</span><span class="stage-name">Demand Detection &amp; Gap Diagnosis</span><span class="screen-badge" id="sb-1"></span></div>
+    <div class="stage-col-header" onclick="toggleStageColumn(2)"><span class="stage-num">Stage 2</span><span class="stage-name">Opening Creation</span><span class="screen-badge" id="sb-2"></span></div>
+    <div class="stage-col-header" onclick="toggleStageColumn(3)"><span class="stage-num">Stage 3</span><span class="stage-name">Configure Agents</span><span class="screen-badge" id="sb-3"></span></div>
+    <div class="stage-col-header" onclick="toggleStageColumn(4)"><span class="stage-num">Stage 4</span><span class="stage-name">Candidate Matching</span><span class="screen-badge" id="sb-4"></span></div>
+    <div class="stage-col-header" onclick="toggleStageColumn(5)"><span class="stage-num">Stage 5</span><span class="stage-name">Outreach</span><span class="screen-badge" id="sb-5"></span></div>
+    <div class="stage-col-header" onclick="toggleStageColumn(6)"><span class="stage-num">Stage 6</span><span class="stage-name">Observed-Work Evaluation</span><span class="screen-badge" id="sb-6"></span></div>
+    <div class="stage-col-header" onclick="toggleStageColumn(7)"><span class="stage-num">Stage 7</span><span class="stage-name">Interview + References</span><span class="screen-badge" id="sb-7"></span></div>
+    <div class="stage-col-header" onclick="toggleStageColumn(8)"><span class="stage-num">Stage 8</span><span class="stage-name">Decision</span><span class="screen-badge" id="sb-8"></span></div>
+    <div class="stage-col-header" onclick="toggleStageColumn(9)"><span class="stage-num">Stage 9</span><span class="stage-name">Performance Monitoring</span><span class="screen-badge" id="sb-9"></span></div>
+
+    <!-- Row 2: AI-Driven -->
+    <div class="role-label rl-recruiter">AI-Driven</div>
+    <div class="lane-cell lr">
+      <div class="swim-node automated" id="n-receive-org"><div class="node-title">Receive Org Signal</div><div class="node-detail">RCDO / Signal surfaces organizational gap as structured demand.</div></div>
+    </div>
+    <div class="lane-cell lr">
+      <div class="swim-node automated" id="n-gen-opening"><div class="node-title">Generate Opening Package</div><div class="node-detail">AI generates from policy + capability model: capabilities, trial design, posting.</div></div>
+    </div>
+    <div class="lane-cell lr"><div class="empty-cell">No action</div></div>
+    <div class="lane-cell lr">
+      <div class="swim-node automated" id="n-sourcing-agents"><div class="node-title">Sourcing Agents Find Candidates</div><div class="node-detail">Sourcing agents find candidates from CoreSignal DB.</div></div>
+      <div class="swim-node automated" id="n-match-pool"><div class="node-title">Match from Candidate Pool</div><div class="node-detail">Match opening against pre-built candidate pool by evidence density.</div></div>
+      <div class="swim-node automated" id="n-ingest-inbound"><div class="node-title">Ingest Inbound Candidates</div><div class="node-detail">Agent assesses inbound applicants.</div></div>
+    </div>
+    <div class="lane-cell lr">
+      <div class="swim-node automated" id="n-outreach-draft"><div class="node-title">Outbound Messaging Draft</div><div class="node-detail">Produces outbound messaging draft for the top 50 candidates from all 3 sources.</div></div>
+    </div>
+    <div class="lane-cell lr"><div class="empty-cell">No action</div></div>
+    <div class="lane-cell lr">
+      <div class="swim-node automated" id="n-plan-evidence"><div class="node-title">Plan Evidence Needs</div><div class="node-detail">Per candidate: what's observed vs. still needed.</div></div>
+      <div class="swim-node automated" id="n-manage-trial"><div class="node-title">Create Recruiting Workflow</div><div class="node-detail">Schedule, deliver, capture work trials at scale. AI first-pass scoring.</div></div>
+    </div>
+    <div class="lane-cell lr">
+      <div class="swim-node automated" id="n-present-picture"><div class="node-title">Present Full Picture</div><div class="node-detail">Observed-work + interview + references + unknowns. System recommendation.</div></div>
+    </div>
+    <div class="lane-cell lr"><div class="empty-cell">No action</div></div>
+
+    <!-- Row 3: Hiring Team -->
+    <div class="role-label rl-hm">Hiring<br>Team</div>
+    <div class="lane-cell lh">
+      <div class="swim-node human" id="n-initiate-gap"><div class="node-title">Initiate Gap Request &amp; Intake</div><div class="node-detail">Identifies need and initiates directly. Conversational AI intake with Diagnostician &mdash; hiring, training, or process gap?</div></div>
+    </div>
+    <div class="lane-cell lh">
+      <div class="swim-node human" id="n-review-opening"><div class="node-title">Review &amp; Approve Opening</div><div class="node-detail">Single generated package. HM + ELT approve, modify, or regenerate.</div></div>
+    </div>
+    <div class="lane-cell lh">
+      <div class="swim-node human" id="n-config-ai-agents"><div class="node-title">Configure AI Agents</div><div class="node-detail">Set agent policy, target channels, and capability filters before sourcing.</div></div>
+    </div>
+    <div class="lane-cell lh"><div class="empty-cell">No action</div></div>
+    <div class="lane-cell lh"><div class="empty-cell">No action</div></div>
+    <div class="lane-cell lh"><div class="empty-cell">No action</div></div>
+    <div class="lane-cell lh">
+      <div class="swim-node human" id="n-conduct-interview"><div class="node-title">Conduct Interviews &amp; References</div><div class="node-detail">Receive pre-interview briefing. AI-briefed on gaps. Methodology-enforced probes. Human judges. AI-prepared reference conversations mapped to capability model.</div></div>
+    </div>
+    <div class="lane-cell lh">
+      <div class="swim-node human" id="n-make-decision"><div class="node-title">Make Final Decision</div><div class="node-detail">Approve, override, or request more. May decide "don't hire — train instead." Snapshot frozen.</div></div>
+    </div>
+    <div class="lane-cell lh">
+      <div class="swim-node human" id="n-provide-perf"><div class="node-title">Monitor Performance Data</div><div class="node-detail">30/60/90/180-day observations. Validates predictions.</div></div>
+    </div>
+
+    <!-- Row 4: Candidate -->
+    <div class="role-label rl-candidate">Candidate</div>
+    <div class="lane-cell lc"><div class="empty-cell">No action</div></div>
+    <div class="lane-cell lc"><div class="empty-cell">No action</div></div>
+    <div class="lane-cell lc"><div class="empty-cell">No action</div></div>
+    <div class="lane-cell lc">
+      <div class="swim-node human" id="n-cand-application"><div class="node-title">Candidate Application</div><div class="node-detail">Candidate submits inbound application.</div></div>
+    </div>
+    <div class="lane-cell lc"><div class="empty-cell">No action</div></div>
+    <div class="lane-cell lc">
+      <div class="swim-node human" id="n-take-assessments"><div class="node-title">Take Assessments</div><div class="node-detail">CCAT, EPP, living honeypot instruments.</div></div>
+      <div class="swim-node human" id="n-complete-trial"><div class="node-title">Complete Case Study / Work Product / Code Assessment</div><div class="node-detail">Live build (sandboxable) or case study + AI-process recording (senior).</div></div>
+    </div>
+    <div class="lane-cell lc">
+      <div class="swim-node human" id="n-cand-interview"><div class="node-title">Interview</div><div class="node-detail">Structured conversation probing unproven capabilities.</div></div>
+      <div class="swim-node passive" id="n-provide-refs"><div class="node-title">Provide References</div><div class="node-detail">References contacted for AI-prepared conversations.</div></div>
+    </div>
+    <div class="lane-cell lc"><div class="empty-cell">No action</div></div>
+    <div class="lane-cell lc"><div class="empty-cell">No action</div></div>
+
+  </div>
+  </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- TAB 3: TOTAL SCREENS                         -->
+<!-- ═══════════════════════════════════════════ -->
+<div id="screens" class="tab-panel">
+  <div id="screensBody" style="max-width:820px;"></div>
+</div>
+
+</div>
+
+<script>
+const stageData = {
+  1: { name: 'Demand Detection &amp; Gap Diagnosis', screens: [
+    { name: 'Gap Analysis Review &amp; Intake', desc: 'Hiring manager reviews the gap identified and discusses with AI what the team needs to fine-tune the gap requirements.' }
+  ]},
+  2: { name: 'Opening Creation', screens: [
+    { name: 'Gap Review &amp; Approval', desc: 'Hiring manager reviews the fine-tuned gap created in "Generate Opening Package" and can approve, edit, or reject it.' }
+  ]},
+  3: { name: 'Configure Agents', screens: [
+    { name: 'Agent Configuration', desc: 'Configure the AI agents used in the sourcing process.' }
+  ]},
+  4: { name: 'Candidate Matching', screens: [
+    { name: 'Gap / Opening Dashboard', desc: 'Overview of the opening and the state of sourcing against the gap.' },
+    { name: 'Gap Candidate List', desc: 'Ranked list of candidates matched to the gap.' },
+    { name: 'Candidate Dashboard', desc: 'Detailed profile and evidence view for an individual candidate.' }
+  ]},
+  5: { name: 'Outreach', screens: [] },
+  6: { name: 'Observed-Work Evaluation', screens: [
+    { name: 'Candidate Dashboard', desc: 'Hiring team reviews assessment progress and scoring of the candidates.' }
+  ]},
+  7: { name: 'Interview + References', screens: [
+    { name: 'Candidate Dashboard', desc: 'Review evidence needs for each candidate ahead of interviews and reference checks.' },
+    { name: 'Workflow Builder', desc: 'Build and configure the interview and reference workflow.' },
+    { name: 'Interview / Reference Overview', desc: 'Overview of scheduled interviews and reference conversations.' }
+  ]},
+  8: { name: 'Decision', screens: [
+    { name: 'Candidate Final View', desc: 'Consolidated final view of the candidate across all collected evidence.' },
+    { name: 'Offer Creation', desc: 'Create the offer for the selected candidate.' },
+    { name: 'Candidate Offer Approval', desc: 'Approve the offer before it is extended to the candidate.' }
+  ]},
+  9: { name: 'Performance Monitoring', screens: [] }
+};
+
+function populateBadges() {
+  for (const k in stageData) {
+    const el = document.getElementById('sb-' + k);
+    if (!el) continue;
+    const n = stageData[k].screens.length;
+    if (n === 0) { el.textContent = 'TBD'; el.classList.add('tbd'); }
+    else { el.textContent = n + (n === 1 ? ' screen' : ' screens'); }
+  }
+}
+
+const openColumns = new Set();
+
+function buildScreenList(n) {
+  const d = stageData[n];
+  const cnt = d.screens.length;
+  let html = '<div class="cs-head">Stage ' + n + ' &middot; ' + d.name + '</div>';
+  html += '<div class="cs-count">' + (cnt === 0 ? 'Screens not yet defined' : (cnt + (cnt === 1 ? ' screen' : ' screens'))) + '</div>';
+  if (cnt === 0) {
+    html += '<div class="screen-empty">No screens defined for this stage yet.</div>';
+  } else {
+    d.screens.forEach((s, i) => {
+      html += '<div class="screen-item"><div class="screen-num">' + (i + 1) + '</div>'
+        + '<div><div class="screen-name">' + s.name + '</div>'
+        + '<div class="screen-desc">' + s.desc + '</div></div></div>';
+    });
+  }
+  return html;
+}
+
+function positionColumnOverlay(n, ov) {
+  const wrapper = document.querySelector('.swimlane-wrapper');
+  const ai = document.querySelectorAll('.lane-cell.lr')[n - 1];
+  const cand = document.querySelectorAll('.lane-cell.lc')[n - 1];
+  if (!ai || !cand) return;
+  const wr = wrapper.getBoundingClientRect();
+  const a = ai.getBoundingClientRect();
+  const c = cand.getBoundingClientRect();
+  ov.style.left = (a.left - wr.left) + 'px';
+  ov.style.top = (a.top - wr.top) + 'px';
+  ov.style.width = a.width + 'px';
+  ov.style.height = (c.bottom - a.top) + 'px';
+}
+
+function toggleStageColumn(n) {
+  if (openColumns.has(n)) { closeStageColumn(n); return; }
+  const wrapper = document.querySelector('.swimlane-wrapper');
+  const ov = document.createElement('div');
+  ov.className = 'col-screens';
+  ov.id = 'cs-col-' + n;
+  ov.innerHTML = buildScreenList(n);
+  wrapper.appendChild(ov);
+  positionColumnOverlay(n, ov);
+  const header = document.querySelectorAll('.stage-col-header')[n - 1];
+  if (header) header.classList.add('header-open');
+  openColumns.add(n);
+}
+
+function closeStageColumn(n) {
+  const ov = document.getElementById('cs-col-' + n);
+  if (ov) ov.remove();
+  const header = document.querySelectorAll('.stage-col-header')[n - 1];
+  if (header) header.classList.remove('header-open');
+  openColumns.delete(n);
+}
+
+function closeAllColumns() {
+  Array.from(openColumns).forEach(closeStageColumn);
+}
+
+function repositionOpenColumns() {
+  openColumns.forEach((n) => {
+    const ov = document.getElementById('cs-col-' + n);
+    if (ov) positionColumnOverlay(n, ov);
+  });
+}
+
+function renderScreensTab() {
+  const stageKeys = Object.keys(stageData);
+  const total = stageKeys.reduce((a, k) => a + stageData[k].screens.length, 0);
+  let html = '<div class="screens-total"><span class="screens-total-num">' + total + '</span>'
+    + '<span class="screens-total-label">total screens across ' + stageKeys.length + ' stages</span></div>';
+  stageKeys.forEach((k) => {
+    const d = stageData[k];
+    const n = d.screens.length;
+    const badge = n === 0 ? 'TBD' : (n + (n === 1 ? ' screen' : ' screens'));
+    html += '<div class="screens-stage">';
+    html += '<div class="screens-stage-head">'
+      + '<span class="screens-stage-num">Stage ' + k + '</span>'
+      + '<span class="screens-stage-name">' + d.name + '</span>'
+      + '<span class="screens-stage-count' + (n === 0 ? ' tbd' : '') + '">' + badge + '</span></div>';
+    if (n === 0) {
+      html += '<div class="screen-empty">No screens defined for this stage yet.</div>';
+    } else {
+      html += '<div class="screens-list">';
+      d.screens.forEach((s, i) => {
+        html += '<div class="screen-item"><div class="screen-num">' + (i + 1) + '</div>'
+          + '<div><div class="screen-name">' + s.name + '</div>'
+          + '<div class="screen-desc">' + s.desc + '</div></div></div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  document.getElementById('screensBody').innerHTML = html;
+}
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllColumns(); });
+
+function switchTab(id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const tabMap = { overview: 0, swimlane: 1, screens: 2 };
+  document.querySelectorAll('.tab')[tabMap[id]].classList.add('active');
+  if (id === 'swimlane') setTimeout(() => { drawFlowArrows(); repositionOpenColumns(); }, 80);
+}
+
+function drawFlowArrows() {
+  const svg = document.getElementById('flowOverlay');
+  const wrapper = document.querySelector('.swimlane-wrapper');
+  const grid = document.getElementById('swimlaneGrid');
+
+  const W = grid.scrollWidth;
+  const H = grid.scrollHeight;
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = '';
+
+  // Markers
+  const ns = 'http://www.w3.org/2000/svg';
+  const defs = document.createElementNS(ns,'defs');
+  const markerColors = {h:'#6c8cff', d:'#fbbf24', u:'#22d3ee', lb:'#a78bfa'};
+  for (const [k,c] of Object.entries(markerColors)) {
+    const m = document.createElementNS(ns,'marker');
+    m.setAttribute('id','mk-'+k); m.setAttribute('viewBox','0 0 12 12');
+    m.setAttribute('refX','11'); m.setAttribute('refY','6');
+    m.setAttribute('markerWidth','10'); m.setAttribute('markerHeight','10');
+    m.setAttribute('orient','auto-start-reverse');
+    const p = document.createElementNS(ns,'path');
+    p.setAttribute('d','M 0 1 L 12 6 L 0 11 z'); p.setAttribute('fill',c); p.setAttribute('opacity','0.7');
+    m.appendChild(p); defs.appendChild(m);
+  }
+  svg.appendChild(defs);
+
+  const wr = wrapper.getBoundingClientRect();
+
+  // Get edge points of a node
+  function edge(id, side, offsetX, offsetY) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const ox = offsetX || 0, oy = offsetY || 0;
+    const cx = r.left - wr.left + r.width/2 + ox;
+    const cy = r.top - wr.top + r.height/2 + oy;
+    switch(side) {
+      case 'r': return {x: r.right - wr.left + 2, y: cy};
+      case 'l': return {x: r.left - wr.left - 2, y: cy};
+      case 'b': return {x: cx, y: r.bottom - wr.top + 2};
+      case 't': return {x: cx, y: r.top - wr.top - 2};
+    }
+    return {x: cx, y: cy};
+  }
+
+  // Draw orthogonal connector: right-out, jog, right-in (horizontal)
+  function hLine(fromId, fromSide, toId, toSide, color, mk, ofsFrom, ofsTo) {
+    const a = edge(fromId, fromSide, ofsFrom?.[0], ofsFrom?.[1]);
+    const b = edge(toId, toSide, ofsTo?.[0], ofsTo?.[1]);
+    if (!a || !b) return;
+    const p = document.createElementNS(ns, 'path');
+    const gap = 18; // how far out before turning
+
+    if (fromSide === 'r' && toSide === 'l') {
+      // Horizontal: right → jog → left
+      const midX = a.x + (b.x - a.x) / 2;
+      if (Math.abs(a.y - b.y) < 4) {
+        p.setAttribute('d', `M${a.x},${a.y} L${b.x},${b.y}`);
+      } else {
+        p.setAttribute('d', `M${a.x},${a.y} L${midX},${a.y} L${midX},${b.y} L${b.x},${b.y}`);
+      }
+    } else if (fromSide === 'b' && toSide === 't') {
+      // Vertical down
+      if (Math.abs(a.x - b.x) < 4) {
+        p.setAttribute('d', `M${a.x},${a.y} L${b.x},${b.y}`);
+      } else {
+        const midY = a.y + (b.y - a.y) / 2;
+        p.setAttribute('d', `M${a.x},${a.y} L${a.x},${midY} L${b.x},${midY} L${b.x},${b.y}`);
+      }
+    } else if (fromSide === 't' && toSide === 'b') {
+      // Vertical up
+      if (Math.abs(a.x - b.x) < 4) {
+        p.setAttribute('d', `M${a.x},${a.y} L${b.x},${b.y}`);
+      } else {
+        const midY = a.y + (b.y - a.y) / 2;
+        p.setAttribute('d', `M${a.x},${a.y} L${a.x},${midY} L${b.x},${midY} L${b.x},${b.y}`);
+      }
+    } else if (fromSide === 'r' && toSide === 't') {
+      // Right then down to top
+      p.setAttribute('d', `M${a.x},${a.y} L${b.x},${a.y} L${b.x},${b.y}`);
+    } else if (fromSide === 'b' && toSide === 'l') {
+      // Down then right to left
+      p.setAttribute('d', `M${a.x},${a.y} L${a.x},${b.y} L${b.x},${b.y}`);
+    } else if (fromSide === 'r' && toSide === 'b') {
+      // Right then up
+      p.setAttribute('d', `M${a.x},${a.y} L${b.x},${a.y} L${b.x},${b.y}`);
+    } else if (fromSide === 't' && toSide === 'l') {
+      // Up then right to left
+      p.setAttribute('d', `M${a.x},${a.y} L${a.x},${b.y} L${b.x},${b.y}`);
+    } else if (fromSide === 'r' && toSide === 'r') {
+      // Out the right of both: wrap around a channel to the right
+      const farX = Math.max(a.x, b.x) + 40 + (ofsFrom?.[0] || 0);
+      p.setAttribute('d', `M${a.x},${a.y} L${farX},${a.y} L${farX},${b.y} L${b.x},${b.y}`);
+    } else {
+      // Fallback: straight
+      p.setAttribute('d', `M${a.x},${a.y} L${b.x},${b.y}`);
+    }
+
+    p.setAttribute('fill','none');
+    p.setAttribute('stroke', color);
+    p.setAttribute('stroke-width','2');
+    p.setAttribute('opacity','0.5');
+    p.setAttribute('stroke-linejoin','round');
+    p.setAttribute('marker-end', `url(#mk-${mk})`);
+    svg.appendChild(p);
+    return p;
+  }
+
+  function dashed(path) { if(path) path.setAttribute('stroke-dasharray','8,5'); }
+
+  const C = markerColors;
+
+  // ═══ AI-DRIVEN LANE: horizontal same-lane flow ═══
+  hLine('n-plan-evidence','b', 'n-manage-trial','t', C.h, 'h');
+  // (run-refs now in HM lane)
+  // (calibration loop removed — workflow ends at Monitor Performance Data)
+
+  // ═══ HIRING TEAM LANE: horizontal flow ═══
+  // (initiate-gap now combines request + intake in a single Stage 1 box)
+  hLine('n-conduct-interview','r', 'n-present-picture','l', C.u, 'u');
+  hLine('n-make-decision','r', 'n-provide-perf','l', C.h, 'h');
+
+  // ═══ CANDIDATE LANE: horizontal flow ═══
+  hLine('n-take-assessments','b', 'n-complete-trial','t', C.h, 'h');
+  hLine('n-cand-interview','b', 'n-provide-refs','t', C.h, 'h');
+  // (receive-outcome removed)
+
+  // ═══ CROSS-LANE: Handoffs DOWN (amber) ═══
+  // AI → HM
+  // Create Recruiting Workflow → Conduct Interviews & References
+  hLine('n-manage-trial','b', 'n-conduct-interview','t', C.d, 'd');
+  hLine('n-present-picture','b', 'n-make-decision','t', C.d, 'd');
+  // HM → Candidate
+  hLine('n-conduct-interview','b', 'n-cand-interview','t', C.d, 'd', [-20,0], [-20,0]);
+  // HM → Candidate
+  // (make-decision no longer arrows to receive-outcome)
+
+  // ═══ CROSS-LANE: Handoffs UP (cyan) ═══
+  // HM → TO
+  // HM lane internal flow (stages 1-3)
+  hLine('n-receive-org','b', 'n-initiate-gap','t', C.d, 'd');
+  // Initiate Gap Request & Intake → Generate Opening Package (right side out, left side in)
+  hLine('n-initiate-gap','r', 'n-gen-opening','l', C.u, 'u');
+  hLine('n-gen-opening','b', 'n-review-opening','t', C.d, 'd');
+  // Configure AI Agents fans out: top → Sourcing Agents, right → Match from Candidate Pool + Ingest Inbound
+  hLine('n-config-ai-agents','r', 'n-match-pool','l', C.u, 'u');
+  hLine('n-config-ai-agents','r', 'n-ingest-inbound','l', C.u, 'u');
+  // Review & Approve Opening → Configure AI Agents (HM) → Sourcing Agents
+  hLine('n-review-opening','r', 'n-config-ai-agents','l', C.h, 'h');
+  hLine('n-config-ai-agents','t', 'n-sourcing-agents','l', C.u, 'u');
+  // Sourcing + Match from Candidate Pool + Ingest Inbound → Outbound Messaging Draft (all 3 sources converge)
+  hLine('n-sourcing-agents','r', 'n-outreach-draft','l', C.h, 'h', [0,0], [0,-18]);
+  hLine('n-match-pool','r', 'n-outreach-draft','l', C.h, 'h', [0,0], [0,0]);
+  hLine('n-ingest-inbound','r', 'n-outreach-draft','l', C.h, 'h', [0,0], [0,18]);
+  // Outbound Messaging Draft → Take Assessments (outreach lands, candidate engages)
+  hLine('n-outreach-draft','r', 'n-take-assessments','l', C.d, 'd');
+  // Candidate Application → Ingest Inbound Candidates (candidate submits, AI ingests)
+  hLine('n-cand-application','t', 'n-ingest-inbound','b', C.u, 'u');
+  // Take Assessments → Plan Evidence Needs → Create Recruiting Workflow
+  hLine('n-complete-trial','r', 'n-plan-evidence','l', C.u, 'u');
+  // (Monitor Performance Data is the terminal node — no outgoing arrow)
+
+}
+
+window.addEventListener('load', () => {
+  populateBadges();
+  renderScreensTab();
+  if (document.getElementById('swimlane').classList.contains('active')) drawFlowArrows();
+});
+window.addEventListener('resize', () => { clearTimeout(window._rto); window._rto = setTimeout(() => { drawFlowArrows(); repositionOpenColumns(); }, 150); });
+</script>
+</body>
+</html>

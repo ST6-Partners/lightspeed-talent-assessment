@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plain-English: Our Hiring System vs. the Lightspeed Plan</title>
+<style>
+  :root{
+    --bg:#0e1424; --panel:#161f36; --panel2:#1d2842; --ink:#eaf0ff; --muted:#9fb0d0;
+    --line:#2a3656; --brand:#6c8cff; --brand2:#39d3bb; --warn:#ffb84d; --bad:#ff6b81;
+    --good:#46d59e; --chip:#22304f; --shadow:0 10px 30px rgba(0,0,0,.35); --r:16px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:linear-gradient(180deg,#0b1020,#0e1424 30%);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 22px}
+  a{color:var(--brand)}
+  h1,h2,h3{line-height:1.2;margin:0 0 .4em}
+  h2{font-size:1.55rem;margin-top:.2em}
+  h2 .num{color:var(--brand2);font-weight:700;margin-right:.45em}
+  .sub{color:var(--muted)}
+  header.hero{padding:54px 0 30px;border-bottom:1px solid var(--line);
+    background:radial-gradient(1200px 400px at 80% -10%,rgba(108,140,255,.18),transparent),
+               radial-gradient(900px 360px at 0% 0%,rgba(57,211,187,.12),transparent);}
+  .eyebrow{letter-spacing:.18em;text-transform:uppercase;font-size:.72rem;color:var(--brand2);font-weight:700}
+  .hero h1{font-size:2.25rem;margin:.2em 0 .25em;letter-spacing:-.5px}
+  .hero p{max-width:820px;color:var(--muted);font-size:1.05rem}
+  .badges{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+  .badge{background:var(--chip);border:1px solid var(--line);padding:6px 12px;border-radius:999px;font-size:.8rem;color:var(--muted)}
+  .badge b{color:var(--ink)}
+  nav.toc{position:sticky;top:0;z-index:20;backdrop-filter:blur(8px);
+    background:rgba(14,20,36,.82);border-bottom:1px solid var(--line)}
+  nav.toc .wrap{display:flex;gap:18px;overflow:auto;padding:12px 22px}
+  nav.toc a{color:var(--muted);text-decoration:none;font-size:.86rem;white-space:nowrap;padding:5px 2px;border-bottom:2px solid transparent}
+  nav.toc a:hover{color:var(--ink);border-color:var(--brand)}
+  section{padding:40px 0;border-bottom:1px solid var(--line)}
+  .lead{color:var(--muted);max-width:840px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px;box-shadow:var(--shadow)}
+  .card h3{font-size:1.08rem}
+  ul.clean{list-style:none;padding:0;margin:0}
+  ul.clean li{padding:9px 0 9px 26px;position:relative;border-bottom:1px dashed var(--line);color:var(--ink);font-size:.93rem}
+  ul.clean li:last-child{border-bottom:0}
+  ul.clean li:before{content:"";position:absolute;left:4px;top:16px;width:9px;height:9px;border-radius:3px;background:var(--brand2)}
+  .steps{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:18px}
+  .step{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .step .cnt{font-size:1.05rem;font-weight:800;color:var(--brand2)}
+  .step .nm{font-weight:700;font-size:.92rem;margin:2px 0 6px}
+  .step .ds{color:var(--muted);font-size:.8rem;min-height:64px}
+  .callout{border-left:4px solid var(--warn);background:rgba(255,184,77,.08);padding:14px 16px;border-radius:0 12px 12px 0;margin-top:16px}
+  .callout.bad{border-color:var(--bad);background:rgba(255,107,129,.08)}
+  .callout.good{border-color:var(--good);background:rgba(70,213,158,.08)}
+  .callout.brand{border-color:var(--brand);background:rgba(108,140,255,.08)}
+  .callout h3{margin:0 0 4px;font-size:1rem}
+  .word{display:grid;grid-template-columns:170px 1fr;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .word:last-child{border-bottom:0}
+  .word .t{font-weight:700;color:var(--ink);font-size:.92rem}
+  .word .d{color:var(--muted);font-size:.92rem}
+  footer{padding:34px 0 60px;color:var(--muted);font-size:.82rem}
+  .note{background:var(--panel);border:1px dashed var(--line);border-radius:12px;padding:12px 16px;margin-top:14px;color:var(--muted);font-size:.85rem}
+  .venn-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:20px 10px;margin:22px 0 18px;box-shadow:var(--shadow)}
+  @media(max-width:860px){.grid2,.grid3{grid-template-columns:1fr}.steps{grid-template-columns:1fr 1fr}
+    .hero h1{font-size:1.8rem}.word{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Plain-English version · 10x Design v2</div>
+    <h1>Our hiring system vs. the Lightspeed plan</h1>
+    <p>The same comparison as the technical write-up, but with the jargon stripped out. In short: we already built a big, full-featured hiring system (we call it "PA"). For Lightspeed, we designed something much smaller and simpler. This explains where they overlap, where the Lightspeed plan does something extra, and all the things our big system does that the Lightspeed plan leaves out.</p>
+    <div class="badges">
+      <span class="badge">Audience: <b>No technical background needed</b></span>
+      <span class="badge">Date: <b>June 23, 2026</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc"><div class="wrap">
+  <a href="#tldr">The short version</a>
+  <a href="#two">Two different sizes</a>
+  <a href="#plan">The Lightspeed plan</a>
+  <a href="#venn">Overlap &amp; differences</a>
+  <a href="#bottom">Bottom line</a>
+  <a href="#glossary">Word list</a>
+</div></nav>
+
+<!-- TL;DR -->
+<section id="tldr"><div class="wrap">
+  <h2><span class="num">01</span>The short version</h2>
+  <p class="lead">Think of it like comparing a fully-equipped commercial kitchen to a smart home-kitchen setup. Both can cook a great meal. One can also run a restaurant.</p>
+  <div class="grid2" style="margin-top:18px">
+    <div class="card"><h3>Our system ("PA") — the commercial kitchen</h3>
+      <ul class="clean">
+        <li>A complete, in-house hiring system we built from scratch</li>
+        <li>Handles the whole journey — from posting a job to making the offer</li>
+        <li>Used by several companies at once, with lots of controls</li>
+        <li>Powerful, but big and expensive to build and maintain</li>
+      </ul>
+    </div>
+    <div class="card"><h3>The Lightspeed plan — the smart home kitchen</h3>
+      <ul class="clean">
+        <li>A lightweight setup for one company (Lightspeed)</li>
+        <li>Focuses on the busy first step: sorting lots of applicants down to a few</li>
+        <li>Built by connecting tools Lightspeed already pays for</li>
+        <li>Fast and cheap to set up — about a week or two of work</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout brand"><h3>The takeaway in one sentence</h3>
+    The Lightspeed plan gets the main job done — sort the flood of applicants, keep candidates informed, and save people's time for the final few — using only a tiny slice of what our big system can do, because it borrows tools that are already in place instead of building everything from the ground up.</div>
+</div></section>
+
+<!-- TWO SIZES -->
+<section id="two"><div class="wrap">
+  <h2><span class="num">02</span>Why this is really a comparison of two different sizes</h2>
+  <p class="lead">This is the most important thing to understand before the details. Our system and the Lightspeed plan aren't really rivals doing the same job — they're built for very different scopes.</p>
+  <ul class="clean" style="margin-top:14px">
+    <li><b>Our system</b> manages the <i>entire</i> hiring process for multiple companies: writing and approving job openings, testing candidates, running several rounds of interviews, checking references, working out pay, and getting offers signed off.</li>
+    <li><b>The Lightspeed plan</b> only automates the <i>front end</i> — taking a large pile of applications and quickly narrowing it to a handful of strong people, then handing those few to a person for a final interview.</li>
+  </ul>
+  <div class="callout"><h3>So the comparison is naturally lopsided</h3>
+    There's only a <b>short list</b> of things the Lightspeed plan does that our system doesn't — and a <b>long list</b> of things our system does that the Lightspeed plan simply doesn't try to do. That imbalance is the main finding, not a flaw in either one.</div>
+</div></section>
+
+<!-- THE PLAN -->
+<section id="plan"><div class="wrap">
+  <h2><span class="num">03</span>How the Lightspeed plan works, step by step</h2>
+  <p class="lead">Imagine 1,000 people apply for a job. Here's how the plan narrows that down to one hire, doing the early, repetitive work automatically and saving people for the end.</p>
+  <div class="steps">
+    <div class="step"><div class="cnt">Everyone applies</div><div class="nm">Step 1</div><div class="ds">When someone applies, they automatically get a friendly "thanks, here's what happens next" email.</div></div>
+    <div class="step"><div class="cnt">1,000 &rarr; 200</div><div class="nm">A quick online test</div><div class="ds">Applicants take a short skills-and-aptitude test. Those who score too low are automatically and politely declined.</div></div>
+    <div class="step"><div class="cnt">200 &rarr; 20</div><div class="nm">A real work task</div><div class="ds">The remaining people do a small, true-to-the-job task. An AI assistant grades it for speed, accuracy, and quality.</div></div>
+    <div class="step"><div class="cnt">20 &rarr; 5</div><div class="nm">A values check</div><div class="ds">A short questionnaire checks how well each person fits the company's values and the role. A person reviews the results.</div></div>
+    <div class="step"><div class="cnt">5 &rarr; 1</div><div class="nm">The interview</div><div class="ds">The final few meet a real person from HR for an interview. The AI helps prepare good questions.</div></div>
+  </div>
+  <div class="callout brand"><h3>What's doing the work behind the scenes</h3>
+    The plan keeps Lightspeed's existing hiring software as the home base, adds a quiet "automation helper" that moves candidates from one step to the next, uses an AI assistant to grade tasks and write the emails, and plugs in the testing tool Lightspeed already pays for. Nothing new has to be bought — it's mostly a matter of wiring the existing pieces together.</div>
+  <div class="callout bad"><h3>The one thing that sets the timeline</h3>
+    The build itself is quick. The real wait is turning on the connection to the testing tool and getting a privacy/security sign-off for handling applicant information.</div>
+</div></section>
+
+<!-- VENN — Overlap & Differences -->
+<section id="venn"><div class="wrap">
+  <h2><span class="num">04</span>Where they overlap — and where they don't</h2>
+  <p class="lead">The diagram below shows what's shared, what only the Lightspeed plan does, and what only our big system does. The short left list vs. the long right list tells the whole story.</p>
+
+  <!-- Venn SVG -->
+  <div class="venn-card">
+    <svg viewBox="0 0 980 190" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block;">
+      <ellipse cx="295" cy="95" rx="278" ry="83" fill="rgba(70,213,158,0.10)" stroke="#46d59e" stroke-width="1.5"/>
+      <ellipse cx="685" cy="95" rx="278" ry="83" fill="rgba(108,140,255,0.10)" stroke="#6c8cff" stroke-width="1.5"/>
+      <ellipse cx="490" cy="95" rx="83" ry="80" fill="rgba(159,122,234,0.18)" stroke="none"/>
+      <text x="155" y="83" text-anchor="middle" fill="#46d59e" font-size="13" font-weight="700" font-family="system-ui,sans-serif">Lightspeed Plan Only</text>
+      <text x="155" y="102" text-anchor="middle" fill="#9fb0d0" font-size="11" font-family="system-ui,sans-serif">4 things</text>
+      <text x="490" y="90" text-anchor="middle" fill="#c4b5fd" font-size="11" font-weight="700" font-family="system-ui,sans-serif">Both</text>
+      <text x="490" y="107" text-anchor="middle" fill="#c4b5fd" font-size="10" font-family="system-ui,sans-serif">10 shared</text>
+      <text x="825" y="83" text-anchor="middle" fill="#6c8cff" font-size="13" font-weight="700" font-family="system-ui,sans-serif">Our System Only</text>
+      <text x="825" y="102" text-anchor="middle" fill="#9fb0d0" font-size="11" font-family="system-ui,sans-serif">15+ things</text>
+    </svg>
+  </div>
+
+  <!-- Three columns -->
+  <div class="grid3">
+
+    <!-- Lightspeed plan only -->
+    <div class="card" style="border-color:rgba(70,213,158,.3);">
+      <div style="font-size:1.6rem;font-weight:800;background:linear-gradient(90deg,#46d59e,#39d3bb);-webkit-background-clip:text;background-clip:text;color:transparent">4</div>
+      <h3 style="color:#46d59e;font-size:.8rem;text-transform:uppercase;letter-spacing:.07em;margin:.2em 0 10px;">Lightspeed Plan Only</h3>
+      <ul class="clean">
+        <li><b>An AI-graded "real work" task used early as the main filter.</b> The plan gives people a true-to-the-job task right after the aptitude test and has the AI grade it. Our system has this idea too, but a person grades it and it comes much later.</li>
+        <li><b>A different values questionnaire.</b> Same goal as ours, different tool.</li>
+        <li><b>"Connect what we already have" approach.</b> The plan deliberately avoids building anything new — it wires together tools already in use. Our system is the opposite: a fully custom build.</li>
+        <li><b>An AI first-glance at resumes.</b> Minor — the plan's real first gate is the aptitude test anyway.</li>
+      </ul>
+      <div style="margin-top:12px;padding:10px 12px;background:rgba(70,213,158,.07);border-radius:10px;font-size:.85rem;color:#b0f0d8;">
+        <b>The one that really matters:</b> the automatically-graded, early "do the real task" step. That's the thing most worth borrowing.
+      </div>
+    </div>
+
+    <!-- Shared -->
+    <div class="card" style="border-color:rgba(159,122,234,.3);">
+      <div style="font-size:1.6rem;font-weight:800;background:linear-gradient(90deg,#c4b5fd,#9f7aea);-webkit-background-clip:text;background-clip:text;color:transparent">10</div>
+      <h3 style="color:#c4b5fd;font-size:.8rem;text-transform:uppercase;letter-spacing:.07em;margin:.2em 0 10px;">What Both Do</h3>
+      <ul class="clean">
+        <li>An automatic first test that screens people out</li>
+        <li>A central piece of hiring software as the home base</li>
+        <li>Automatic emails to candidates at every step</li>
+        <li>AI doing the grading and the writing</li>
+        <li>A "does this person fit our values?" check</li>
+        <li>A hands-on task to test real ability</li>
+        <li>Something that moves candidates along automatically</li>
+        <li>Help for the human interviewers</li>
+        <li>People focus only on the finalists</li>
+        <li>Redirecting a good person to a different open role</li>
+      </ul>
+    </div>
+
+    <!-- Our system only -->
+    <div class="card" style="border-color:rgba(108,140,255,.3);">
+      <div style="font-size:1.6rem;font-weight:800;background:linear-gradient(90deg,#6c8cff,#aebfff);-webkit-background-clip:text;background-clip:text;color:transparent">15+</div>
+      <h3 style="color:#6c8cff;font-size:.8rem;text-transform:uppercase;letter-spacing:.07em;margin:.2em 0 10px;">Our System Only</h3>
+      <ul class="clean">
+        <li>Creating and approving job openings (the plan starts from a job that's already posted)</li>
+        <li>Detailed, structured rating sheets for each candidate</li>
+        <li>A full personality assessment tailored to the role type</li>
+        <li>Several rounds of interviews, each with its own scoring</li>
+        <li>Reference checks — including discreet ones the candidate didn't list</li>
+        <li>Working out the pay and drafting offer packages</li>
+        <li>Getting offers approved through layers of sign-off</li>
+        <li>Remembering candidate profiles across many job openings over time</li>
+        <li>A task-and-deadline tracker with due dates and views</li>
+        <li>Keeping multiple companies separate, with detailed permissions</li>
+        <li>Reports and hiring analytics dashboards</li>
+        <li>Tools to spot and fix stuck or stalled cases</li>
+        <li>Personalized video messages from company leaders</li>
+        <li>A fast, powerful search across all candidates and jobs</li>
+        <li>Connections to other business systems (employee directory, etc.)</li>
+        <li>A rich, detailed candidate profile screen</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <div class="callout brand" style="margin-top:18px;">
+    <h3>So the comparison is naturally lopsided</h3>
+    There's only a <b>short list</b> of things the Lightspeed plan does that our system doesn't — and a <b>long list</b> of things our system does that the Lightspeed plan simply doesn't try to do. That imbalance is the main finding, not a flaw in either one.
+  </div>
+
+</div></section>
+
+<!-- BOTTOM LINE -->
+<section id="bottom"><div class="wrap">
+  <h2><span class="num">05</span>The bottom line</h2>
+  <p class="lead">Our system and the Lightspeed plan are built for very different jobs, using opposite philosophies. Ours is a big, custom platform that runs hiring end-to-end for several companies. The Lightspeed plan is a small, fast setup that speeds up the crowded early stage by connecting tools that are already there — and saves people for the final interview.</p>
+  <div class="grid2" style="margin-top:18px">
+    <div class="card"><h3>What our big system could borrow</h3>
+      <ul class="clean">
+        <li>The early, AI-graded "do the real task" step</li>
+        <li>The "connect what we already have" mindset — less building</li>
+      </ul>
+    </div>
+    <div class="card"><h3>Where the Lightspeed plan could grow later</h3>
+      <ul class="clean">
+        <li>Reference checks, pay, and formal offers</li>
+        <li>More structured scoring and multi-company support</li>
+        <li>These show the natural next steps if Lightspeed ever needs more than fast early screening</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout good"><h3>In plain terms</h3>
+    The Lightspeed plan reaches the main goal — sort the crowd, keep candidates in the loop, and save people's time for the finalists — with a small fraction of what our big system can do, simply because it reuses existing tools instead of building a whole platform. Whether that's "enough" depends on what Lightspeed actually needs — it isn't a knock on either one.</div>
+</div></section>
+
+<!-- GLOSSARY -->
+<section id="glossary"><div class="wrap">
+  <h2><span class="num">06</span>The few names, in plain words</h2>
+  <p class="lead">If you bump into these terms elsewhere, here's what they mean.</p>
+  <div class="card" style="margin-top:14px">
+    <div class="word"><div class="t">PA (our system)</div><div class="d">The complete, in-house hiring software we built ourselves.</div></div>
+    <div class="word"><div class="t">The Lightspeed plan</div><div class="d">The lightweight hiring-automation design we created for the company Lightspeed.</div></div>
+    <div class="word"><div class="t">Greenhouse</div><div class="d">The off-the-shelf hiring software Lightspeed already uses to track applicants.</div></div>
+    <div class="word"><div class="t">The aptitude test (Criteria / CCAT)</div><div class="d">A short online test of thinking skills, used to screen out the lowest scorers automatically.</div></div>
+    <div class="word"><div class="t">The automation helper (n8n)</div><div class="d">A behind-the-scenes tool that automatically moves a candidate from one step to the next.</div></div>
+    <div class="word"><div class="t">AI assistant (Claude)</div><div class="d">The AI that grades tasks, writes candidate emails, and helps interviewers prepare.</div></div>
+    <div class="word"><div class="t">Values questionnaire (Insights Discovery)</div><div class="d">A short survey that gauges how well someone fits the company's values and the role.</div></div>
+    <div class="word"><div class="t">Work-sample task</div><div class="d">A small, realistic job task that shows whether a person can actually do the work.</div></div>
+    <div class="word"><div class="t">Back-channel reference</div><div class="d">A reference the candidate didn't list — someone contacted discreetly for a fuller picture.</div></div>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <p>This is the plain-English version of the technical comparison, <i>10x design v2</i>. The full detail lives in <i>10x design v2.html</i> in the same folder.</p>
+  <p style="margin-top:10px;color:#6b7a9c">Plain-English v2 · June 23, 2026</p>
+</div></footer>
+
+</body>
+</html>

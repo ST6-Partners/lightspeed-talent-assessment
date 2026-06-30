@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Email &amp; Messaging — AI Talent Assessment</title>
+<style>
+  :root{
+    --bg:#f6f8fb; --panel:#ffffff; --ink:#16202c; --muted:#5d6b7a; --line:#e4e9f0;
+    --brand:#2f6df6; --brand-soft:#eaf1ff; --green:#1faa59; --green-soft:#e7f6ee;
+    --amber:#e08a17; --amber-soft:#fdf3e2; --violet:#6c4cdb; --violet-soft:#efeafe;
+    --slate:#64748b; --slate-soft:#eef1f6;
+    --shadow:0 1px 2px rgba(20,32,44,.05),0 8px 28px rgba(20,32,44,.07);
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 22px 80px}
+  header.hero{background:linear-gradient(135deg,#26375a 0%,#2f6df6 100%);color:#fff;
+    border-radius:22px;padding:40px 40px 36px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  header.hero:after{content:"";position:absolute;right:-60px;top:-60px;width:260px;height:260px;
+    background:radial-gradient(circle,rgba(255,255,255,.16),transparent 70%);border-radius:50%}
+  .eyebrow{font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;opacity:.82;font-weight:600;margin:0 0 10px}
+  header.hero h1{margin:0 0 12px;font-size:33px;line-height:1.2;font-weight:700}
+  header.hero p{margin:0;max-width:700px;font-size:16.5px;opacity:.95}
+  .meta{margin-top:22px;display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.22);
+    padding:5px 12px;border-radius:999px;font-size:12.5px;font-weight:500}
+  h2{font-size:23px;margin:46px 0 6px;font-weight:700;letter-spacing:-.01em}
+  .lead{color:var(--muted);margin:0 0 20px;font-size:15.5px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:24px 26px;box-shadow:var(--shadow);margin:16px 0}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid3,.grid2{grid-template-columns:1fr}}
+  .step-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:22px;box-shadow:var(--shadow)}
+  .ic-round{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;
+    font-size:17px;margin-bottom:12px}
+  .i-blue{background:var(--brand-soft)}.i-violet{background:var(--violet-soft)}.i-green{background:var(--green-soft)}
+  .step-card h3{margin:0 0 6px;font-size:17px}
+  .step-card p{margin:0;color:var(--muted);font-size:14.5px}
+  figure{margin:0}
+  figcaption{color:var(--muted);font-size:13px;text-align:center;margin-top:10px}
+  .svgwrap{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:22px;box-shadow:var(--shadow);overflow-x:auto}
+  svg{display:block;margin:0 auto;max-width:100%;height:auto}
+  .callout{display:flex;gap:14px;align-items:flex-start;border-radius:14px;padding:16px 18px;margin:16px 0}
+  .callout.info{background:var(--brand-soft);border:1px solid #d3e2ff}
+  .callout.warn{background:var(--amber-soft);border:1px solid #f6e2bd}
+  .callout .ic{font-size:18px;line-height:1.4}
+  .callout p{margin:0;font-size:14.5px}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:8px}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  td code,p code,li code{background:#eef1f6;border-radius:6px;padding:1px 6px;font-size:12.5px;color:#2a3a4d}
+  ul.clean{margin:6px 0 0;padding-left:20px}
+  ul.clean li{margin:5px 0;font-size:14.5px}
+  .footnote{color:var(--muted);font-size:12.5px;margin-top:40px;text-align:center}
+  a{color:var(--brand);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">AI Talent Assessment · Email &amp; Messaging</p>
+    <h1>Candidate Email, Handled Inside the App</h1>
+    <p>Every candidate gets a conversation thread that recruiters work right inside the hiring app — sending and receiving real email through SendGrid — while Greenhouse remains the official system of record.</p>
+    <div class="meta">
+      <span class="chip">In-app inbox per candidate</span>
+      <span class="chip">Recruiters never leave the app</span>
+      <span class="chip">Greenhouse stays the record</span>
+    </div>
+  </header>
+
+  <!-- ===== TODAY ===== -->
+  <h2>How candidate email works today</h2>
+  <p class="lead">Today, the conversation with a candidate lives in Greenhouse and in recruiters' personal inboxes.</p>
+  <div class="svgwrap">
+    <svg viewBox="0 0 860 230" role="img" aria-label="Today, a recruiter emails candidates from Greenhouse and replies land in the recruiter's personal inbox">
+      <defs>
+        <marker id="aT" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#64748b"/></marker>
+      </defs>
+      <rect x="20" y="80" width="180" height="92" rx="14" fill="#fff" stroke="#e4e9f0"/>
+      <text x="110" y="116" text-anchor="middle" font-size="15" font-weight="700">Recruiter</text>
+      <text x="110" y="138" text-anchor="middle" font-size="12.5" fill="#5d6b7a">works in Greenhouse</text>
+      <text x="110" y="155" text-anchor="middle" font-size="12.5" fill="#5d6b7a">+ personal inbox</text>
+
+      <rect x="300" y="65" width="240" height="122" rx="16" fill="#eef1f6" stroke="#d8dee8"/>
+      <text x="420" y="100" text-anchor="middle" font-size="15.5" font-weight="700" fill="#26375a">Greenhouse</text>
+      <text x="420" y="124" text-anchor="middle" font-size="12.5" fill="#5d6b7a">sends standard emails,</text>
+      <text x="420" y="142" text-anchor="middle" font-size="12.5" fill="#5d6b7a">logs the history</text>
+      <text x="420" y="170" text-anchor="middle" font-size="11.5" font-weight="600" fill="#1faa59">system of record</text>
+
+      <rect x="660" y="80" width="180" height="92" rx="14" fill="#fff" stroke="#e4e9f0"/>
+      <text x="750" y="116" text-anchor="middle" font-size="15" font-weight="700">Candidate</text>
+      <text x="750" y="138" text-anchor="middle" font-size="12.5" fill="#5d6b7a">normal email</text>
+
+      <line x1="200" y1="110" x2="295" y2="110" stroke="#64748b" stroke-width="2" marker-end="url(#aT)"/>
+      <text x="247" y="102" text-anchor="middle" font-size="10.5" fill="#64748b">composes</text>
+      <line x1="540" y1="110" x2="655" y2="110" stroke="#64748b" stroke-width="2" marker-end="url(#aT)"/>
+      <text x="597" y="102" text-anchor="middle" font-size="10.5" fill="#64748b">email out</text>
+      <!-- reply goes back to recruiter inbox, bypassing Greenhouse -->
+      <path d="M660,150 C520,205 240,205 150,178" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#aT)"/>
+      <text x="420" y="216" text-anchor="middle" font-size="11" fill="#64748b">candidate replies land in the recruiter's personal inbox</text>
+    </svg>
+    <figcaption>The hiring app itself doesn't send or receive candidate email today — replies scatter into individual inboxes.</figcaption>
+  </div>
+  <div class="card">
+    In practice that means a candidate's messages are split across Greenhouse and whichever recruiter happened to email them. There's no single place in the hiring app to see the full back-and-forth with a candidate.
+  </div>
+
+  <!-- ===== THE EVOLUTION ===== -->
+  <h2>How it will work</h2>
+  <p class="lead">The conversation moves into the hiring app. Recruiters read and reply there, the app sends and catches the email, and Greenhouse still gets every message for the record.</p>
+  <div class="svgwrap">
+    <svg viewBox="0 0 860 300" role="img" aria-label="The evolution: from Greenhouse-plus-personal-inbox today to an in-app inbox that syncs back to Greenhouse">
+      <defs>
+        <marker id="aE" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#64748b"/></marker>
+        <marker id="aEv" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#6c4cdb"/></marker>
+        <marker id="aEg" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#1faa59"/></marker>
+      </defs>
+      <!-- TODAY column -->
+      <text x="200" y="34" text-anchor="middle" font-size="13" font-weight="700" letter-spacing=".06em" fill="#64748b">TODAY</text>
+      <rect x="60" y="50" width="280" height="92" rx="13" fill="#eef1f6" stroke="#d8dee8"/>
+      <text x="200" y="84" text-anchor="middle" font-size="13.5" fill="#16202c">Recruiter ⇄ Greenhouse ⇄ candidate,</text>
+      <text x="200" y="104" text-anchor="middle" font-size="13.5" fill="#16202c">replies in personal inboxes</text>
+      <text x="200" y="126" text-anchor="middle" font-size="11.5" fill="#64748b">scattered, no single thread</text>
+
+      <!-- arrow between -->
+      <line x1="355" y1="96" x2="505" y2="96" stroke="#6c4cdb" stroke-width="2.5" marker-end="url(#aEv)"/>
+      <text x="430" y="86" text-anchor="middle" font-size="11.5" font-weight="600" fill="#6c4cdb">evolves to</text>
+
+      <!-- FUTURE column -->
+      <text x="660" y="34" text-anchor="middle" font-size="13" font-weight="700" letter-spacing=".06em" fill="#4a32a8">FUTURE</text>
+      <rect x="520" y="50" width="300" height="92" rx="13" fill="#efeafe" stroke="#ddd2fb"/>
+      <text x="670" y="84" text-anchor="middle" font-size="13.5" fill="#16202c">One conversation thread per</text>
+      <text x="670" y="104" text-anchor="middle" font-size="13.5" fill="#16202c">candidate, inside the app</text>
+      <text x="670" y="126" text-anchor="middle" font-size="11.5" fill="#6c4cdb">recruiters work it in one place</text>
+
+      <!-- future detail flow -->
+      <rect x="60" y="178" width="170" height="86" rx="13" fill="#fff" stroke="#e4e9f0"/>
+      <text x="145" y="214" text-anchor="middle" font-size="14.5" font-weight="700">Recruiter</text>
+      <text x="145" y="235" text-anchor="middle" font-size="12" fill="#5d6b7a">reads &amp; replies in-app</text>
+
+      <rect x="290" y="168" width="220" height="106" rx="15" fill="#eaf1ff" stroke="#d3e2ff"/>
+      <text x="400" y="200" text-anchor="middle" font-size="14.5" font-weight="700" fill="#26375a">The hiring app</text>
+      <text x="400" y="223" text-anchor="middle" font-size="12.5" fill="#5d6b7a">candidate thread</text>
+      <text x="400" y="244" text-anchor="middle" font-size="11.5" fill="#5d6b7a">↑ sends · ↓ receives (SendGrid)</text>
+
+      <rect x="570" y="178" width="160" height="86" rx="13" fill="#fff" stroke="#e4e9f0"/>
+      <text x="650" y="214" text-anchor="middle" font-size="14.5" font-weight="700">Candidate</text>
+      <text x="650" y="235" text-anchor="middle" font-size="12" fill="#5d6b7a">normal email</text>
+
+      <line x1="230" y1="210" x2="285" y2="210" stroke="#6c4cdb" stroke-width="2" marker-end="url(#aEv)"/>
+      <line x1="510" y1="210" x2="565" y2="210" stroke="#6c4cdb" stroke-width="2" marker-end="url(#aEv)"/>
+
+      <!-- sync to greenhouse -->
+      <path d="M400,168 C400,150 770,150 800,170 L800,205" fill="none" stroke="#1faa59" stroke-width="2.5" marker-end="url(#aEg)"/>
+      <rect x="745" y="206" width="100" height="58" rx="11" fill="#e7f6ee" stroke="#bfe6cf"/>
+      <text x="795" y="231" text-anchor="middle" font-size="12" font-weight="700" fill="#1faa59">Greenhouse</text>
+      <text x="795" y="249" text-anchor="middle" font-size="10.5" fill="#5d6b7a">record kept</text>
+    </svg>
+    <figcaption>Recruiters get one place to work each candidate; every message is mirrored back so Greenhouse stays authoritative.</figcaption>
+  </div>
+  <div class="grid3">
+    <div class="step-card">
+      <div class="ic-round i-blue">✉️</div>
+      <h3>Sends &amp; receives</h3>
+      <p>The app emails candidates through SendGrid and catches their replies — no recruiter inbox in the middle.</p>
+    </div>
+    <div class="step-card">
+      <div class="ic-round i-violet">💬</div>
+      <h3>One thread each</h3>
+      <p>Every candidate has a single conversation in the app, so the whole history is in one place.</p>
+    </div>
+    <div class="step-card">
+      <div class="ic-round i-green">📋</div>
+      <h3>Greenhouse stays the record</h3>
+      <p>Each message is copied into Greenhouse automatically, so the official record stays complete.</p>
+    </div>
+  </div>
+
+  <!-- ===== IN-APP INBOX ===== -->
+  <h2>The in-app inbox</h2>
+  <p class="lead">A recruiter works the conversation inside the app — a small send-and-receive inbox per candidate, separate from their personal email. The candidate just uses normal email and never sees the app.</p>
+  <div class="svgwrap">
+    <svg viewBox="0 0 860 250" role="img" aria-label="Recruiter works in the app; the app exchanges normal email with the candidate">
+      <defs>
+        <marker id="aI" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#2f6df6"/></marker>
+        <marker id="aIv" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#6c4cdb"/></marker>
+      </defs>
+      <rect x="20" y="80" width="180" height="90" rx="14" fill="#fff" stroke="#e4e9f0"/>
+      <text x="110" y="118" text-anchor="middle" font-size="15" font-weight="700">Recruiter</text>
+      <text x="110" y="139" text-anchor="middle" font-size="12.5" fill="#5d6b7a">reads &amp; replies in-app</text>
+
+      <rect x="300" y="40" width="260" height="170" rx="16" fill="#eaf1ff" stroke="#d3e2ff"/>
+      <text x="430" y="74" text-anchor="middle" font-size="15.5" font-weight="700" fill="#26375a">The hiring app</text>
+      <rect x="330" y="92" width="200" height="44" rx="9" fill="#fff" stroke="#cdd9ee"/>
+      <text x="430" y="113" text-anchor="middle" font-size="12.5" font-weight="600" fill="#16202c">Jane Doe — App #4821</text>
+      <text x="430" y="129" text-anchor="middle" font-size="11.5" fill="#5d6b7a">conversation thread</text>
+      <rect x="330" y="146" width="200" height="40" rx="9" fill="#fff" stroke="#cdd9ee"/>
+      <text x="430" y="171" text-anchor="middle" font-size="12" fill="#5d6b7a">↑ sends · ↓ catches replies</text>
+
+      <rect x="660" y="80" width="180" height="90" rx="14" fill="#fff" stroke="#e4e9f0"/>
+      <text x="750" y="118" text-anchor="middle" font-size="15" font-weight="700">Candidate</text>
+      <text x="750" y="139" text-anchor="middle" font-size="12.5" fill="#5d6b7a">normal email only</text>
+
+      <line x1="200" y1="113" x2="295" y2="113" stroke="#2f6df6" stroke-width="2" marker-end="url(#aI)"/>
+      <line x1="295" y1="138" x2="200" y2="138" stroke="#2f6df6" stroke-width="2" marker-end="url(#aI)"/>
+      <line x1="560" y1="113" x2="655" y2="113" stroke="#6c4cdb" stroke-width="2" marker-end="url(#aIv)"/>
+      <text x="607" y="105" text-anchor="middle" font-size="11" fill="#6c4cdb">email out</text>
+      <line x1="655" y1="138" x2="560" y2="138" stroke="#6c4cdb" stroke-width="2" marker-end="url(#aIv)"/>
+      <text x="607" y="156" text-anchor="middle" font-size="11" fill="#6c4cdb">reply in</text>
+    </svg>
+    <figcaption>The app is the recruiter's workspace; to the candidate it's just email.</figcaption>
+  </div>
+
+  <!-- ===== MATCHING ===== -->
+  <h2>How a reply finds the right candidate</h2>
+  <p class="lead">Each candidate gets a unique reply address, so an incoming reply files itself to the right person automatically.</p>
+  <div class="svgwrap">
+    <svg viewBox="0 0 860 250" role="img" aria-label="A unique reply address with a tag routes a reply to the right candidate">
+      <defs>
+        <marker id="aM" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#8a98a8"/></marker>
+      </defs>
+      <rect x="20" y="36" width="820" height="62" rx="12" fill="#f1f5ff" stroke="#d3e2ff"/>
+      <text x="40" y="62" font-size="13" fill="#5d6b7a">We email Jane (application 4821) with reply address:</text>
+      <text x="40" y="84" font-size="17" font-weight="700" fill="#16202c" font-family="ui-monospace,Menlo,Consolas,monospace">lightspeedta+<tspan fill="#2f6df6">4821</tspan>-<tspan fill="#6c4cdb">x7k</tspan>@st6partners.com</text>
+      <text x="648" y="84" font-size="11.5" fill="#5d6b7a"><tspan fill="#2f6df6">application</tspan> · <tspan fill="#6c4cdb">secret token</tspan></text>
+
+      <rect x="20" y="140" width="200" height="80" rx="13" fill="#fff" stroke="#e4e9f0"/>
+      <text x="120" y="174" text-anchor="middle" font-size="14" font-weight="700">Jane replies</text>
+      <text x="120" y="195" text-anchor="middle" font-size="12" fill="#5d6b7a">from any account</text>
+      <line x1="220" y1="180" x2="300" y2="180" stroke="#8a98a8" stroke-width="2" marker-end="url(#aM)"/>
+
+      <rect x="305" y="140" width="230" height="80" rx="13" fill="#eaf1ff" stroke="#d3e2ff"/>
+      <text x="420" y="168" text-anchor="middle" font-size="13.5" font-weight="700" fill="#26375a">App reads the tag</text>
+      <text x="420" y="190" text-anchor="middle" font-size="12.5" fill="#5d6b7a">"4821" → application 4821</text>
+      <text x="420" y="207" text-anchor="middle" font-size="11.5" fill="#5d6b7a">token confirms it's genuine</text>
+      <line x1="535" y1="180" x2="615" y2="180" stroke="#8a98a8" stroke-width="2" marker-end="url(#aM)"/>
+
+      <rect x="620" y="140" width="220" height="80" rx="13" fill="#e7f6ee" stroke="#bfe6cf"/>
+      <text x="730" y="168" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1faa59">Filed to Jane's thread</text>
+      <text x="730" y="190" text-anchor="middle" font-size="12.5" fill="#5d6b7a">recruiter gets a nudge</text>
+    </svg>
+    <figcaption>The tag is reliable even when a candidate replies from a different email than they applied with.</figcaption>
+  </div>
+  <div class="callout warn">
+    <span class="ic">⚠️</span>
+    <p><strong>One address note.</strong> <code>lightspeedta@st6partners.com</code> works as the reply mailbox. For full automated receiving, the app needs its own subdomain (e.g. <code>reply.st6partners.com</code>) with a mail-routing record — pointing <code>st6partners.com</code> itself at the app would disrupt company email.</p>
+  </div>
+
+  <!-- ===== GREENHOUSE ===== -->
+  <h2>Keeping Greenhouse complete</h2>
+  <p class="lead">When a candidate moves into the app, their existing email trail comes with them — and from then on, every message is mirrored back to Greenhouse.</p>
+  <div class="svgwrap">
+    <svg viewBox="0 0 860 250" role="img" aria-label="At handoff the email trail is imported into the app; afterward each message is mirrored back to Greenhouse">
+      <defs>
+        <marker id="aG" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#e08a17"/></marker>
+        <marker id="aGg" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#1faa59"/></marker>
+      </defs>
+      <rect x="40" y="80" width="230" height="110" rx="14" fill="#eef1f6" stroke="#d8dee8"/>
+      <text x="155" y="116" text-anchor="middle" font-size="15" font-weight="700" fill="#26375a">Greenhouse</text>
+      <text x="155" y="140" text-anchor="middle" font-size="12.5" fill="#5d6b7a">holds the prior</text>
+      <text x="155" y="157" text-anchor="middle" font-size="12.5" fill="#5d6b7a">email trail</text>
+      <text x="155" y="179" text-anchor="middle" font-size="11.5" font-weight="600" fill="#1faa59">system of record</text>
+
+      <rect x="590" y="80" width="230" height="110" rx="14" fill="#eaf1ff" stroke="#d3e2ff"/>
+      <text x="705" y="116" text-anchor="middle" font-size="15" font-weight="700" fill="#26375a">The hiring app</text>
+      <text x="705" y="140" text-anchor="middle" font-size="12.5" fill="#5d6b7a">candidate's live</text>
+      <text x="705" y="157" text-anchor="middle" font-size="12.5" fill="#5d6b7a">conversation thread</text>
+      <text x="705" y="179" text-anchor="middle" font-size="11.5" font-weight="600" fill="#6c4cdb">working surface</text>
+
+      <!-- import arrow -->
+      <line x1="270" y1="118" x2="588" y2="118" stroke="#e08a17" stroke-width="2.5" marker-end="url(#aG)"/>
+      <text x="430" y="108" text-anchor="middle" font-size="12" font-weight="600" fill="#e08a17">at handoff: import the trail (full messages)</text>
+      <!-- sync back arrow -->
+      <line x1="588" y1="156" x2="272" y2="156" stroke="#1faa59" stroke-width="2.5" marker-end="url(#aGg)"/>
+      <text x="430" y="176" text-anchor="middle" font-size="12" font-weight="600" fill="#1faa59">ongoing: mirror every new message back</text>
+    </svg>
+    <figcaption>One system owns the live conversation at a time, so candidates never get duplicate emails.</figcaption>
+  </div>
+
+  <!-- ===== SETUP ===== -->
+  <h2>What it takes to run</h2>
+  <div class="grid2">
+    <div class="card">
+      <strong>Sending</strong>
+      <ul class="clean">
+        <li>A SendGrid key in the app's settings</li>
+        <li>A from-address and reply-to address (<code>lightspeedta@st6partners.com</code>)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <strong>Receiving</strong>
+      <ul class="clean">
+        <li>A dedicated subdomain (e.g. <code>reply.st6partners.com</code>) with a mail-routing record</li>
+        <li>Greenhouse API access for the import and sync (already available)</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ===== OPEN QUESTIONS ===== -->
+  <h2>Open questions to settle</h2>
+  <div class="card">
+    <table>
+      <tr><th>Question</th><th>Why it matters</th></tr>
+      <tr><td>Which subdomain, and who owns the DNS change?</td><td>Gates automated receiving.</td></tr>
+      <tr><td>How do we verify inbound mail is genuine?</td><td>Incoming mail needs a secret/allowlist to prevent spoofing.</td></tr>
+      <tr><td>Which pipeline stage is the handoff point?</td><td>Stops Greenhouse double-sending once the app takes over.</td></tr>
+      <tr><td>Retention &amp; PII handling for stored email?</td><td>Candidate messages are personal data (GDPR/EEOC-aware).</td></tr>
+    </table>
+  </div>
+
+  <p class="footnote">AI Talent Assessment · Email &amp; Messaging · companion to the markdown design spec.</p>
+
+</div>
+</body>
+</html>

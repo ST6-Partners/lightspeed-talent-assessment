@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lightspeed Systems · AI Engagement — Style &amp; Navigation Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   LIGHTSPEED SYSTEMS — DESIGN TOKENS
+   Palette derived from the Lightspeed Systems logo:
+   cyan mark + slate-gray wordmark. If you have official brand
+   hex values, fine-tune the :root block — every color in this
+   document and the sample screen routes through these vars.
+   ============================================================ */
+:root{
+  /* Brand — Lightspeed Blue + slate */
+  --ls-cyan:           #4FA9D6;   /* LIGHTSPEED BLUE (official) — headers, accents, active, gradients, mark */
+  --ls-cyan-bright:    #6FBCE0;
+  --ls-primary:        #2E89B8;   /* deeper Lightspeed Blue — buttons/links w/ white text (accessible) */
+  --ls-primary-600:    #246F97;
+  --ls-primary-50:     #EAF4FA;   /* blue tint */
+
+  /* Slate neutrals (from the wordmark) — cool, clean, calm */
+  --ls-ink:            #2E3942;   /* primary text */
+  --ls-ink-2:          #51606A;   /* secondary text */
+  --ls-ink-3:          #8A969E;   /* tertiary / captions */
+  --ls-line:           #E3E8EB;   /* hairline borders */
+  --ls-surface:        #FFFFFF;   /* cards */
+  --ls-bg:             #F6F9FA;   /* app background (cool off-white) */
+  --ls-bg-2:           #EEF3F5;
+  --ls-slate-deep:     #28323A;   /* dark sidebar (darkened brand slate) */
+
+  /* Muted semantics — signal, not alarm */
+  --ls-thrive:         #2E9E7B;   /* thriving */
+  --ls-thrive-bg:      #E6F4EF;
+  --ls-watch:          #C99300;   /* watch / amber */
+  --ls-watch-bg:       #FBF2DC;
+  --ls-risk:           #C2615A;   /* flight-risk (desaturated, never fire-engine red) */
+  --ls-risk-bg:        #F8EAE8;
+
+  /* Shape & elevation */
+  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 22px;
+  --sh-1: 0 1px 2px rgba(40,50,58,.06), 0 1px 3px rgba(40,50,58,.05);
+  --sh-2: 0 4px 12px rgba(40,50,58,.07), 0 2px 4px rgba(40,50,58,.04);
+  --sh-3: 0 12px 32px rgba(40,50,58,.12);
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font);color:var(--ls-ink);background:var(--ls-bg);line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding:0 28px}
+h1,h2,h3,h4{line-height:1.2;letter-spacing:-.02em}
+section{padding:56px 0;border-top:1px solid var(--ls-line)}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ls-cyan);margin-bottom:10px}
+.lead{font-size:18px;color:var(--ls-ink-2);max-width:64ch}
+.muted{color:var(--ls-ink-3)}
+
+/* brand mark glyph */
+.mark{display:inline-flex;align-items:center;justify-content:center}
+.mark svg{display:block}
+
+/* ---- Cover ---- */
+.cover{background:
+   radial-gradient(1200px 380px at 88% -8%, rgba(79,169,214,.18), transparent 60%),
+   radial-gradient(900px 320px at 8% 0%, rgba(46,137,184,.12), transparent 55%);
+   border-top:none;padding-top:48px;padding-bottom:48px}
+.lockup{display:flex;align-items:center;gap:14px;margin-bottom:26px}
+.lockup .wm{font-size:30px;font-weight:800;letter-spacing:-.03em;color:var(--ls-ink)}
+.lockup .wm span{font-weight:600;color:var(--ls-ink-2)}
+.badge-draft{display:inline-block;font-size:12px;font-weight:700;color:var(--ls-primary);background:var(--ls-primary-50);
+   border:1px solid #C9E7F3;border-radius:999px;padding:5px 12px;margin-bottom:20px}
+.cover h1{font-size:46px;font-weight:800;max-width:18ch}
+.cover h1 .spark{background:linear-gradient(92deg,var(--ls-primary),var(--ls-cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.cover p{margin-top:16px}
+.meta{display:flex;gap:28px;flex-wrap:wrap;margin-top:28px;font-size:13px;color:var(--ls-ink-3)}
+.meta b{color:var(--ls-ink-2);font-weight:600}
+
+/* ---- Principles ---- */
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.card{background:var(--ls-surface);border:1px solid var(--ls-line);border-radius:var(--r-lg);padding:22px;box-shadow:var(--sh-1)}
+.card h3{font-size:17px;margin-bottom:8px}
+.card p{font-size:14.5px;color:var(--ls-ink-2)}
+.pill{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;
+   background:var(--ls-primary-50);margin-bottom:14px;font-size:18px}
+
+/* ---- Palette ---- */
+.swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.sw{border:1px solid var(--ls-line);border-radius:var(--r-md);overflow:hidden;background:var(--ls-surface);box-shadow:var(--sh-1)}
+.sw .chip{height:76px}
+.sw .info{padding:10px 12px}
+.sw .name{font-size:13px;font-weight:600}
+.sw .var{font-size:11.5px;color:var(--ls-ink-3);font-family:ui-monospace,Menlo,monospace}
+.sw .hex{font-size:11.5px;color:var(--ls-ink-3);font-family:ui-monospace,Menlo,monospace}
+.group-label{font-size:13px;font-weight:700;color:var(--ls-ink-2);margin:22px 0 12px;text-transform:uppercase;letter-spacing:.06em}
+
+/* ---- Type ---- */
+.typerow{display:flex;align-items:baseline;gap:18px;padding:14px 0;border-bottom:1px solid var(--ls-line)}
+.typerow:last-child{border-bottom:none}
+.typerow .lbl{width:150px;flex:none;font-size:12px;color:var(--ls-ink-3);font-family:ui-monospace,Menlo,monospace}
+.t-display{font-size:38px;font-weight:800;letter-spacing:-.025em}
+.t-h2{font-size:26px;font-weight:700;letter-spacing:-.02em}
+.t-h3{font-size:19px;font-weight:600}
+.t-body{font-size:16px;font-weight:400}
+.t-sm{font-size:13px;font-weight:500;color:var(--ls-ink-2)}
+.t-cap{font-size:11.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ls-ink-3)}
+
+/* ---- Components ---- */
+.comp-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.btn{font-family:var(--font);font-size:14px;font-weight:600;border-radius:var(--r-sm);padding:9px 16px;border:1px solid transparent;cursor:pointer}
+.btn-primary{background:var(--ls-primary);color:#fff}
+.btn-primary:hover{background:var(--ls-primary-600)}
+.btn-accent{background:linear-gradient(92deg,var(--ls-primary),var(--ls-cyan));color:#fff;box-shadow:0 4px 14px rgba(79,169,214,.35)}
+.btn-ghost{background:var(--ls-surface);color:var(--ls-ink);border-color:var(--ls-line)}
+.btn-ghost:hover{background:var(--ls-bg-2)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.badgeS{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;display:inline-flex;align-items:center;gap:6px}
+.b-thrive{color:var(--ls-thrive);background:var(--ls-thrive-bg)}
+.b-watch{color:var(--ls-watch);background:var(--ls-watch-bg)}
+.b-risk{color:var(--ls-risk);background:var(--ls-risk-bg)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.input{font-family:var(--font);font-size:14px;border:1px solid var(--ls-line);border-radius:var(--r-sm);padding:9px 12px;width:100%;background:var(--ls-surface)}
+.input:focus{outline:none;border-color:var(--ls-cyan);box-shadow:0 0 0 3px var(--ls-primary-50)}
+
+/* sparkline */
+.spark-row{display:flex;align-items:center;gap:10px}
+.trend-up{color:var(--ls-thrive);font-weight:600;font-size:13px}
+.trend-dn{color:var(--ls-risk);font-weight:600;font-size:13px}
+
+/* ---- Nav rationale ---- */
+.reco{background:var(--ls-primary-50);border:1px solid #C9E7F3;border-radius:var(--r-lg);padding:22px 24px;margin-bottom:24px}
+.reco h3{font-size:18px;color:var(--ls-primary-600);margin-bottom:6px}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:8px}
+.compare .card h4{font-size:15px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.compare ul{list-style:none;font-size:14px;color:var(--ls-ink-2)}
+.compare li{padding:5px 0 5px 22px;position:relative}
+.compare li::before{position:absolute;left:0;top:5px}
+.win li::before{content:"✓";color:var(--ls-thrive);font-weight:700}
+.lose li::before{content:"–";color:var(--ls-ink-3);font-weight:700}
+
+/* ============================================================
+   SAMPLE SCREEN — Organization surface
+   ============================================================ */
+.frame{border:1px solid var(--ls-line);border-radius:var(--r-xl);overflow:hidden;box-shadow:var(--sh-3);background:var(--ls-bg)}
+.app{display:grid;grid-template-columns:236px 1fr;min-height:560px}
+
+/* sidebar */
+.side{background:var(--ls-slate-deep);color:#B9C3CB;display:flex;flex-direction:column;padding:18px 14px}
+.brand{display:flex;align-items:center;gap:11px;padding:6px 8px 18px}
+.brand .nm{color:#fff;font-weight:700;font-size:15px;letter-spacing:-.01em}
+.brand .nm small{display:block;font-weight:500;font-size:11px;color:#7E8B94;letter-spacing:.02em}
+.wsswitch{display:flex;align-items:center;gap:9px;background:#323D46;border:1px solid #3D4953;border-radius:10px;padding:8px 10px;margin-bottom:16px;cursor:pointer}
+.wsswitch .av{width:22px;height:22px;border-radius:6px;background:#46535D;flex:none}
+.wsswitch .txt{font-size:12.5px;color:#E3E7EA;font-weight:600;flex:1}
+.wsswitch .car{color:#7E8B94;font-size:11px}
+.navlbl{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#677480;padding:14px 10px 7px;font-weight:700}
+.nav a{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;color:#B9C3CB;text-decoration:none;font-size:14px;font-weight:500;margin-bottom:2px}
+.nav a .ic{width:18px;text-align:center;opacity:.85}
+.nav a:hover{background:#323D46;color:#fff}
+.nav a.active{background:linear-gradient(92deg,var(--ls-primary),var(--ls-cyan));color:#fff;box-shadow:0 4px 14px rgba(79,169,214,.3)}
+.nav a.active .ic{opacity:1}
+.side .foot{margin-top:auto;border-top:1px solid #36424B;padding-top:12px}
+.userchip{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:9px;cursor:pointer}
+.userchip:hover{background:#323D46}
+.userchip .av{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#51606A,#4FA9D6);flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700}
+.userchip .un{font-size:13px;color:#E3E7EA;font-weight:600}
+.userchip .ur{font-size:11px;color:#7E8B94}
+
+/* main */
+.main{display:flex;flex-direction:column;background:var(--ls-bg)}
+.topbar{display:flex;align-items:center;gap:14px;padding:14px 22px;background:rgba(255,255,255,.7);backdrop-filter:blur(8px);border-bottom:1px solid var(--ls-line)}
+.crumb{font-size:13px;color:var(--ls-ink-3)}
+.crumb b{color:var(--ls-ink);font-weight:600}
+.search{margin-left:8px;flex:1;max-width:320px;position:relative}
+.search input{font-size:13px;padding:8px 12px 8px 32px;border-radius:999px;border:1px solid var(--ls-line);width:100%;background:var(--ls-surface)}
+.search .si{position:absolute;left:11px;top:7px;color:var(--ls-ink-3);font-size:13px}
+.topbar .sp{flex:1}
+.iconbtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--ls-line);background:var(--ls-surface);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;font-size:15px}
+.iconbtn .dotn{position:absolute;top:7px;right:8px;width:7px;height:7px;border-radius:50%;background:var(--ls-risk)}
+
+.content{padding:24px 26px;overflow:auto}
+.phead{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:6px}
+.phead h2{font-size:24px;font-weight:700}
+.psub{font-size:14px;color:var(--ls-ink-3);margin-bottom:18px}
+
+/* in-page tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--ls-line);margin-bottom:22px}
+.tabs a{font-size:14px;font-weight:600;color:var(--ls-ink-3);text-decoration:none;padding:10px 14px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs a.on{color:var(--ls-primary);border-bottom-color:var(--ls-cyan)}
+
+/* stat strip */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.stat{background:var(--ls-surface);border:1px solid var(--ls-line);border-radius:var(--r-md);padding:16px;box-shadow:var(--sh-1)}
+.stat .k{font-size:12px;color:var(--ls-ink-3);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.stat .v{font-size:28px;font-weight:800;letter-spacing:-.02em;margin-top:6px}
+.stat .d{font-size:12.5px;margin-top:4px}
+
+/* people */
+.sechead{display:flex;align-items:center;justify-content:space-between;margin:6px 0 14px}
+.sechead h3{font-size:16px;font-weight:700}
+.people{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.person{background:var(--ls-surface);border:1px solid var(--ls-line);border-radius:var(--r-md);padding:16px;box-shadow:var(--sh-1);display:flex;gap:14px;align-items:center}
+.person .av{width:44px;height:44px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:15px}
+.person .who{flex:1;min-width:0}
+.person .nm{font-size:14.5px;font-weight:600}
+.person .rl{font-size:12.5px;color:var(--ls-ink-3)}
+.person .sig{text-align:right}
+.svg-spark{display:block}
+@media(max-width:980px){.grid3,.swatches,.stats{grid-template-columns:repeat(2,1fr)}.people,.comp-grid,.compare{grid-template-columns:1fr}.app{grid-template-columns:1fr}.side{display:none}}
+</style>
+</head>
+<body>
+
+<!-- ===================== COVER ===================== -->
+<div class="cover">
+  <div class="wrap">
+    <div class="lockup">
+      <span class="mark">
+        <svg width="44" height="44" viewBox="0 0 40 40" fill="none" stroke="var(--ls-cyan)" stroke-width="3.4" stroke-linecap="round">
+          <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5"/>
+          <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5"/>
+          <line x1="5" y1="14" x2="11.5" y2="14"/>
+          <line x1="28.5" y1="26" x2="35" y2="26"/>
+        </svg>
+      </span>
+      <span class="wm">Lightspeed <span>Systems</span></span>
+    </div>
+    <span class="badge-draft">Brand applied · colors sampled from the Lightspeed Systems logo — fine-tune <code>:root</code> if you have official hex</span>
+    <h1>AI Engagement<br><span class="spark">Style &amp; Navigation Guide</span></h1>
+    <p class="lead">A calm, humane, modern-SaaS design language for a continuous thriving &amp; flight-risk product — built on the Lightspeed cyan-and-slate brand without ever feeling like surveillance.</p>
+    <div class="meta">
+      <span><b>Module</b> · AI Engagement (Type 2)</span>
+      <span><b>Author</b> · Brooke Friedman</span>
+      <span><b>Date</b> · 2026-06-28</span>
+      <span><b>Status</b> · Ideation draft</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== PRINCIPLES ===================== -->
+<section><div class="wrap">
+  <div class="eyebrow">Design principles</div>
+  <h2 class="t-h2" style="margin-bottom:8px">Three ideas drive every decision below</h2>
+  <p class="lead" style="margin-bottom:26px">The subject matter — reading people for flight risk — sets a higher bar than a normal dashboard. The look has to earn trust.</p>
+  <div class="grid3">
+    <div class="card"><div class="pill">🌿</div><h3>Humane, not clinical</h3><p>The cool cyan-and-slate brand stays calm through soft shapes, low-contrast surfaces, and generous space — so it feels supportive, not like a dense surveillance console.</p></div>
+    <div class="card"><div class="pill">📈</div><h3>Signal, not alarm</h3><p>Muted, desaturated semantics. We show <em>trend and direction</em> — sparklines, arrows, soft badges — so a reading invites a conversation rather than flagging a person.</p></div>
+    <div class="card"><div class="pill">⚡</div><h3>On-brand &amp; quiet</h3><p>Lightspeed cyan carries energy and action; slate carries everything calm and structural. The bright cyan is a spotlight — used sparingly, never wallpaper.</p></div>
+  </div>
+</div></section>
+
+<!-- ===================== COLOR ===================== -->
+<section><div class="wrap">
+  <div class="eyebrow">Color</div>
+  <h2 class="t-h2">Palette — Lightspeed cyan + slate</h2>
+  <p class="lead" style="margin:8px 0 6px">Sampled from the logo. Cyan splits into a <strong>bright</strong> brand cyan (the mark, accents, active states) and a <strong>deeper</strong> cyan for buttons and links so white text stays readable.</p>
+
+  <div class="group-label">Brand</div>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:var(--ls-cyan)"></div><div class="info"><div class="name">Lightspeed Blue (brand)</div><div class="var">--ls-cyan</div><div class="hex">#4FA9D6</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--ls-primary)"></div><div class="info"><div class="name">Primary (actions)</div><div class="var">--ls-primary</div><div class="hex">#2E89B8</div></div></div>
+    <div class="sw"><div class="chip" style="background:linear-gradient(92deg,var(--ls-primary),var(--ls-cyan))"></div><div class="info"><div class="name">Motion gradient</div><div class="var">primary → cyan</div><div class="hex">active states only</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--ls-primary-50);border-bottom:1px solid var(--ls-line)"></div><div class="info"><div class="name">Blue tint</div><div class="var">--ls-primary-50</div><div class="hex">#EAF4FA</div></div></div>
+  </div>
+
+  <div class="group-label">Neutrals — cool slate (from the wordmark)</div>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:var(--ls-slate-deep)"></div><div class="info"><div class="name">Slate deep (sidebar)</div><div class="var">--ls-slate-deep</div><div class="hex">#28323A</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--ls-ink)"></div><div class="info"><div class="name">Ink</div><div class="var">--ls-ink</div><div class="hex">#2E3942</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--ls-bg)"></div><div class="info"><div class="name">App background</div><div class="var">--ls-bg</div><div class="hex">#F6F9FA</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--ls-line)"></div><div class="info"><div class="name">Hairline</div><div class="var">--ls-line</div><div class="hex">#E3E8EB</div></div></div>
+  </div>
+
+  <div class="group-label">Semantics — muted on purpose</div>
+  <div class="swatches">
+    <div class="sw"><div class="chip" style="background:var(--ls-thrive)"></div><div class="info"><div class="name">Thriving</div><div class="var">--ls-thrive</div><div class="hex">#2E9E7B</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--ls-watch)"></div><div class="info"><div class="name">Watch</div><div class="var">--ls-watch</div><div class="hex">#C99300</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--ls-risk)"></div><div class="info"><div class="name">Flight-risk</div><div class="var">--ls-risk</div><div class="hex">#C2615A</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--ls-bg-2)"></div><div class="info"><div class="name">Surface alt</div><div class="var">--ls-bg-2</div><div class="hex">#EEF3F5</div></div></div>
+  </div>
+</div></section>
+
+<!-- ===================== TYPE ===================== -->
+<section><div class="wrap">
+  <div class="eyebrow">Typography</div>
+  <h2 class="t-h2">One family: Inter</h2>
+  <p class="lead" style="margin:8px 0 20px">A single, highly legible workhorse — close to the geometric sans in the Lightspeed wordmark, matches the Tailwind ecosystem, and reads as credible from dense data to friendly headings.</p>
+  <div class="card">
+    <div class="typerow"><span class="lbl">Display / 800</span><span class="t-display">People thrive when feedback is clear</span></div>
+    <div class="typerow"><span class="lbl">Heading / 700</span><span class="t-h2">Organization health this week</span></div>
+    <div class="typerow"><span class="lbl">Subhead / 600</span><span class="t-h3">Engineering · 24 people</span></div>
+    <div class="typerow"><span class="lbl">Body / 400</span><span class="t-body">Continuous signals replace the annual survey — a calm, ongoing read.</span></div>
+    <div class="typerow"><span class="lbl">Small / 500</span><span class="t-sm">Last check-in 2 days ago</span></div>
+    <div class="typerow"><span class="lbl">Caption / 600</span><span class="t-cap">Updated nightly</span></div>
+  </div>
+</div></section>
+
+<!-- ===================== COMPONENTS ===================== -->
+<section><div class="wrap">
+  <div class="eyebrow">Components &amp; signal language</div>
+  <h2 class="t-h2">Built on shadcn/ui + Tailwind</h2>
+  <p class="lead" style="margin:8px 0 22px">Accessible Radix primitives, themeable to the tokens above, fast to build — the right default for the existing TS/Tailwind/React stack.</p>
+  <div class="comp-grid">
+    <div class="card">
+      <div class="t-cap" style="margin-bottom:14px">Buttons</div>
+      <div class="row" style="margin-bottom:18px">
+        <button class="btn btn-primary">Primary</button>
+        <button class="btn btn-accent">⚡ Accent</button>
+        <button class="btn btn-ghost">Ghost</button>
+      </div>
+      <div class="t-cap" style="margin-bottom:12px">Signal badges (muted)</div>
+      <div class="row">
+        <span class="badgeS b-thrive"><span class="dot" style="background:var(--ls-thrive)"></span>Thriving</span>
+        <span class="badgeS b-watch"><span class="dot" style="background:var(--ls-watch)"></span>Watch</span>
+        <span class="badgeS b-risk"><span class="dot" style="background:var(--ls-risk)"></span>Flight-risk</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="t-cap" style="margin-bottom:14px">Input</div>
+      <input class="input" placeholder="Search people, teams…" style="margin-bottom:18px">
+      <div class="t-cap" style="margin-bottom:12px">Trend over alarm</div>
+      <div class="spark-row" style="margin-bottom:8px">
+        <svg width="120" height="32" viewBox="0 0 120 32" class="svg-spark"><polyline fill="none" stroke="var(--ls-thrive)" stroke-width="2.5" points="2,26 22,22 42,24 62,16 82,12 102,7 118,5"/></svg>
+        <span class="trend-up">▲ trending up</span>
+      </div>
+      <div class="spark-row">
+        <svg width="120" height="32" viewBox="0 0 120 32" class="svg-spark"><polyline fill="none" stroke="var(--ls-risk)" stroke-width="2.5" points="2,8 22,10 42,9 62,15 82,18 102,24 118,27"/></svg>
+        <span class="trend-dn">▼ needs a conversation</span>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<!-- ===================== NAVIGATION ===================== -->
+<section><div class="wrap">
+  <div class="eyebrow">Navigation</div>
+  <h2 class="t-h2">Recommendation: left sidebar, not top tabs</h2>
+  <p class="lead" style="margin:8px 0 22px">A left vertical sidebar for primary destinations, a thin top bar for global actions, and in-page tabs for sub-views within a surface.</p>
+
+  <div class="reco">
+    <h3>Why sidebar wins for this product</h3>
+    <p style="font-size:15px;color:var(--ls-ink-2)">Four surfaces today — Home · My Week · Organization · Admin — but Organization, Admin, and later exec analytics all grow sub-sections. A sidebar absorbs that growth; top tabs run out of room around 5–7 items and can't group or nest. It's also the category convention (15Five, Lattice, Culture Amp, Linear, Asana), and it preserves vertical height for org trees and people grids.</p>
+  </div>
+
+  <div class="compare">
+    <div class="card win"><h4>✓ Left sidebar</h4><ul>
+      <li>Scales to more surfaces + nested sections</li>
+      <li>Matches every comparable people-product</li>
+      <li>Holds workspace switcher, role context, separated Admin</li>
+      <li>Preserves vertical space for tables &amp; org trees</li>
+      <li>Collapses to an icon rail for dense screens</li>
+    </ul></div>
+    <div class="card lose"><h4>Top tabs alone</h4><ul>
+      <li>Caps out ~5–7 items, no nesting</li>
+      <li>Sub-tabs eat vertical room</li>
+      <li>Weak home for an Admin area</li>
+      <li>Only wins for a permanently flat, shallow app</li>
+      <li>Still useful — as <em>in-page</em> tabs within a surface</li>
+    </ul></div>
+  </div>
+</div></section>
+
+<!-- ===================== SAMPLE SCREEN ===================== -->
+<section><div class="wrap">
+  <div class="eyebrow">Sample screen</div>
+  <h2 class="t-h2">Organization surface — recommended pattern in context</h2>
+  <p class="lead" style="margin:8px 0 22px">Sidebar (primary nav) · top bar (search, notifications, profile, workspace switch) · in-page tabs (People / Pulse / Org Tree). Everything uses the brand tokens above.</p>
+
+  <div class="frame">
+    <div class="app">
+      <!-- SIDEBAR -->
+      <aside class="side">
+        <div class="brand">
+          <span class="mark">
+            <svg width="30" height="30" viewBox="0 0 40 40" fill="none" stroke="var(--ls-cyan)" stroke-width="3.6" stroke-linecap="round">
+              <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5"/>
+              <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5"/>
+              <line x1="5" y1="14" x2="11.5" y2="14"/>
+              <line x1="28.5" y1="26" x2="35" y2="26"/>
+            </svg>
+          </span>
+          <div class="nm">Lightspeed<small>AI Engagement</small></div>
+        </div>
+        <div class="wsswitch"><span class="av"></span><span class="txt">Acme Robotics</span><span class="car">▾</span></div>
+        <div class="navlbl">Workspace</div>
+        <nav class="nav">
+          <a href="#"><span class="ic">⌂</span> Home</a>
+          <a href="#"><span class="ic">✎</span> My Week</a>
+          <a href="#" class="active"><span class="ic">⊞</span> Organization</a>
+        </nav>
+        <div class="navlbl">Manage</div>
+        <nav class="nav">
+          <a href="#"><span class="ic">⚙</span> Admin</a>
+        </nav>
+        <div class="foot">
+          <div class="userchip"><span class="av">BF</span><div><div class="un">Brooke F.</div><div class="ur">Admin</div></div></div>
+        </div>
+      </aside>
+
+      <!-- MAIN -->
+      <div class="main">
+        <div class="topbar">
+          <span class="crumb"><b>Organization</b></span>
+          <div class="search"><span class="si">⌕</span><input placeholder="Search people, teams…"></div>
+          <span class="sp"></span>
+          <button class="iconbtn">⌕</button>
+          <button class="iconbtn">🔔<span class="dotn"></span></button>
+          <button class="iconbtn">BF</button>
+        </div>
+
+        <div class="content">
+          <div class="phead"><h2>Organization</h2><button class="btn btn-accent" style="font-size:13px">⚡ Run pulse</button></div>
+          <div class="psub">A continuous read of how the org is thriving — updated nightly from signals, never from a survey blast.</div>
+
+          <div class="tabs">
+            <a href="#">People</a>
+            <a href="#" class="on">Pulse</a>
+            <a href="#">Org Tree</a>
+          </div>
+
+          <div class="stats">
+            <div class="stat"><div class="k">Thriving</div><div class="v" style="color:var(--ls-thrive)">68%</div><div class="d trend-up">▲ 4 pts vs last month</div></div>
+            <div class="stat"><div class="k">Watch</div><div class="v" style="color:var(--ls-watch)">24%</div><div class="d muted">steady</div></div>
+            <div class="stat"><div class="k">Flight-risk</div><div class="v" style="color:var(--ls-risk)">8%</div><div class="d trend-dn">▲ 2 — worth a look</div></div>
+            <div class="stat"><div class="k">Check-in rate</div><div class="v">82%</div><div class="d trend-up">▲ 6 pts</div></div>
+          </div>
+
+          <div class="sechead"><h3>People needing a conversation</h3><a href="#" style="font-size:13px;color:var(--ls-primary);text-decoration:none;font-weight:600">View all →</a></div>
+          <div class="people">
+            <div class="person"><div class="av" style="background:linear-gradient(135deg,#2E89B8,#4FA9D6)">JL</div><div class="who"><div class="nm">Jordan Lee</div><div class="rl">Senior Engineer · Platform</div></div><div class="sig"><span class="badgeS b-risk">Flight-risk</span><div style="margin-top:8px"><svg width="92" height="24" viewBox="0 0 92 24"><polyline fill="none" stroke="var(--ls-risk)" stroke-width="2.5" points="2,6 20,8 38,9 56,13 74,18 90,21"/></svg></div></div></div>
+            <div class="person"><div class="av" style="background:linear-gradient(135deg,#2E9E7B,#4FA9D6)">PA</div><div class="who"><div class="nm">Priya Anand</div><div class="rl">Product Manager · Growth</div></div><div class="sig"><span class="badgeS b-watch">Watch</span><div style="margin-top:8px"><svg width="92" height="24" viewBox="0 0 92 24"><polyline fill="none" stroke="var(--ls-watch)" stroke-width="2.5" points="2,12 20,10 38,13 56,11 74,14 90,12"/></svg></div></div></div>
+            <div class="person"><div class="av" style="background:linear-gradient(135deg,#4FA9D6,#2E9E7B)">MO</div><div class="who"><div class="nm">Marcus Obi</div><div class="rl">Designer · Brand</div></div><div class="sig"><span class="badgeS b-thrive">Thriving</span><div style="margin-top:8px"><svg width="92" height="24" viewBox="0 0 92 24"><polyline fill="none" stroke="var(--ls-thrive)" stroke-width="2.5" points="2,20 20,17 38,15 56,11 74,8 90,4"/></svg></div></div></div>
+            <div class="person"><div class="av" style="background:linear-gradient(135deg,#C99300,#2E89B8)">SK</div><div class="who"><div class="nm">Sam Kelly</div><div class="rl">Engineer · Platform</div></div><div class="sig"><span class="badgeS b-watch">Watch</span><div style="margin-top:8px"><svg width="92" height="24" viewBox="0 0 92 24"><polyline fill="none" stroke="var(--ls-watch)" stroke-width="2.5" points="2,9 20,12 38,10 56,14 74,12 90,15"/></svg></div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="muted" style="font-size:13px;margin-top:14px">The mark shown is a brand-color echo of the Lightspeed knot — drop the official logo SVG into the folder and I'll swap it in exactly. Sample data is illustrative. The sidebar collapses to a 64px icon rail on dense screens and to a top drawer on mobile.</p>
+</div></section>
+
+<section style="padding-bottom:64px"><div class="wrap">
+  <div class="eyebrow">Next</div>
+  <h2 class="t-h2" style="margin-bottom:10px">Open items before this becomes spec</h2>
+  <p class="lead">Confirm official brand hex (if different from the sampled values) and drop in the logo SVG. Decide internal-tool vs. sellable-product polish level. Then I can extend the sample set to Home, My Week, and Admin, and formalize this as a Design Decision.</p>
+</div></section>
+
+</body>
+</html>
