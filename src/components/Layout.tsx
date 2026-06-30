@@ -5,28 +5,30 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Database, Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2, Award, ClipboardCheck, Search, Bell, Brain } from 'lucide-react';
+import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
 import { trpc } from '../lib/trpc';
 
-const navItems = [
-  { path: '/', label: 'Home', icon: Home },
-  { path: '/entities', label: 'Entities', icon: Database },
-  { path: '/chat', label: 'AI Chat', icon: Bot },
-  { path: '/admin/settings', label: 'Settings', icon: Settings },
+const topNav = [
+  { path: '/hiring', label: 'Overview', icon: LayoutDashboard },
+  { path: '/hiring/metrics', label: 'Metrics', icon: BarChart2 },
 ];
 
-const hiringNavItems = [
-  { path: '/hiring', label: 'Overview', icon: LayoutDashboard },
+const talentNav = [
   { path: '/hiring/requisitions', label: 'Requisitions', icon: ClipboardList },
-  { path: '/hiring/jobs', label: 'Job Descriptions', icon: FileText },
   { path: '/hiring/candidates', label: 'Candidates', icon: Users },
+  { path: '/hiring/assessments', label: 'Assessments', icon: ClipboardCheck },
+  { path: '/hiring/scorecards', label: 'Scorecards', icon: FileCheck },
+];
+
+const coreNav = [
+  { path: '/hiring/employees', label: 'Employees', icon: Contact },
+  { path: '/hiring/departments', label: 'Departments', icon: Building2 },
+  { path: '/hiring/titles', label: 'Titles', icon: Tag },
   { path: '/hiring/values', label: 'Company Values', icon: Award },
-  { path: '/hiring/epp', label: 'EPP Profiles', icon: Brain },
-  { path: '/hiring/score-values', label: 'Score Values', icon: ClipboardCheck },
-  { path: '/hiring/insights', label: 'Insights', icon: BarChart2 },
+  { path: '/hiring/jobs', label: 'Job Descriptions', icon: FileText },
 ];
 
 function BrandMark({ size = 28 }: { size?: number }) {
@@ -40,7 +42,7 @@ function BrandMark({ size = 28 }: { size?: number }) {
   );
 }
 
-const allNav = [...navItems, ...hiringNavItems];
+const allNav = [...topNav, ...talentNav, ...coreNav];
 
 export default function Layout() {
   const location = useLocation();
@@ -111,11 +113,13 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 overflow-y-auto">
-          <div className="px-2.5 pt-2 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Workspace</div>
-          {navItems.map(renderLink)}
+          {topNav.map(renderLink)}
 
-          <div className="px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Hiring Pipeline</div>
-          {hiringNavItems.map(renderLink)}
+          <div className="px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Talent Acquisition</div>
+          {talentNav.map(renderLink)}
+
+          <div className="px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Core Data</div>
+          {coreNav.map(renderLink)}
         </nav>
 
         <div className="mt-auto border-t border-[#36424B] pt-3">
@@ -140,6 +144,12 @@ export default function Layout() {
           <div className="flex items-center gap-2">
             <WhatsNew />
             <NotificationBell />
+            <Link to="/chat" title="AI Chat" className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors">
+              <Bot className="w-5 h-5" />
+            </Link>
+            <Link to="/admin/settings" title="Settings" className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors">
+              <Settings className="w-5 h-5" />
+            </Link>
             <button
               onClick={() => setShowFeedback(true)}
               className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors"

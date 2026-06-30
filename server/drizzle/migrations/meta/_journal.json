@@ -71,6 +71,13 @@
       "when": 1800000400000,
       "tag": "0009_work_sample_submission",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1800000500000,
+      "tag": "0010_core_data",
+      "breakpoints": true
     }
   ]
 }
