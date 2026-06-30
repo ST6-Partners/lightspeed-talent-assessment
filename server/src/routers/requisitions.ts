@@ -86,4 +86,21 @@ export const requisitionsRouter = router({
       trackActivity(ctx.db, ctx.user.id, 'update_requisition', 'job_requisitions', { reqId: id }).catch(() => {});
       return req;
     }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.jobRequisitions.findFirst({
+        where: eq(jobRequisitions.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      // FK: job_descriptions.req_id ON DELETE CASCADE removes child JDs;
+      // candidates.jd_id ON DELETE SET NULL detaches any linked candidates.
+      await ctx.db.delete(jobRequisitions).where(eq(jobRequisitions.id, input.id));
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'job_requisitions', 'delete');
+      trackActivity(ctx.db, ctx.user.id, 'delete_requisition', 'job_requisitions', { reqId: input.id }).catch(() => {});
+      return { id: input.id };
+    }),
 });

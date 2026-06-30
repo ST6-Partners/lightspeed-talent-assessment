@@ -37,7 +37,6 @@ const JdInput = z.object({
   responsibilities: z.string().optional(),
   requiredQualifications: z.string().optional(),
   preferredQualifications: z.string().optional(),
-  ccatThreshold: z.number().int().min(0).max(50).default(30),
   eppValues: z.array(z.string()).default([]),
   workSampleInstructions: z.string().optional(),
 });
@@ -95,6 +94,21 @@ export const jobDescriptionsRouter = router({
       await auditChange(ctx.db, ctx.user.id, id, 'job_descriptions', 'update');
       trackActivity(ctx.db, ctx.user.id, 'update_job_description', 'job_descriptions', { jdId: id }).catch(() => {});
       return jd;
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.jobDescriptions.findFirst({
+        where: eq(jobDescriptions.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      await ctx.db.delete(jobDescriptions).where(eq(jobDescriptions.id, input.id));
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'job_descriptions', 'delete');
+      trackActivity(ctx.db, ctx.user.id, 'delete_job_description', 'job_descriptions', { jdId: input.id }).catch(() => {});
+      return { id: input.id };
     }),
 
   publish: protectedProcedure

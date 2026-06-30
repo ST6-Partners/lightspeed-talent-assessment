@@ -77,7 +77,6 @@ export const jobDescriptions = pgTable('job_descriptions', {
   responsibilities: text('responsibilities'),
   requiredQualifications: text('required_qualifications'),
   preferredQualifications: text('preferred_qualifications'),
-  ccatThreshold: integer('ccat_threshold').notNull().default(30),
   // Array of selected Lightspeed company value names for EPP matching
   eppValues: jsonb('epp_values').default([]),
   workSampleInstructions: text('work_sample_instructions'),

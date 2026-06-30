@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Pencil, Trash2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -23,33 +23,72 @@ const DEPARTMENTS = [
   'Finance', 'HR', 'Customer Success', 'Legal', 'Other',
 ];
 
+const EMPTY_FORM = {
+  department: '', hiringManager: '', numOpenings: 1,
+  employmentType: 'Full-Time', location: '', remote: false,
+  salaryMin: '', salaryMax: '', reason: '', priority: 'Medium',
+};
+
 export default function Requisitions() {
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    department: '', hiringManager: '', numOpenings: 1,
-    employmentType: 'Full-Time' as const, location: '', remote: false,
-    salaryMin: '', salaryMax: '', reason: '', priority: 'Medium' as const,
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<typeof EMPTY_FORM>({ ...EMPTY_FORM });
 
   const { data: requisitions, refetch } = trpc.requisitions.list.useQuery();
+
+  const closeForm = () => { setShowForm(false); setEditingId(null); resetForm(); };
+
   const createMutation = trpc.requisitions.create.useMutation({
-    onSuccess: () => { refetch(); setShowForm(false); resetForm(); },
+    onSuccess: () => { refetch(); closeForm(); },
+  });
+  const updateMutation = trpc.requisitions.update.useMutation({
+    onSuccess: () => { refetch(); closeForm(); },
+  });
+  const deleteMutation = trpc.requisitions.delete.useMutation({
+    onSuccess: () => refetch(),
   });
 
-  const resetForm = () => setForm({
-    department: '', hiringManager: '', numOpenings: 1,
-    employmentType: 'Full-Time', location: '', remote: false,
-    salaryMin: '', salaryMax: '', reason: '', priority: 'Medium',
-  });
+  const resetForm = () => setForm({ ...EMPTY_FORM });
+
+  const startCreate = () => { setEditingId(null); resetForm(); setShowForm(true); };
+
+  const startEdit = (r: any) => {
+    setEditingId(r.id);
+    setForm({
+      department: r.department ?? '',
+      hiringManager: r.hiringManager ?? '',
+      numOpenings: r.numOpenings ?? 1,
+      employmentType: r.employmentType ?? 'Full-Time',
+      location: r.location ?? '',
+      remote: !!r.remote,
+      salaryMin: r.salaryMin != null ? String(r.salaryMin) : '',
+      salaryMax: r.salaryMax != null ? String(r.salaryMax) : '',
+      reason: r.reason ?? '',
+      priority: r.priority ?? 'Medium',
+    });
+    setShowForm(true);
+  };
 
   const handleSubmit = () => {
     if (!form.department || !form.hiringManager) return;
-    createMutation.mutate({
+    const payload = {
       ...form,
+      employmentType: form.employmentType as any,
+      priority: form.priority as any,
       salaryMin: form.salaryMin ? parseInt(form.salaryMin) : undefined,
       salaryMax: form.salaryMax ? parseInt(form.salaryMax) : undefined,
-    });
+    };
+    if (editingId) updateMutation.mutate({ id: editingId, ...payload });
+    else createMutation.mutate(payload);
   };
+
+  const handleDelete = (r: any) => {
+    if (window.confirm(`Delete the ${r.department} requisition (${r.hiringManager})? This also removes its job description and cannot be undone.`)) {
+      deleteMutation.mutate({ id: r.id });
+    }
+  };
+
+  const saving = createMutation.isLoading || updateMutation.isLoading;
 
   return (
     <div>
@@ -59,7 +98,7 @@ export default function Requisitions() {
           <p className="text-gray-500 text-sm mt-1">Create and track open headcount requests</p>
         </div>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => (showForm ? closeForm() : startCreate())}
           className="inline-flex items-center gap-2 px-4 py-2 bg-ls-primary text-white rounded-lg text-sm font-medium hover:bg-ls-primary-600"
         >
           <Plus size={16} />
@@ -70,8 +109,10 @@ export default function Requisitions() {
       {showForm && (
         <div className="bg-white rounded-lg border border-gray-200 p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-semibold text-gray-700">New Job Requisition</span>
-            <button onClick={() => { setShowForm(false); resetForm(); }} className="text-gray-400 hover:text-gray-600">
+            <span className="text-sm font-semibold text-gray-700">
+              {editingId ? 'Edit Job Requisition' : 'New Job Requisition'}
+            </span>
+            <button onClick={closeForm} className="text-gray-400 hover:text-gray-600">
               <X size={18} />
             </button>
           </div>
@@ -110,7 +151,7 @@ export default function Requisitions() {
               <label className="block text-xs font-medium text-gray-600 mb-1">Employment Type</label>
               <select
                 value={form.employmentType}
-                onChange={(e) => setForm({ ...form, employmentType: e.target.value as any })}
+                onChange={(e) => setForm({ ...form, employmentType: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               >
                 {['Full-Time', 'Part-Time', 'Contract', 'Internship'].map((t) => (
@@ -132,7 +173,7 @@ export default function Requisitions() {
               <label className="block text-xs font-medium text-gray-600 mb-1">Priority</label>
               <select
                 value={form.priority}
-                onChange={(e) => setForm({ ...form, priority: e.target.value as any })}
+                onChange={(e) => setForm({ ...form, priority: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               >
                 {['Low', 'Medium', 'High', 'Critical'].map((p) => (
@@ -184,12 +225,12 @@ export default function Requisitions() {
           <div className="flex gap-2 mt-4">
             <button
               onClick={handleSubmit}
-              disabled={!form.department || !form.hiringManager || createMutation.isLoading}
+              disabled={!form.department || !form.hiringManager || saving}
               className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50"
             >
-              {createMutation.isLoading ? 'Creating...' : 'Create Requisition'}
+              {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Requisition'}
             </button>
-            <button onClick={() => { setShowForm(false); resetForm(); }} className="px-4 py-2 text-gray-600 text-sm">
+            <button onClick={closeForm} className="px-4 py-2 text-gray-600 text-sm">
               Cancel
             </button>
           </div>
@@ -210,6 +251,7 @@ export default function Requisitions() {
                 <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Created</th>
+                <th className="px-4 py-3 w-20"></th>
               </tr>
             </thead>
             <tbody>
@@ -226,6 +268,25 @@ export default function Requisitions() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-400">{new Date(r.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => startEdit(r)}
+                        className="p-1 text-gray-400 hover:text-ls-primary transition-colors"
+                        title="Edit"
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(r)}
+                        disabled={deleteMutation.isLoading}
+                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

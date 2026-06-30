@@ -21,7 +21,8 @@
     "db:seed:values": "tsx server/src/seedValues.ts",
     "db:seed:epp": "tsx server/src/seedEpp.ts",
     "db:seed:employees": "tsx server/src/seedEmployees.ts",
-    "db:seed:reviews": "tsx server/src/seedReviews.ts"
+    "db:seed:reviews": "tsx server/src/seedReviews.ts",
+    "db:seed:realjobs": "tsx server/src/seedRealJobs.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.64",

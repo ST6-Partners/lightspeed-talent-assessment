@@ -173,7 +173,7 @@ export async function seedHiring() {
     const [jd] = await db.insert(jobDescriptions).values({
       reqId: req.id, jobTitle: r.title, summary: r.summary,
       responsibilities: r.responsibilities, requiredQualifications: r.required,
-      preferredQualifications: r.preferred, ccatThreshold: 30, eppValues: r.values,
+      preferredQualifications: r.preferred, eppValues: r.values,
       workSampleInstructions: r.workSample, status: 'Published',
       publishedAt: daysAgo(rint(55, 70)),
       createdAt: daysAgo(rint(60, 75)), updatedAt: daysAgo(rint(1, 30)),

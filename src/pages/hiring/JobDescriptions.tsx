@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, Send } from 'lucide-react';
+import { Plus, X, Send, Pencil, Trash2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const LIGHTSPEED_VALUES = [
@@ -15,34 +15,74 @@ const STATUS_COLORS: Record<string, string> = {
   Closed: 'bg-red-100 text-red-700',
 };
 
+const EMPTY_FORM = {
+  reqId: '',
+  jobTitle: '',
+  summary: '',
+  responsibilities: '',
+  requiredQualifications: '',
+  preferredQualifications: '',
+  eppValues: [] as string[],
+  workSampleInstructions: '',
+};
+
 export default function JobDescriptions() {
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    reqId: '',
-    jobTitle: '',
-    summary: '',
-    responsibilities: '',
-    requiredQualifications: '',
-    preferredQualifications: '',
-    ccatThreshold: 30,
-    eppValues: [] as string[],
-    workSampleInstructions: '',
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ ...EMPTY_FORM });
 
   const { data: requisitions } = trpc.requisitions.list.useQuery();
   const { data: jobDescriptions, refetch } = trpc.jobDescriptions.list.useQuery();
+
+  const closeForm = () => { setShowForm(false); setEditingId(null); resetForm(); };
+
   const createMutation = trpc.jobDescriptions.create.useMutation({
-    onSuccess: () => { refetch(); setShowForm(false); resetForm(); },
+    onSuccess: () => { refetch(); closeForm(); },
+  });
+  const updateMutation = trpc.jobDescriptions.update.useMutation({
+    onSuccess: () => { refetch(); closeForm(); },
   });
   const publishMutation = trpc.jobDescriptions.publish.useMutation({
     onSuccess: () => refetch(),
   });
-
-  const resetForm = () => setForm({
-    reqId: '', jobTitle: '', summary: '', responsibilities: '',
-    requiredQualifications: '', preferredQualifications: '',
-    ccatThreshold: 30, eppValues: [], workSampleInstructions: '',
+  const deleteMutation = trpc.jobDescriptions.delete.useMutation({
+    onSuccess: () => refetch(),
   });
+
+  const resetForm = () => setForm({ ...EMPTY_FORM, eppValues: [] });
+
+  const startCreate = () => {
+    setEditingId(null);
+    resetForm();
+    setShowForm(true);
+  };
+
+  const startEdit = (jd: any) => {
+    setEditingId(jd.id);
+    setForm({
+      reqId: jd.reqId ?? '',
+      jobTitle: jd.jobTitle ?? '',
+      summary: jd.summary ?? '',
+      responsibilities: jd.responsibilities ?? '',
+      requiredQualifications: jd.requiredQualifications ?? '',
+      preferredQualifications: jd.preferredQualifications ?? '',
+      eppValues: Array.isArray(jd.eppValues) ? (jd.eppValues as string[]) : [],
+      workSampleInstructions: jd.workSampleInstructions ?? '',
+    });
+    setShowForm(true);
+  };
+
+  const handleSave = () => {
+    if (!form.reqId || !form.jobTitle) return;
+    if (editingId) updateMutation.mutate({ id: editingId, ...form });
+    else createMutation.mutate(form);
+  };
+
+  const handleDelete = (jd: any) => {
+    if (window.confirm(`Delete the job description "${jd.jobTitle}"? This cannot be undone.`)) {
+      deleteMutation.mutate({ id: jd.id });
+    }
+  };
 
   const toggleValue = (v: string) => {
     setForm((f) => ({
@@ -58,15 +98,17 @@ export default function JobDescriptions() {
     return r ? `${r.department} · ${r.hiringManager}` : reqId;
   };
 
+  const saving = createMutation.isLoading || updateMutation.isLoading;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Job Descriptions</h1>
-          <p className="text-gray-500 text-sm mt-1">Define roles, CCAT thresholds, and EPP value targets</p>
+          <p className="text-gray-500 text-sm mt-1">Define roles and EPP value targets</p>
         </div>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => (showForm ? closeForm() : startCreate())}
           className="inline-flex items-center gap-2 px-4 py-2 bg-ls-primary text-white rounded-lg text-sm font-medium hover:bg-ls-primary-600"
         >
           <Plus size={16} />
@@ -77,8 +119,10 @@ export default function JobDescriptions() {
       {showForm && (
         <div className="bg-white rounded-lg border border-gray-200 p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-semibold text-gray-700">New Job Description</span>
-            <button onClick={() => { setShowForm(false); resetForm(); }} className="text-gray-400 hover:text-gray-600">
+            <span className="text-sm font-semibold text-gray-700">
+              {editingId ? 'Edit Job Description' : 'New Job Description'}
+            </span>
+            <button onClick={closeForm} className="text-gray-400 hover:text-gray-600">
               <X size={18} />
             </button>
           </div>
@@ -144,18 +188,7 @@ export default function JobDescriptions() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                CCAT Threshold <span className="text-gray-400 font-normal">(pass score, default 30)</span>
-              </label>
-              <input
-                type="number" min={0} max={50}
-                value={form.ccatThreshold}
-                onChange={(e) => setForm({ ...form, ccatThreshold: parseInt(e.target.value) || 30 })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
-              />
-            </div>
-            <div>
+            <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-1">Work Sample Instructions</label>
               <textarea
                 value={form.workSampleInstructions}
@@ -189,13 +222,13 @@ export default function JobDescriptions() {
           </div>
           <div className="flex gap-2 mt-4">
             <button
-              onClick={() => createMutation.mutate(form)}
-              disabled={!form.reqId || !form.jobTitle || createMutation.isLoading}
+              onClick={handleSave}
+              disabled={!form.reqId || !form.jobTitle || saving}
               className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50"
             >
-              {createMutation.isLoading ? 'Creating...' : 'Save as Draft'}
+              {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Save as Draft'}
             </button>
-            <button onClick={() => { setShowForm(false); resetForm(); }} className="px-4 py-2 text-gray-600 text-sm">
+            <button onClick={closeForm} className="px-4 py-2 text-gray-600 text-sm">
               Cancel
             </button>
           </div>
@@ -211,11 +244,10 @@ export default function JobDescriptions() {
               <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
                 <th className="px-4 py-3">Job Title</th>
                 <th className="px-4 py-3">Requisition</th>
-                <th className="px-4 py-3">CCAT Threshold</th>
                 <th className="px-4 py-3">EPP Values</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Published</th>
-                <th className="px-4 py-3 w-16"></th>
+                <th className="px-4 py-3 w-28"></th>
               </tr>
             </thead>
             <tbody>
@@ -223,7 +255,6 @@ export default function JobDescriptions() {
                 <tr key={jd.id} className="border-b border-gray-50 hover:bg-gray-50 text-sm">
                   <td className="px-4 py-3 font-medium text-gray-900">{jd.jobTitle}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{getReqLabel(jd.reqId)}</td>
-                  <td className="px-4 py-3 text-gray-600">{jd.ccatThreshold}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">
                     {Array.isArray(jd.eppValues) && (jd.eppValues as string[]).length > 0
                       ? (jd.eppValues as string[]).slice(0, 3).join(', ') + ((jd.eppValues as string[]).length > 3 ? ` +${(jd.eppValues as string[]).length - 3}` : '')
@@ -238,16 +269,33 @@ export default function JobDescriptions() {
                     {jd.publishedAt ? new Date(jd.publishedAt).toLocaleDateString() : '—'}
                   </td>
                   <td className="px-4 py-3">
-                    {jd.status === 'Draft' && (
+                    <div className="flex items-center gap-1">
+                      {jd.status === 'Draft' && (
+                        <button
+                          onClick={() => publishMutation.mutate({ id: jd.id })}
+                          disabled={publishMutation.isLoading}
+                          className="p-1 text-gray-400 hover:text-green-600 transition-colors"
+                          title="Publish"
+                        >
+                          <Send size={15} />
+                        </button>
+                      )}
                       <button
-                        onClick={() => publishMutation.mutate({ id: jd.id })}
-                        disabled={publishMutation.isLoading}
-                        className="p-1 text-gray-400 hover:text-green-600 transition-colors"
-                        title="Publish"
+                        onClick={() => startEdit(jd)}
+                        className="p-1 text-gray-400 hover:text-ls-primary transition-colors"
+                        title="Edit"
                       >
-                        <Send size={15} />
+                        <Pencil size={15} />
                       </button>
-                    )}
+                      <button
+                        onClick={() => handleDelete(jd)}
+                        disabled={deleteMutation.isLoading}
+                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
