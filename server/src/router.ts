@@ -25,6 +25,7 @@ import { requisitionsRouter } from './routers/requisitions.js';
 import { jobDescriptionsRouter } from './routers/jobDescriptions.js';
 import { candidatesRouter } from './routers/candidates.js';
 import { insightsRouter } from './routers/insights.js';
+import { workSampleRouter } from './routers/workSample.js';
 import { valuesRouter } from './routers/values.js';
 
 export const appRouter = router({
@@ -50,6 +51,7 @@ export const appRouter = router({
   jobDescriptions: jobDescriptionsRouter,
   candidates: candidatesRouter,
   insights: insightsRouter,
+  workSample: workSampleRouter,
   values: valuesRouter,
 });
 

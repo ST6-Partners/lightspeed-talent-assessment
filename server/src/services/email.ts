@@ -129,6 +129,7 @@ interface CandidateEmailData {
   rejectionReason?: string;
   assessmentLink?: string;
   workSampleInstructions?: string;
+  workSampleUrl?: string;
   interviewDate?: string;
   interviewerName?: string;
   offerDetails?: string;
@@ -187,6 +188,7 @@ export async function emailInvitedToWorkSample(data: CandidateEmailData) {
       <div style="background: #f5f5f5; border-radius: 8px; padding: 16px 20px; margin: 0 0 20px; font-size: 14px; line-height: 1.6;">
         ${data.workSampleInstructions ?? 'Instructions will be provided by the hiring team.'}
       </div>
+      ${data.workSampleUrl ? `<div style="margin: 0 0 20px;"><a href="${data.workSampleUrl}" style="display:inline-block;background:#4FA9D6;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;font-size:14px;">Start your work sample &rarr;</a></div>` : ''}
       ${p('Please submit your work sample within <strong>5 business days</strong>.')}
     `),
   });

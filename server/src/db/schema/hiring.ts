@@ -107,6 +107,12 @@ export const candidates = pgTable('candidates', {
   eppValuesMatchScore: integer('epp_values_match_score'),
   // Automated scoring fields
   workSampleScore: integer('work_sample_score'),
+  // Work-sample submission (candidate self-submits via emailed link)
+  workSampleToken: varchar('work_sample_token', { length: 64 }),
+  workSampleSubmission: text('work_sample_submission'),
+  workSampleLink: text('work_sample_link'),
+  workSampleSubmittedAt: timestamp('work_sample_submitted_at', { withTimezone: true }),
+  workSampleNotes: text('work_sample_notes'),
   resumeReviewScore: integer('resume_review_score'),
   referenceCheckScore: integer('reference_check_score'),
   // Work sample + resume + reference check notes

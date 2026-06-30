@@ -50,6 +50,12 @@ export default function Candidates() {
   const updateMutation = trpc.candidates.update.useMutation({
     onSuccess: () => refetch(),
   });
+  const sendWorkSampleMutation = trpc.workSample.send.useMutation({
+    onSuccess: () => refetch(),
+  });
+  const workSampleReviewMutation = trpc.workSample.setReview.useMutation({
+    onSuccess: () => refetch(),
+  });
 
   const resetForm = () => setForm({
     jdId: '', firstName: '', lastName: '', email: '',
@@ -326,6 +332,75 @@ export default function Candidates() {
               </div>
             ))}
           </div>
+
+          {/* Work Sample */}
+          <Section title="Work Sample">
+            {(selected as any).workSampleSubmittedAt ? (
+              <div className="space-y-2">
+                <div className="text-xs text-green-700">
+                  Submitted {new Date((selected as any).workSampleSubmittedAt).toLocaleString()}
+                </div>
+                <div className="bg-gray-50 rounded p-2 text-xs text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                  {(selected as any).workSampleSubmission || '(no written response)'}
+                </div>
+                {(selected as any).workSampleLink && (
+                  <a href={(selected as any).workSampleLink} target="_blank" rel="noreferrer"
+                     className="text-xs text-ls-primary underline break-all">
+                    {(selected as any).workSampleLink}
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-gray-400 italic">No submission yet.</div>
+            )}
+
+            <div className="pt-1">
+              <button
+                onClick={() => sendWorkSampleMutation.mutate({ id: selected.id })}
+                disabled={sendWorkSampleMutation.isLoading}
+                className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+              >
+                {sendWorkSampleMutation.isLoading
+                  ? 'Sending…'
+                  : (selected as any).workSampleToken ? 'Resend work-sample link' : 'Send work-sample link'}
+              </button>
+              {sendWorkSampleMutation.data?.url && (
+                <div className="mt-2">
+                  <div className="text-xs text-gray-500 mb-0.5">Link emailed — shareable URL:</div>
+                  <div className="flex gap-1">
+                    <input
+                      readOnly
+                      value={sendWorkSampleMutation.data.url}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50"
+                    />
+                    <button
+                      onClick={() => navigator.clipboard?.writeText(sendWorkSampleMutation.data!.url)}
+                      className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-1">
+              <EditableField
+                label="Work Sample Score (0–100)"
+                value={(selected as any).workSampleScore != null ? String((selected as any).workSampleScore) : ''}
+                onSave={(v) => workSampleReviewMutation.mutate({
+                  id: selected.id,
+                  score: v.trim() === '' ? null : Math.max(0, Math.min(100, parseInt(v) || 0)),
+                })}
+              />
+              <EditableTextarea
+                label="Work Sample Review Notes"
+                value={(selected as any).workSampleNotes ?? ''}
+                onSave={(v) => workSampleReviewMutation.mutate({ id: selected.id, notes: v })}
+              />
+            </div>
+          </Section>
 
           {/* Interviewer */}
           <Section title="Interviewer">
