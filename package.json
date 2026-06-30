@@ -19,7 +19,9 @@
     "typecheck": "tsc --noEmit",
     "db:seed:hiring": "tsx server/src/seedHiring.ts",
     "db:seed:values": "tsx server/src/seedValues.ts",
-    "db:seed:epp": "tsx server/src/seedEpp.ts"
+    "db:seed:epp": "tsx server/src/seedEpp.ts",
+    "db:seed:employees": "tsx server/src/seedEmployees.ts",
+    "db:seed:reviews": "tsx server/src/seedReviews.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.64",

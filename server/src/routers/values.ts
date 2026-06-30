@@ -1,13 +1,14 @@
 // ============================================================
-// VALUES ROUTER — CRUD for company_values + candidate scoring
+// VALUES ROUTER — values CRUD + EPP + multi-reviewer scoring
 // ============================================================
 
 import { z } from 'zod';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, desc, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
-import { companyValues, candidateValueScores } from '../db/schema/values.js';
+import { companyValues, candidateValueScores, valueReviews } from '../db/schema/values.js';
 import { candidateEppScores } from '../db/schema/epp.js';
+import { employees } from '../db/schema/employees.js';
 import { auditChange } from '../services/audit.js';
 
 const PILLARS = ['Mission-Driven', 'Customer-Obsessed', 'Results-Focused'] as const;
@@ -23,19 +24,15 @@ const ValueInput = z.object({
 });
 
 export const valuesRouter = router({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.companyValues.findMany({
-      orderBy: [asc(companyValues.sortOrder)],
-    });
-  }),
+  // ── Values CRUD ──
+  list: protectedProcedure.query(async ({ ctx }) =>
+    ctx.db.query.companyValues.findMany({ orderBy: [asc(companyValues.sortOrder)] })),
 
-  create: protectedProcedure
-    .input(ValueInput)
-    .mutation(async ({ ctx, input }) => {
-      const [v] = await ctx.db.insert(companyValues).values({ ...input }).returning();
-      await auditChange(ctx.db, ctx.user.id, v.id, 'company_values', 'create');
-      return v;
-    }),
+  create: protectedProcedure.input(ValueInput).mutation(async ({ ctx, input }) => {
+    const [v] = await ctx.db.insert(companyValues).values({ ...input }).returning();
+    await auditChange(ctx.db, ctx.user.id, v.id, 'company_values', 'create');
+    return v;
+  }),
 
   update: protectedProcedure
     .input(z.object({ id: z.string().uuid() }).merge(ValueInput.partial()))
@@ -44,42 +41,56 @@ export const valuesRouter = router({
       const existing = await ctx.db.query.companyValues.findFirst({ where: eq(companyValues.id, id) });
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
       const [v] = await ctx.db.update(companyValues)
-        .set({ ...updates, updatedAt: new Date() })
-        .where(eq(companyValues.id, id))
-        .returning();
+        .set({ ...updates, updatedAt: new Date() }).where(eq(companyValues.id, id)).returning();
       await auditChange(ctx.db, ctx.user.id, id, 'company_values', 'update');
       return v;
     }),
 
-  delete: protectedProcedure
-    .input(z.object({ id: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      await ctx.db.delete(companyValues).where(eq(companyValues.id, input.id));
-      await auditChange(ctx.db, ctx.user.id, input.id, 'company_values', 'delete');
-      return { ok: true };
-    }),
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ ctx, input }) => {
+    await ctx.db.delete(companyValues).where(eq(companyValues.id, input.id));
+    await auditChange(ctx.db, ctx.user.id, input.id, 'company_values', 'delete');
+    return { ok: true };
+  }),
+
+  // ── Reviewers (employees) ──
+  listReviewers: protectedProcedure.query(async ({ ctx }) =>
+    ctx.db.query.employees.findMany({ orderBy: [asc(employees.name)] })),
 
   // ── EPP ──
   getCandidateEpp: protectedProcedure
     .input(z.object({ candidateId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      return ctx.db.query.candidateEppScores.findMany({
-        where: eq(candidateEppScores.candidateId, input.candidateId),
-      });
-    }),
+    .query(async ({ ctx, input }) =>
+      ctx.db.query.candidateEppScores.findMany({ where: eq(candidateEppScores.candidateId, input.candidateId) })),
 
-  // ── Candidate scoring ──
-  getCandidateScores: protectedProcedure
+  // ── Reviews (one candidate → many reviewer passes) ──
+  getCandidateReviews: protectedProcedure
     .input(z.object({ candidateId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      return ctx.db.query.candidateValueScores.findMany({
-        where: eq(candidateValueScores.candidateId, input.candidateId),
+      const reviews = await ctx.db.query.valueReviews.findMany({
+        where: eq(valueReviews.candidateId, input.candidateId),
+        orderBy: [desc(valueReviews.reviewedAt)],
       });
+      if (!reviews.length) return [];
+      const emps = await ctx.db.query.employees.findMany();
+      const empName: Record<string, string> = {};
+      emps.forEach((e: any) => { empName[e.id] = e.name; });
+      const scoreRows = await ctx.db.select().from(candidateValueScores)
+        .where(inArray(candidateValueScores.reviewId, reviews.map((r: any) => r.id)));
+      return reviews.map((r: any) => ({
+        id: r.id,
+        reviewerId: r.reviewerId,
+        reviewerName: r.reviewerId ? (empName[r.reviewerId] ?? 'Unknown') : 'Unassigned',
+        reviewedAt: r.reviewedAt,
+        scores: scoreRows.filter((s: any) => s.reviewId === r.id).map((s: any) => ({ valueId: s.valueId, score: s.score, notes: s.notes })),
+      }));
     }),
 
-  saveCandidateScores: protectedProcedure
+  saveReview: protectedProcedure
     .input(z.object({
+      reviewId: z.string().uuid().optional(),
       candidateId: z.string().uuid(),
+      reviewerId: z.string().uuid().optional(),
+      reviewedAt: z.string().optional(),
       scores: z.array(z.object({
         valueId: z.string().uuid(),
         score: z.number().int().min(1).max(5),
@@ -87,19 +98,28 @@ export const valuesRouter = router({
       })),
     }))
     .mutation(async ({ ctx, input }) => {
-      for (const s of input.scores) {
-        await ctx.db.insert(candidateValueScores).values({
-          candidateId: input.candidateId,
-          valueId: s.valueId,
-          score: s.score,
-          notes: s.notes,
-          scoredBy: ctx.user.id,
-        }).onConflictDoUpdate({
-          target: [candidateValueScores.candidateId, candidateValueScores.valueId],
-          set: { score: s.score, notes: s.notes, scoredBy: ctx.user.id, updatedAt: new Date() },
-        });
-      }
-      await auditChange(ctx.db, ctx.user.id, input.candidateId, 'candidate_value_scores', 'update');
-      return { ok: true, count: input.scores.length };
+      const reviewedAt = input.reviewedAt ? new Date(input.reviewedAt) : new Date();
+      const reviewId = await ctx.db.transaction(async (tx) => {
+        let rid = input.reviewId;
+        if (rid) {
+          await tx.update(valueReviews)
+            .set({ reviewerId: input.reviewerId ?? null, reviewedAt, updatedAt: new Date() })
+            .where(eq(valueReviews.id, rid));
+          await tx.delete(candidateValueScores).where(eq(candidateValueScores.reviewId, rid));
+        } else {
+          const [r] = await tx.insert(valueReviews).values({
+            candidateId: input.candidateId, reviewerId: input.reviewerId ?? null, reviewedAt,
+          }).returning({ id: valueReviews.id });
+          rid = r.id;
+        }
+        if (input.scores.length) {
+          await tx.insert(candidateValueScores).values(
+            input.scores.map((s) => ({ reviewId: rid!, valueId: s.valueId, score: s.score, notes: s.notes })),
+          );
+        }
+        return rid!;
+      });
+      await auditChange(ctx.db, ctx.user.id, reviewId, 'value_reviews', input.reviewId ? 'update' : 'create');
+      return { ok: true, reviewId };
     }),
 });

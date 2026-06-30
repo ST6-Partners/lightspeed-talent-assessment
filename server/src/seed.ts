@@ -17,6 +17,8 @@ import { appSettings, screenInventory } from './db/schema/core.js';
 import { seedHiring } from './seedHiring.js';
 import { seedValues } from './seedValues.js';
 import { seedEpp } from './seedEpp.js';
+import { seedEmployees } from './seedEmployees.js';
+import { seedReviews } from './seedReviews.js';
 
 async function seed() {
   console.log('Seeding Template App database...');
@@ -62,6 +64,8 @@ async function seed() {
   await seedHiring();
   await seedValues();
   await seedEpp();
+  await seedEmployees();
+  await seedReviews();
 
   console.log('Seed complete.');
   process.exit(0);
