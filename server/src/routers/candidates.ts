@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { eq, desc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
+import { randomUUID } from 'node:crypto';
 import { router, protectedProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, emailLog } from '../db/schema/hiring.js';
 import { auditChange } from '../services/audit.js';
@@ -48,6 +49,14 @@ const CandidateInput = z.object({
 });
 
 // Helper: fetch job title for email context
+function appBaseUrl(): string {
+  const explicit = process.env.APP_BASE_URL;
+  if (explicit) return explicit.replace(/\/$/, '');
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (railway) return `https://${railway}`;
+  return '';
+}
+
 async function getJobTitle(db: any, jdId: string | null | undefined): Promise<string | undefined> {
   if (!jdId) return undefined;
   const jd = await db.query.jobDescriptions.findFirst({
@@ -181,12 +190,26 @@ export const candidatesRouter = router({
       const jd = existing.jdId
         ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, existing.jdId) })
         : null;
+      // Auto-generate + send the work-sample link the moment the candidate
+      // reaches the Work Sample stage (i.e. passed the assessment). No manual step.
+      let workSampleUrl: string | undefined;
+      if (input.toStage === 'Work Sample') {
+        const token = (existing as any).workSampleToken ?? randomUUID();
+        if (!(existing as any).workSampleToken) {
+          await ctx.db.update(candidates)
+            .set({ workSampleToken: token, updatedAt: new Date() })
+            .where(eq(candidates.id, input.id));
+        }
+        workSampleUrl = `${appBaseUrl()}/work-sample/${token}`;
+      }
+
       dispatchStageEmail(input.toStage, existing.currentStage, {
         firstName: existing.firstName,
         lastName: existing.lastName,
         email: existing.email,
         jobTitle,
         workSampleInstructions: jd?.workSampleInstructions ?? undefined,
+        workSampleUrl,
         interviewerName: (existing as any).interviewerName,
       }).catch(() => {});
 

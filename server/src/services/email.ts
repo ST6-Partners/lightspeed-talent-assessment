@@ -482,6 +482,7 @@ export async function dispatchStageEmail(
     email: string;
     jobTitle?: string;
     workSampleInstructions?: string;
+    workSampleUrl?: string;
     interviewerName?: string | null;
   }
 ): Promise<void> {
@@ -492,6 +493,7 @@ export async function dispatchStageEmail(
     jobTitle: candidate.jobTitle,
     fromStage: fromStage ?? undefined,
     workSampleInstructions: candidate.workSampleInstructions,
+    workSampleUrl: candidate.workSampleUrl,
     interviewerName: candidate.interviewerName ?? undefined,
   };
 
