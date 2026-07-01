@@ -42,6 +42,8 @@ export const insightsDiscoveryProfiles = pgTable('insights_discovery_profiles', 
   conscious: jsonb('conscious').$type<ColourEnergies | null>(),
   lessConscious: jsonb('less_conscious').$type<ColourEnergies | null>(),
 
+  // How this profile arrived: 'upload' (manual PDF) or 'insights-api' (auto-sync)
+  source: varchar('source', { length: 20 }).notNull().default('upload'),
   parseStatus: varchar('parse_status', { length: 20 }).notNull().default('ok'),
   parseError: text('parse_error'),
 

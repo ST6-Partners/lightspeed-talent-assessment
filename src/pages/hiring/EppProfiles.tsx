@@ -1,18 +1,65 @@
-import { useState, useMemo } from 'react';
-import { trpc } from '../../lib/trpc';
-import { EPP_TRAITS, bandLabel } from '../../lib/epp';
+// ============================================================
+// EPP PROFILES — Assessments > EPP subtab
+// Criteria Employee Personality Profile: 12 traits shown as
+// bipolar spectra (low descriptor ← → high descriptor) with a
+// percentile marker, matching the Criteria "Score Details" view.
+// ============================================================
 
-function barColor(p: number): string {
-  if (p >= 70) return 'bg-ls-thrive';
-  if (p >= 55) return 'bg-ls-cyan';
-  if (p >= 30) return 'bg-ls-watch';
-  return 'bg-ls-risk';
-}
-function textColor(p: number): string {
-  if (p >= 70) return 'text-ls-thrive';
-  if (p >= 55) return 'text-ls-primary';
-  if (p >= 30) return 'text-ls-watch';
-  return 'text-ls-risk';
+import { useState, useMemo } from 'react';
+import {
+  Target, Megaphone, Trophy, ClipboardCheck, Handshake, Users,
+  Crown, Flame, Lightbulb, Clock, ShieldCheck, Activity,
+} from 'lucide-react';
+import { trpc } from '../../lib/trpc';
+import { EPP_TRAITS } from '../../lib/epp';
+
+// Bipolar descriptors + icon per Criteria EPP trait (low ← → high).
+const TRAIT_META: Record<string, { icon: any; low: string; high: string }> = {
+  'Achievement':       { icon: Target,         low: 'Impulsive',                    high: 'Goal-Oriented' },
+  'Assertiveness':     { icon: Megaphone,      low: 'Deferential',                  high: 'Forceful, Dominant' },
+  'Competitiveness':   { icon: Trophy,         low: 'Relaxed',                      high: 'Competitive' },
+  'Conscientiousness': { icon: ClipboardCheck, low: 'Spontaneous, Laid-Back',       high: 'Dependable, Self-Disciplined' },
+  'Cooperativeness':   { icon: Handshake,      low: 'Aggressive, Independent',      high: 'Accommodating' },
+  'Extroversion':      { icon: Users,          low: 'Introverted, Low-Key',         high: 'Extroverted, Sociable' },
+  'Managerial':        { icon: Crown,          low: 'Follower',                     high: 'Leader' },
+  'Motivation':        { icon: Flame,          low: 'Mellow',                       high: 'Committed, Driven' },
+  'Openness':          { icon: Lightbulb,      low: 'Conventional, Traditional',    high: 'Experimental, Creative' },
+  'Patience':          { icon: Clock,          low: 'Impatient',                    high: 'Patient' },
+  'Self-Confidence':   { icon: ShieldCheck,    low: 'Timid, Lacks Self-Assurance',  high: 'Self-Confident' },
+  'Stress Tolerance':  { icon: Activity,       low: 'Excitable',                    high: 'Calm, Even-Tempered' },
+};
+
+const MARKER = '#1f3a5f'; // Criteria navy
+
+function SpectrumRow({ trait, percentile }: { trait: string; percentile: number }) {
+  const meta = TRAIT_META[trait];
+  const Icon = meta?.icon ?? Target;
+  const p = Math.max(0, Math.min(100, Math.round(percentile)));
+  return (
+    <div className="flex items-center gap-4 py-3 border-b border-ls-line last:border-0">
+      <Icon size={20} className="text-ls-primary flex-none" aria-hidden />
+      <div className="w-36 flex-none text-sm font-semibold text-ls-ink">{trait}</div>
+      <div className="w-28 flex-none text-right text-[11px] leading-tight text-ls-ink-3">{meta?.low}</div>
+
+      <div className="flex-1 relative h-7">
+        {/* ruler track */}
+        <div className="absolute top-1/2 -translate-y-1/2 w-full h-2 rounded bg-ls-bg-2 flex overflow-hidden">
+          {Array.from({ length: 10 }).map((_, i) => (
+            <div key={i} className="flex-1 border-r border-white/70 last:border-0" />
+          ))}
+        </div>
+        {/* percentile marker */}
+        <div
+          className="absolute top-1/2 flex items-center justify-center rounded-full text-white text-[11px] font-semibold shadow"
+          style={{ left: `${p}%`, transform: 'translate(-50%, -50%)', width: 28, height: 28, backgroundColor: MARKER }}
+        >
+          {p}
+        </div>
+      </div>
+
+      <div className="w-28 flex-none text-[11px] leading-tight text-ls-ink-3">{meta?.high}</div>
+    </div>
+  );
 }
 
 export default function EppProfiles() {
@@ -29,7 +76,7 @@ export default function EppProfiles() {
   const hasData = (eppQuery.data ?? []).length > 0;
 
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-4xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-ls-ink">EPP Profiles</h1>
         <p className="text-ls-ink-3 text-sm mt-1">Criteria Employee Personality Profile — 12 traits, percentile vs. global norm</p>
@@ -59,24 +106,16 @@ export default function EppProfiles() {
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5">
-          <div className="space-y-3">
+          <div className="text-sm font-semibold text-ls-ink mb-2">Score Details</div>
+          <div>
             {EPP_TRAITS.map((trait) => {
               const p = byTrait[trait];
               if (typeof p !== 'number') return null;
-              return (
-                <div key={trait} className="flex items-center gap-3">
-                  <div className="w-40 flex-none text-sm text-ls-ink">{trait}</div>
-                  <div className="flex-1 h-2.5 rounded-full bg-ls-bg-2 overflow-hidden">
-                    <div className={`h-full rounded-full ${barColor(p)}`} style={{ width: `${p}%` }} />
-                  </div>
-                  <div className="w-12 flex-none text-right text-sm font-semibold text-ls-ink">{p}</div>
-                  <div className={`w-24 flex-none text-right text-xs font-medium ${textColor(p)}`}>{bandLabel(p)}</div>
-                </div>
-              );
+              return <SpectrumRow key={trait} trait={trait} percentile={p} />;
             })}
           </div>
           <p className="text-[11px] text-ls-ink-3 mt-4 pt-3 border-t border-ls-line">
-            Percentile rankings vs. Criteria's global norm group. Bands: 85+ exceptional · 70–84 strong · 55–69 solid · 30–54 developing · &lt;30 weak.
+            Percentile (0–100) vs. Criteria's global norm group. The marker sits toward the descriptor the candidate leans to.
           </p>
         </div>
       )}

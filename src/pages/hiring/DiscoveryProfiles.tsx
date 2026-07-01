@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useState, useRef } from 'react';
-import { UploadCloud, FileText, Trash2, AlertTriangle } from 'lucide-react';
+import { UploadCloud, FileText, Trash2, AlertTriangle, RefreshCw, Cloud } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const ENERGY = [
@@ -81,6 +81,11 @@ function ProfileDetail({ profileId }: { profileId: string }) {
         </div>
       </div>
 
+      {p.source === 'insights-api' ? (
+        <div className="bg-white rounded-xl border border-ls-line shadow-sm p-4 flex items-center gap-2 text-sm text-ls-ink-3">
+          <Cloud size={16} /> Synced automatically from the Insights API — no PDF report attached.
+        </div>
+      ) : (
       <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-semibold text-ls-ink">Full report</span>
@@ -90,6 +95,7 @@ function ProfileDetail({ profileId }: { profileId: string }) {
           <iframe src={`/api/insights-pdf/${p.id}`} title="Insights Discovery PDF" className="w-full h-[600px]" />
         </object>
       </div>
+      )}
     </div>
   );
 }
@@ -109,6 +115,11 @@ export default function DiscoveryProfiles() {
   );
   const deleteMut = trpc.discoveryProfiles.delete.useMutation({
     onSuccess: () => { profilesQuery.refetch(); setSelectedId(null); },
+  });
+  const { data: cfg } = trpc.discoveryProfiles.insightsConfigured.useQuery();
+  const syncMut = trpc.discoveryProfiles.syncFromInsights.useMutation({
+    onSuccess: (row: any) => { setError(null); profilesQuery.refetch(); if (row?.id) setSelectedId(row.id); },
+    onError: (e: any) => setError(e.message),
   });
 
   async function handleUpload(file: File) {
@@ -172,14 +183,27 @@ export default function DiscoveryProfiles() {
               </div>
               <input ref={fileRef} type="file" accept="application/pdf" className="hidden"
                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }} />
-              <button
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
-                className="flex items-center gap-2 bg-ls-primary text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-ls-primary-600"
-              >
-                <UploadCloud size={16} />
-                {uploading ? 'Uploading & reading…' : 'Upload PDF'}
-              </button>
+              <div className="flex items-center gap-2">
+                {cfg?.configured && (
+                  <button
+                    onClick={() => syncMut.mutate({ candidateId })}
+                    disabled={syncMut.isPending}
+                    className="flex items-center gap-2 border border-ls-primary text-ls-primary text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-ls-primary-50"
+                    title="Pull this candidate's profile from the Insights API by email"
+                  >
+                    <RefreshCw size={16} className={syncMut.isPending ? 'animate-spin' : ''} />
+                    {syncMut.isPending ? 'Syncing…' : 'Sync from Insights'}
+                  </button>
+                )}
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  className="flex items-center gap-2 bg-ls-primary text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50 hover:bg-ls-primary-600"
+                >
+                  <UploadCloud size={16} />
+                  {uploading ? 'Uploading & reading…' : 'Upload PDF'}
+                </button>
+              </div>
             </div>
             {error && <div className="text-xs text-ls-risk mt-2">{error}</div>}
           </div>
