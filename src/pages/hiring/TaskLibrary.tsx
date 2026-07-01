@@ -189,7 +189,7 @@ export default function TaskLibrary() {
             <thead>
               <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
                 <th className="px-4 py-3">Task</th>
-                <th className="px-4 py-3">Scope</th>
+                <th className="px-4 py-3">Department</th>
                 <th className="px-4 py-3">Time</th>
                 <th className="px-4 py-3">Difficulty</th>
                 <th className="px-4 py-3">Status</th>
