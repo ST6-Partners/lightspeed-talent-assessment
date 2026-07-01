@@ -1,0 +1,65 @@
+-- Replace placeholder sample employees with the real Lightspeed Systems roster.
+-- Idempotent: safe to run on every boot.
+
+DELETE FROM employees WHERE email LIKE '%@lightspeed.example.com';
+
+INSERT INTO employees (name, email)
+SELECT v.name, v.email FROM (VALUES
+    ('Wes Lawrence', 'wlawrence@lightspeedsystems.com'),
+    ('Heather James', 'hjames@lightspeedsystems.com'),
+    ('Morgan Canales', 'mcanales@lightspeedsystems.com'),
+    ('Amy Bennett', 'abennett@lightspeedsystems.com'),
+    ('Kathy Williamson', 'kwilliamson@lightspeedsystems.com'),
+    ('Patrick Chapa', 'patrick@lightspeedsystems.com'),
+    ('Jonathan Adkins', 'jadkins@lightspeedsystems.com'),
+    ('Nicole Tribo', 'ntribo@lightspeedsystems.com'),
+    ('Alex Hesse', 'ahesse@lightspeedsystems.com'),
+    ('Ryan Passanisi', 'rpassanisi@lightspeedsystems.com'),
+    ('Mike Durando', 'mdurando@lightspeedsystems.com'),
+    ('Michael Boggess', 'michael@lightspeedsystems.com'),
+    ('John Genter', 'john@lightspeedsystems.com'),
+    ('Juliana Morris', 'jmorris@lightspeedsystems.com'),
+    ('Frank Romero', 'fromero@lightspeedsystems.com'),
+    ('Wing Mar', 'wing@lightspeedsystems.com'),
+    ('Tu Ngo', 'tngo@lightspeedsystems.com'),
+    ('Syed Gillani', 'sgillani@lightspeedsystems.com'),
+    ('Marie Wittry', 'mwittry@lightspeedsystems.com'),
+    ('Juan Rodriguez', 'jrodriguez@lightspeedsystems.com'),
+    ('Jiana Khazma', 'jkhazma@lightspeedsystems.com'),
+    ('Gregory Funk', 'gfunk@lightspeedsystems.com'),
+    ('Cameron Meyer', 'cmeyer@lightspeedsystems.com'),
+    ('Abraham Ybarra', 'aybarra@lightspeedsystems.com'),
+    ('Dante Munoz', 'dmunoz@lightspeedsystems.com'),
+    ('Scott Dunham', 'sdunham@lightspeedsystems.com'),
+    ('Ryan Bond', 'ryan@lightspeedsystems.com'),
+    ('Maddie Stewart', 'mstewart@lightspeedsystems.com'),
+    ('Kyle Olson', 'kolson@lightspeedsystems.com'),
+    ('James Laprocido', 'jlaprocido@lightspeedsystems.com'),
+    ('Jake Bowman', 'jbowman@lightspeedsystems.com'),
+    ('Adrienne Synos', 'asynos@lightspeedsystems.com'),
+    ('Kate McDermott', 'kmcdermott@lightspeedsystems.com'),
+    ('Daniel Dunn', 'ddunn@lightspeedsystems.com'),
+    ('Justin Woolverton', 'jwoolverton@lightspeedsystems.com'),
+    ('Chris Dunn', 'cdunn@lightspeedsystems.com'),
+    ('Brad White', 'brad@lightspeedsystems.com'),
+    ('Spencer Smith', 'ssmith@lightspeedsystems.com'),
+    ('Andrew Fowler', 'afowler@lightspeedsystems.com'),
+    ('Jake de la Garrigue', 'jdelagarrigue@lightspeedsystems.com'),
+    ('Brooke Brown', 'bbrown@lightspeedsystems.com'),
+    ('Becky Gould', 'bgould@lightspeedsystems.com'),
+    ('Vernie Ogden', 'vernie@lightspeedsystems.com'),
+    ('Sergio Villegas', 'svillegas@lightspeedsystems.com'),
+    ('Michelle McGovern', 'mmcgovern@lightspeedsystems.com'),
+    ('Sabrina Drouin', 'sdrouin@lightspeedsystems.com'),
+    ('Niki Greig', 'ngreig@lightspeedsystems.com'),
+    ('Megan Duhon', 'mduhon@lightspeedsystems.com'),
+    ('Lauren McNair', 'lmcnair@lightspeedsystems.com'),
+    ('Andrew Cribari', 'acribari@lightspeedsystems.com'),
+    ('Alexander Szabo', 'aszabo@lightspeedsystems.com'),
+    ('Jennifer Duer', 'jduer@lightspeedsystems.com'),
+    ('William Hellems-Moody', 'whellems-moody@lightspeedsystems.com'),
+    ('Brock Anderson', 'brocka@lightspeedsystems.com')
+  ) AS v(name, email)
+WHERE NOT EXISTS (
+    SELECT 1 FROM employees e WHERE e.email = v.email
+  );
