@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { candidates, jobDescriptions } from '../db/schema/hiring.js';
+import { resolveDeptWorkSample } from '../services/workSampleResolver.js';
 import { emailInvitedToWorkSample } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
@@ -40,10 +41,13 @@ export const workSampleRouter = router({
         ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
         : null;
 
+      const resolved = await resolveDeptWorkSample(ctx.db, candidate);
+
       return {
         firstName: candidate.firstName,
         jobTitle: jd?.jobTitle ?? null,
-        instructions: jd?.workSampleInstructions ?? null,
+        taskTitle: resolved?.title ?? null,
+        instructions: resolved?.instructions ?? jd?.workSampleInstructions ?? null,
         alreadySubmitted: !!candidate.workSampleSubmittedAt,
         submittedAt: candidate.workSampleSubmittedAt,
       };

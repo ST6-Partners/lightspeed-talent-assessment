@@ -78,6 +78,7 @@ export default function WorkSample() {
 
         <div className="mt-5 bg-gray-50 border border-gray-200 rounded-lg p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Instructions</div>
+          {data.taskTitle && <div className="text-sm font-semibold text-gray-900 mb-2">{data.taskTitle}</div>}
           <div className="text-sm text-gray-700 whitespace-pre-line">
             {data.instructions || 'Instructions will be provided by the hiring team.'}
           </div>

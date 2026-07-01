@@ -1,3 +1,4 @@
+import { resolveDeptWorkSample } from '../services/workSampleResolver.js';
 // ============================================================
 // CANDIDATES ROUTER — CRUD + stage management + email triggers
 // ============================================================
@@ -193,6 +194,7 @@ export const candidatesRouter = router({
       // Auto-generate + send the work-sample link the moment the candidate
       // reaches the Work Sample stage (i.e. passed the assessment). No manual step.
       let workSampleUrl: string | undefined;
+      let workSampleInstructions: string | undefined = jd?.workSampleInstructions ?? undefined;
       if (input.toStage === 'Work Sample') {
         const token = (existing as any).workSampleToken ?? randomUUID();
         if (!(existing as any).workSampleToken) {
@@ -201,6 +203,12 @@ export const candidatesRouter = router({
             .where(eq(candidates.id, input.id));
         }
         workSampleUrl = `${appBaseUrl()}/work-sample/${token}`;
+        // Pull the department's work sample from the Work Sample library.
+        const resolved = await resolveDeptWorkSample(ctx.db, existing);
+        if (resolved) {
+          workSampleInstructions =
+            `<strong>${resolved.title}</strong><br/><br/>` + resolved.instructions.replace(/\n/g, '<br/>');
+        }
       }
 
       dispatchStageEmail(input.toStage, existing.currentStage, {
@@ -208,7 +216,7 @@ export const candidatesRouter = router({
         lastName: existing.lastName,
         email: existing.email,
         jobTitle,
-        workSampleInstructions: jd?.workSampleInstructions ?? undefined,
+        workSampleInstructions,
         workSampleUrl,
         interviewerName: (existing as any).interviewerName,
       }).catch(() => {});
