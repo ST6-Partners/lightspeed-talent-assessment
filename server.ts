@@ -199,15 +199,13 @@ async function main() {
       if (!buffer || !buffer.length) return res.status(400).json({ error: 'Empty upload' });
 
       const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
-      const key = `insights/${Date.now()}-${safe}${safe.toLowerCase().endsWith('.pdf') ? '' : '.pdf'}`;
-      const stored = await uploadFile(key, buffer);
-      if (!stored.ok) return res.status(500).json({ error: stored.error });
-
       const parsed = await parseInsightsDiscoveryPdf(buffer);
 
+      // Store the PDF bytes in Postgres (no object storage on this host).
       const [row] = await db.insert(insightsDiscoveryProfiles).values({
         candidateId,
-        pdfKey: key,
+        pdfKey: null,
+        pdfData: buffer,
         pdfFilename: safe,
         typeNumber: parsed.typeNumber,
         typeName: parsed.typeName,
@@ -218,11 +216,31 @@ async function main() {
         parseStatus: parsed.status,
         parseError: parsed.error ?? null,
         uploadedBy: user.id,
-      }).returning();
+      }).returning({ id: insightsDiscoveryProfiles.id });
 
-      res.json({ success: true, profile: row, url: `/api/files/${key}` });
+      res.json({ success: true, profile: row, url: `/api/insights-pdf/${row.id}` });
     } catch (err: any) {
       console.error('Insights upload error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Serve an Insights Discovery PDF from Postgres ──────────
+  app.get('/api/insights-pdf/:id', async (req, res) => {
+    try {
+      const row = await db.query.insightsDiscoveryProfiles.findFirst({
+        where: eq(insightsDiscoveryProfiles.id, req.params.id),
+        columns: { pdfData: true, pdfFilename: true },
+      });
+      if (!row || !row.pdfData) return res.status(404).json({ error: 'PDF not found' });
+      const buf = row.pdfData as Buffer;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Length', buf.length);
+      res.setHeader('Content-Disposition', `inline; filename="${row.pdfFilename || 'insights.pdf'}"`);
+      res.setHeader('Cache-Control', 'private, max-age=86400');
+      res.send(buf);
+    } catch (err: any) {
+      console.error('Insights PDF serve error:', err);
       res.status(500).json({ error: err.message });
     }
   });

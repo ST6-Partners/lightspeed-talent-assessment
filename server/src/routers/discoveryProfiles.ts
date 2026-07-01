@@ -11,7 +11,6 @@ import { eq, desc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { insightsDiscoveryProfiles, candidates } from '../db/schema/index.js';
-import { deleteFile } from '../services/storage.js';
 import { auditChange } from '../services/audit.js';
 
 export const discoveryProfilesRouter = router({
@@ -22,6 +21,7 @@ export const discoveryProfilesRouter = router({
       return ctx.db.query.insightsDiscoveryProfiles.findMany({
         where: eq(insightsDiscoveryProfiles.candidateId, input.candidateId),
         orderBy: [desc(insightsDiscoveryProfiles.createdAt)],
+        columns: { pdfData: false },
       });
     }),
 
@@ -31,6 +31,7 @@ export const discoveryProfilesRouter = router({
     .query(async ({ ctx, input }) => {
       const row = await ctx.db.query.insightsDiscoveryProfiles.findFirst({
         where: eq(insightsDiscoveryProfiles.id, input.id),
+        columns: { pdfData: false },
       });
       if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Profile not found' });
       return row;
@@ -69,9 +70,6 @@ export const discoveryProfilesRouter = router({
         where: eq(insightsDiscoveryProfiles.id, input.id),
       });
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'Profile not found' });
-
-      // Best-effort object-storage cleanup; DB row removal is the source of truth.
-      if (existing.pdfKey) { try { await deleteFile(existing.pdfKey); } catch { /* ignore */ } }
 
       await ctx.db.delete(insightsDiscoveryProfiles).where(eq(insightsDiscoveryProfiles.id, input.id));
       await auditChange(ctx.db, ctx.user.id, input.id, 'insights_discovery_profile', 'delete').catch(() => {});

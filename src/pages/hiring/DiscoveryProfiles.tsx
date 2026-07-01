@@ -84,10 +84,10 @@ function ProfileDetail({ profileId }: { profileId: string }) {
       <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-semibold text-ls-ink">Full report</span>
-          <a href={`/api/files/${p.pdfKey}`} target="_blank" rel="noreferrer" className="text-xs text-ls-primary hover:underline">Open in new tab ↗</a>
+          <a href={`/api/insights-pdf/${p.id}`} target="_blank" rel="noreferrer" className="text-xs text-ls-primary hover:underline">Open in new tab ↗</a>
         </div>
-        <object data={`/api/files/${p.pdfKey}`} type="application/pdf" className="w-full h-[600px] rounded-lg border border-ls-line">
-          <iframe src={`/api/files/${p.pdfKey}`} title="Insights Discovery PDF" className="w-full h-[600px]" />
+        <object data={`/api/insights-pdf/${p.id}`} type="application/pdf" className="w-full h-[600px] rounded-lg border border-ls-line">
+          <iframe src={`/api/insights-pdf/${p.id}`} title="Insights Discovery PDF" className="w-full h-[600px]" />
         </object>
       </div>
     </div>
