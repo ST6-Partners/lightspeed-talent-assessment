@@ -53,3 +53,6 @@ export { assessmentTasks, taskDifficultyEnum, taskStatusEnum } from './assessmen
 
 // Assessment Packages (1 table) — General + functional task pairings (assignments)
 export { assessmentPackages } from './assessmentPackages.js';
+
+// Assessment Sessions (1 table) — scheduled, timed take-home deliveries
+export { assessmentSessions, sessionStatusEnum } from './assessmentSessions.js';

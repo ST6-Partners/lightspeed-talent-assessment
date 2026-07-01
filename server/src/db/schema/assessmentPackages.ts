@@ -24,6 +24,11 @@ export const assessmentPackages = pgTable('assessment_packages', {
   status: taskStatusEnum('status').notNull().default('Draft'),
   version: integer('version').notNull().default(1),
   active: boolean('active').notNull().default(true),
+  // Delivery settings: how the candidate receives/starts the assessment.
+  // 'scheduled' = unlocks at a set time; 'open' = start any time.
+  // windowMinutes = the timed window to complete once started.
+  deliveryMode: varchar('delivery_mode', { length: 20 }).notNull().default('scheduled'),
+  windowMinutes: integer('window_minutes').notNull().default(90),
   createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

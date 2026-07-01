@@ -20,6 +20,8 @@ const PackageInput = z.object({
   status: z.enum(STATUS).optional(),
   version: z.number().int().positive().optional(),
   active: z.boolean().optional(),
+  deliveryMode: z.enum(['scheduled', 'open']).optional(),
+  windowMinutes: z.number().int().positive().optional(),
 });
 
 export const assessmentPackagesRouter = router({

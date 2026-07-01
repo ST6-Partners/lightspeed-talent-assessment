@@ -27,6 +27,7 @@ import { valuesRouter } from './routers/values.js';
 import { departmentsRouter } from './routers/departments.js';
 import { assessmentTasksRouter } from './routers/assessmentTasks.js';
 import { assessmentPackagesRouter } from './routers/assessmentPackages.js';
+import { sessionsRouter } from './routers/sessions.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -53,6 +54,7 @@ export const appRouter = router({
   departments: departmentsRouter,
   tasks: assessmentTasksRouter,
   packages: assessmentPackagesRouter,
+  sessions: sessionsRouter,
 });
 
 export type AppRouter = typeof appRouter;

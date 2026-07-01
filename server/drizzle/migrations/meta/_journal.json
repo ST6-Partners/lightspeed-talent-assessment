@@ -57,6 +57,13 @@
       "when": 1800000300000,
       "tag": "0007_assessment_packages",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1800000400000,
+      "tag": "0008_assessment_delivery",
+      "breakpoints": true
     }
   ]
 }

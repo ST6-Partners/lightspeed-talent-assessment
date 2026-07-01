@@ -13,9 +13,11 @@ const STATUS_COLORS: Record<string, string> = {
 type Form = {
   name: string; departmentId: string; generalTaskId: string;
   functionalTaskId: string; status: typeof STATUSES[number]; version: string;
+  deliveryMode: 'scheduled' | 'open'; windowMinutes: string;
 };
 const EMPTY: Form = {
   name: '', departmentId: '', generalTaskId: '', functionalTaskId: '', status: 'Draft', version: '1',
+  deliveryMode: 'scheduled', windowMinutes: '90',
 };
 
 export default function Assignments() {
@@ -44,6 +46,8 @@ export default function Assignments() {
       name: p.name, departmentId: p.departmentId ?? '', generalTaskId: p.generalTaskId ?? '',
       functionalTaskId: p.functionalTaskId ?? '', status: p.status ?? 'Draft',
       version: p.version != null ? String(p.version) : '1',
+      deliveryMode: p.deliveryMode ?? 'scheduled',
+      windowMinutes: p.windowMinutes != null ? String(p.windowMinutes) : '90',
     });
     setShowForm(true);
   };
@@ -57,6 +61,8 @@ export default function Assignments() {
       functionalTaskId: form.functionalTaskId ? form.functionalTaskId : null,
       status: form.status,
       version: form.version ? parseInt(form.version) : undefined,
+      deliveryMode: form.deliveryMode,
+      windowMinutes: form.windowMinutes ? parseInt(form.windowMinutes) : 90,
     };
     if (editingId) updateMutation.mutate({ id: editingId, ...payload });
     else createMutation.mutate(payload);
@@ -128,6 +134,22 @@ export default function Assignments() {
                 <option value="">— select —</option>
                 {functionalTasks.map((t: any) => <option key={t.id} value={t.id}>{t.title}</option>)}
               </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Delivery mode</label>
+              <select value={form.deliveryMode}
+                onChange={(e) => setForm({ ...form, deliveryMode: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan">
+                <option value="scheduled">Scheduled</option>
+                <option value="open">Open</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Window (minutes)</label>
+              <input type="number" value={form.windowMinutes}
+                onChange={(e) => setForm({ ...form, windowMinutes: e.target.value })}
+                placeholder="90"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
             </div>
           </div>
           <div className="flex gap-2 mt-4">
