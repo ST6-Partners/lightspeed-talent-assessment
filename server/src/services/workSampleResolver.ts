@@ -25,7 +25,16 @@ export async function resolveDeptWorkSample(
   if (!candidate?.jdId) return null;
 
   const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) });
-  if (!jd?.reqId) return null;
+  if (!jd) return null;
+
+  // 1) Prefer the task explicitly associated with this job description.
+  if (jd.workSampleTaskId) {
+    const chosen = await db.query.assessmentTasks.findFirst({ where: eq(assessmentTasks.id, jd.workSampleTaskId) });
+    if (chosen) return compose(chosen);
+  }
+
+  // 2) Otherwise fall back to the department's Live library task.
+  if (!jd.reqId) return null;
 
   const req = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) });
   const deptName = req?.department?.trim();
@@ -44,6 +53,10 @@ export async function resolveDeptWorkSample(
   });
   if (!task) return null;
 
+  return compose(task);
+}
+
+function compose(task: any): ResolvedWorkSample {
   const brief = task.brief ?? '';
   const syw = task.showYourWorkInstructions ?? '';
   const instructions = syw ? `${brief}\n\n— Show your work —\n${syw}` : brief;

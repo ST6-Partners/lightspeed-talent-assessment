@@ -80,6 +80,8 @@ export const jobDescriptions = pgTable('job_descriptions', {
   // Array of selected Lightspeed company value names for EPP matching
   eppValues: jsonb('epp_values').default([]),
   workSampleInstructions: text('work_sample_instructions'),
+  // Which Work Sample library task this job uses (FK enforced in migration 0017)
+  workSampleTaskId: uuid('work_sample_task_id'),
   status: jdStatusEnum('status').notNull().default('Draft'),
   publishedAt: timestamp('published_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

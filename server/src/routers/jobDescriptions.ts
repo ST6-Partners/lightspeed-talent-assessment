@@ -39,6 +39,7 @@ const JdInput = z.object({
   preferredQualifications: z.string().optional(),
   eppValues: z.array(z.string()).default([]),
   workSampleInstructions: z.string().optional(),
+  workSampleTaskId: z.string().uuid().nullable().optional(),
 });
 
 export const jobDescriptionsRouter = router({

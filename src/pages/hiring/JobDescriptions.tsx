@@ -23,7 +23,7 @@ const EMPTY_FORM = {
   requiredQualifications: '',
   preferredQualifications: '',
   eppValues: [] as string[],
-  workSampleInstructions: '',
+  workSampleTaskId: '',
 };
 
 export default function JobDescriptions() {
@@ -33,6 +33,7 @@ export default function JobDescriptions() {
 
   const { data: requisitions } = trpc.requisitions.list.useQuery();
   const { data: jobDescriptions, refetch } = trpc.jobDescriptions.list.useQuery();
+  const { data: workSampleTasks } = trpc.tasks.list.useQuery();
 
   const closeForm = () => { setShowForm(false); setEditingId(null); resetForm(); };
 
@@ -67,16 +68,20 @@ export default function JobDescriptions() {
       requiredQualifications: jd.requiredQualifications ?? '',
       preferredQualifications: jd.preferredQualifications ?? '',
       eppValues: Array.isArray(jd.eppValues) ? (jd.eppValues as string[]) : [],
-      workSampleInstructions: jd.workSampleInstructions ?? '',
+      workSampleTaskId: jd.workSampleTaskId ?? '',
     });
     setShowForm(true);
   };
 
   const handleSave = () => {
     if (!form.reqId || !form.jobTitle) return;
-    if (editingId) updateMutation.mutate({ id: editingId, ...form });
-    else createMutation.mutate(form);
+    const payload = { ...form, workSampleTaskId: form.workSampleTaskId || null };
+    if (editingId) updateMutation.mutate({ id: editingId, ...payload });
+    else createMutation.mutate(payload);
   };
+
+  const taskLabel = (id: string | null | undefined) =>
+    id ? (workSampleTasks?.find((t: any) => t.id === id)?.title ?? 'Unknown task') : 'Not set';
 
   const handleDelete = (jd: any) => {
     if (window.confirm(`Delete the job description "${jd.jobTitle}"? This cannot be undone.`)) {
@@ -189,14 +194,18 @@ export default function JobDescriptions() {
               />
             </div>
             <div className="col-span-2">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Work Sample Instructions</label>
-              <textarea
-                value={form.workSampleInstructions}
-                onChange={(e) => setForm({ ...form, workSampleInstructions: e.target.value })}
-                rows={3}
-                placeholder="Instructions sent to candidates for the work sample..."
+              <label className="block text-xs font-medium text-gray-600 mb-1">Work Sample</label>
+              <select
+                value={form.workSampleTaskId}
+                onChange={(e) => setForm({ ...form, workSampleTaskId: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
-              />
+              >
+                <option value="">— none selected —</option>
+                {workSampleTasks?.map((t: any) => (
+                  <option key={t.id} value={t.id}>{t.title}{t.status !== 'Live' ? ` (${t.status})` : ''}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Which work sample this role uses. The instructions themselves live in the Work Sample tab.</p>
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-2">
@@ -253,7 +262,10 @@ export default function JobDescriptions() {
             <tbody>
               {jobDescriptions.map((jd) => (
                 <tr key={jd.id} className="border-b border-gray-50 hover:bg-gray-50 text-sm">
-                  <td className="px-4 py-3 font-medium text-gray-900">{jd.jobTitle}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    {jd.jobTitle}
+                    <div className="text-gray-400 text-xs font-normal mt-0.5">Work sample: {taskLabel(jd.workSampleTaskId)}</div>
+                  </td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{getReqLabel(jd.reqId)}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">
                     {Array.isArray(jd.eppValues) && (jd.eppValues as string[]).length > 0

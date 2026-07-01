@@ -120,6 +120,13 @@
       "when": 1800000605000,
       "tag": "0016_add_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1800000606000,
+      "tag": "0017_jd_work_sample_task",
+      "breakpoints": true
     }
   ]
 }
