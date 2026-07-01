@@ -8,6 +8,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
+import ChatDrawer from './ChatDrawer';
 import WhatsNew from './WhatsNew';
 import { trpc } from '../lib/trpc';
 
@@ -49,6 +50,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showChat, setShowChat] = useState(false);
 
   const { data: user, isLoading } = trpc.auth.me.useQuery();
   const timezoneMutation = trpc.auth.updateTimezone.useMutation();
@@ -145,9 +147,13 @@ export default function Layout() {
           <div className="flex items-center gap-2">
             <WhatsNew />
             <NotificationBell />
-            <Link to="/chat" title="AI Chat" className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors">
+            <button
+              onClick={() => setShowChat(true)}
+              title="AI Assistant"
+              className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors"
+            >
               <Bot className="w-5 h-5" />
-            </Link>
+            </button>
             <Link to="/admin/settings" title="Settings" className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors">
               <Settings className="w-5 h-5" />
             </Link>
@@ -174,6 +180,7 @@ export default function Layout() {
       </div>
 
       <FeedbackDrawer open={showFeedback} onClose={() => setShowFeedback(false)} />
+      <ChatDrawer open={showChat} onClose={() => setShowChat(false)} screenMode={crumb} />
     </div>
   );
 }
