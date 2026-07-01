@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Database, Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2, Award, ClipboardCheck, Search, Bell, Building2, Library, Layers, CalendarClock } from 'lucide-react';
+import { Home, Database, Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2, Award, ClipboardCheck, Search, Bell, Building2, Library, Layers, CalendarClock, Inbox } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
@@ -25,6 +25,7 @@ const hiringNavItems = [
   { path: '/hiring/tasks', label: 'Task Library', icon: Library },
   { path: '/hiring/assignments', label: 'Assignments', icon: Layers },
   { path: '/hiring/sessions', label: 'Sessions', icon: CalendarClock },
+  { path: '/hiring/responses', label: 'Responses', icon: Inbox },
   { path: '/hiring/jobs', label: 'Job Descriptions', icon: FileText },
   { path: '/hiring/candidates', label: 'Candidates', icon: Users },
   { path: '/hiring/values', label: 'Company Values', icon: Award },

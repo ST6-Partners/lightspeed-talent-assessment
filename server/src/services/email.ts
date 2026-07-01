@@ -425,6 +425,49 @@ export async function emailInterviewerQuestions(data: {
   });
 }
 
+// ── Timed work-sample assessment (link-based) ──────────────
+
+// Candidate invite: contains the private link to the timed session.
+export async function emailAssessmentInvite(data: {
+  to: string;
+  firstName?: string;
+  jobTitle?: string;
+  link: string;
+  scheduledStart?: Date | string | null;
+  windowMinutes?: number;
+}) {
+  const when = data.scheduledStart
+    ? `Your session is scheduled for <strong>${new Date(data.scheduledStart).toLocaleString()}</strong>. The assessment unlocks at that time.`
+    : `You can begin whenever you are ready.`;
+  await sendEmail({
+    to: data.to,
+    templateId: 'work_sample_invite_link',
+    subject: `Your work sample${data.jobTitle ? ' — ' + data.jobTitle : ''} — Lightspeed Systems`,
+    html: wrap(`
+      ${h1('Your work sample is ready')}
+      ${p(`Hi ${data.firstName ?? 'there'},`)}
+      ${p(`Thanks for your interest in ${data.jobTitle ? '<strong>' + data.jobTitle + '</strong>' : 'the role'} at Lightspeed Systems. The next step is a short, timed work sample.`)}
+      ${p(`You will have about <strong>${data.windowMinutes ?? 60} minutes</strong> once you begin, and you may use any AI tools. ${when}`)}
+      ${button('Open your assessment', data.link)}
+      ${p('If the button does not work, copy and paste this link into your browser:<br/>' + data.link)}
+    `),
+  });
+}
+
+// HR notify: a candidate submitted their timed work sample.
+export async function emailWorkSampleSubmittedLinkHR(data: { candidateEmail: string }) {
+  await sendEmail({
+    to: HR_EMAIL,
+    templateId: 'work_sample_submitted_link_hr',
+    subject: `Work sample submitted: ${data.candidateEmail}`,
+    html: wrap(`
+      ${h1('Work sample submitted')}
+      ${p(`<strong>${data.candidateEmail}</strong> has submitted their timed work sample.`)}
+      ${p('Open the hiring app (Sessions) to review their responses.')}
+    `),
+  });
+}
+
 // ── Stage-transition dispatcher ────────────────────────────
 // Called by the candidates router on every stage change.
 

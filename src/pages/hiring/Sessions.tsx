@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, Copy, Check } from 'lucide-react';
+import { Plus, X, Copy, Check, Send } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -24,6 +24,8 @@ export default function Sessions() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Form>(EMPTY);
   const [createdLink, setCreatedLink] = useState<string | null>(null);
+  const [createdEmailed, setCreatedEmailed] = useState<boolean>(false);
+  const [resentKey, setResentKey] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const { data: sessions, refetch } = trpc.sessions.list.useQuery();
@@ -33,8 +35,16 @@ export default function Sessions() {
     onSuccess: (created: any) => {
       refetch();
       setCreatedLink(candidateLink(created.token));
+      setCreatedEmailed(!!created.inviteEmailed);
       setForm(EMPTY);
       setShowForm(false);
+    },
+  });
+
+  const resendMutation = trpc.sessions.sendInvite.useMutation({
+    onSuccess: (_res: any, vars: any) => {
+      setResentKey(vars.id);
+      setTimeout(() => setResentKey((k) => (k === vars.id ? null : k)), 2000);
     },
   });
 
@@ -56,6 +66,7 @@ export default function Sessions() {
       packageId: form.packageId,
       candidateEmail: form.candidateEmail,
       scheduledStart: form.scheduledStart ? new Date(form.scheduledStart).toISOString() : undefined,
+      linkBase: window.location.origin,
     });
   };
 
@@ -66,7 +77,7 @@ export default function Sessions() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sessions</h1>
-          <p className="text-gray-500 text-sm mt-1">Schedule timed assessment sessions for candidates and share their private link.</p>
+          <p className="text-gray-500 text-sm mt-1">Schedule timed sessions. Scheduling emails the candidate their private link automatically; you can also copy or resend it.</p>
         </div>
         <button
           onClick={() => { showForm ? close() : setShowForm(true); }}
@@ -80,7 +91,7 @@ export default function Sessions() {
       {createdLink && (
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-green-800">Session scheduled</div>
+            <div className="text-sm font-semibold text-green-800">{createdEmailed ? 'Session scheduled — invite emailed to the candidate' : 'Session scheduled (invite email not sent — see email settings)'}</div>
             <div className="text-xs text-green-700 truncate mt-0.5">{createdLink}</div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -158,7 +169,13 @@ export default function Sessions() {
                     <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_COLORS[s.status] ?? ''}`}>{STATUS_LABELS[s.status] ?? s.status}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex items-center justify-end">
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => resendMutation.mutate({ id: s.id, linkBase: window.location.origin })}
+                        disabled={resendMutation.isLoading}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-gray-600 border border-gray-200 rounded-md text-xs font-medium hover:bg-gray-50 disabled:opacity-50">
+                        {resentKey === s.id ? <Check size={13} /> : <Send size={13} />}
+                        {resentKey === s.id ? 'Sent' : 'Resend'}
+                      </button>
                       <button onClick={() => copy(candidateLink(s.token), s.id)}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 text-gray-600 border border-gray-200 rounded-md text-xs font-medium hover:bg-gray-50">
                         {copiedKey === s.id ? <Check size={13} /> : <Copy size={13} />}

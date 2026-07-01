@@ -15,10 +15,52 @@ import { assessmentSessions } from '../db/schema/assessmentSessions.js';
 import { assessmentPackages } from '../db/schema/assessmentPackages.js';
 import { assessmentTasks } from '../db/schema/assessmentTasks.js';
 import { auditChange } from '../services/audit.js';
+import { emailAssessmentInvite, emailWorkSampleSubmittedLinkHR } from '../services/email.js';
+import { emailLog } from '../db/schema/hiring.js';
 
 // Random 64-char hex token (32 bytes) — unguessable candidate access key.
 function generateToken(): string {
   return randomBytes(32).toString('hex');
+}
+
+// Build the candidate's private assessment link. Prefer the caller's origin
+// (so the link matches the deployment the admin is using); fall back to APP_URL.
+function buildLink(linkBase: string | undefined, token: string): string {
+  const base = (linkBase || process.env.APP_URL || '').replace(/\/+$/, '');
+  return `${base}/assessment/${token}`;
+}
+
+// Send the invite email + log it (best-effort; never fails the mutation).
+async function sendInviteEmail(ctx: any, session: any, link: string) {
+  let windowMinutes = 60;
+  if (session.packageId) {
+    const pkg = await ctx.db.query.assessmentPackages.findFirst({
+      where: eq(assessmentPackages.id, session.packageId),
+    });
+    if (pkg?.windowMinutes) windowMinutes = pkg.windowMinutes;
+  }
+  try {
+    await emailAssessmentInvite({
+      to: session.candidateEmail,
+      link,
+      scheduledStart: session.scheduledStart,
+      windowMinutes,
+    });
+    if (session.candidateId) {
+      await ctx.db.insert(emailLog).values({
+        candidateId: session.candidateId,
+        recipient: session.candidateEmail,
+        template: 'work_sample_invite_link',
+        subject: 'Your work sample — Lightspeed Systems',
+        status: 'sent',
+        sentAt: new Date(),
+      });
+    }
+    return true;
+  } catch (err) {
+    console.error('[sessions] invite email failed:', err);
+    return false;
+  }
 }
 
 export const sessionsRouter = router({
@@ -35,6 +77,10 @@ export const sessionsRouter = router({
       candidateEmail: z.string().email(),
       candidateId: z.string().uuid().optional(),
       scheduledStart: z.string().datetime().optional(),
+      // Origin of the admin's browser, so the emailed link matches the deployment.
+      linkBase: z.string().url().optional(),
+      // If false, create the session but do not email the candidate yet.
+      sendInvite: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const [s] = await ctx.db.insert(assessmentSessions)
@@ -48,7 +94,24 @@ export const sessionsRouter = router({
         })
         .returning();
       await auditChange(ctx.db, ctx.user.id, s.id, 'assessment_sessions', 'create');
-      return s;
+
+      let inviteEmailed = false;
+      if (input.sendInvite !== false) {
+        inviteEmailed = await sendInviteEmail(ctx, s, buildLink(input.linkBase, s.token));
+      }
+      return { ...s, inviteEmailed };
+    }),
+
+  // Resend (or first-time send) the invite email for an existing session.
+  sendInvite: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), linkBase: z.string().url().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const session = await ctx.db.query.assessmentSessions.findFirst({
+        where: eq(assessmentSessions.id, input.id),
+      });
+      if (!session) throw new TRPCError({ code: 'NOT_FOUND' });
+      const inviteEmailed = await sendInviteEmail(ctx, session, buildLink(input.linkBase, session.token));
+      return { ok: inviteEmailed, inviteEmailed };
     }),
 
   // ── CANDIDATE (public, token-guarded) ──────────────────
@@ -185,6 +248,13 @@ export const sessionsRouter = router({
         })
         .where(eq(assessmentSessions.id, session.id))
         .returning();
+
+      // Notify HR that a submission arrived (best-effort).
+      try {
+        await emailWorkSampleSubmittedLinkHR({ candidateEmail: session.candidateEmail });
+      } catch (err) {
+        console.error('[sessions] HR submit-notify failed:', err);
+      }
       return s;
     }),
 });
