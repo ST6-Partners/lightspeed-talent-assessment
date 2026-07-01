@@ -75,7 +75,7 @@ export default function TaskLibrary() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Task Library</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Work Sample</h1>
           <p className="text-gray-500 text-sm mt-1">Curated work-sample tasks. Each one measures both work quality and AI skill. Scope is General (everyone) or a single department.</p>
         </div>
         <button
