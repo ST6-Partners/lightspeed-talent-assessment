@@ -31,7 +31,6 @@ export default function TaskLibrary() {
 
   const { data: tasks, refetch } = trpc.tasks.list.useQuery();
   const { data: departments } = trpc.departments.list.useQuery();
-  const { data: jobDescriptions } = trpc.jobDescriptions.list.useQuery();
   const createMutation = trpc.tasks.create.useMutation({ onSuccess: () => { refetch(); close(); } });
   const updateMutation = trpc.tasks.update.useMutation({ onSuccess: () => { refetch(); close(); } });
   const deleteMutation = trpc.tasks.delete.useMutation({ onSuccess: () => refetch() });
@@ -40,13 +39,6 @@ export default function TaskLibrary() {
 
   const deptName = (id: string | null) =>
     id ? (departments?.find((d: any) => d.id === id)?.name ?? 'Unknown') : 'General';
-
-  const jdsForTask = (taskId: string) => {
-    const titles = (jobDescriptions ?? [])
-      .filter((j: any) => j.workSampleTaskId === taskId)
-      .map((j: any) => j.jobTitle);
-    return titles.length ? titles.join(', ') : '—';
-  };
 
   const startEdit = (t: any) => {
     setEditingId(t.id);
@@ -199,7 +191,6 @@ export default function TaskLibrary() {
               <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
                 <th className="px-4 py-3">Task</th>
                 <th className="px-4 py-3">Department</th>
-                <th className="px-4 py-3">Job Description</th>
                 <th className="px-4 py-3">Time</th>
                 <th className="px-4 py-3">Difficulty</th>
                 <th className="px-4 py-3">Status</th>
@@ -225,7 +216,6 @@ export default function TaskLibrary() {
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${t.departmentId ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{deptName(t.departmentId)}</span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{jdsForTask(t.id)}</td>
                   <td className="px-4 py-3 text-gray-600">{t.timeLimitMin ? `${t.timeLimitMin} min` : '—'}</td>
                   <td className="px-4 py-3 text-gray-600">{t.difficulty}</td>
                   <td className="px-4 py-3">
@@ -241,7 +231,7 @@ export default function TaskLibrary() {
                 </tr>
                 {open && (
                   <tr className="border-b border-gray-100 bg-gray-50/40">
-                    <td colSpan={8} className="px-4 py-5">
+                    <td colSpan={7} className="px-4 py-5">
                       <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">How the candidate sees this task</div>
                       <div className="bg-white border border-gray-200 rounded-lg p-5 max-w-2xl">
                         <div className="text-lg font-bold text-gray-900">{t.title}</div>
