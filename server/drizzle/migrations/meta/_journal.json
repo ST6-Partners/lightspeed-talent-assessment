@@ -113,6 +113,13 @@
       "when": 1800000604000,
       "tag": "0015_seed_work_samples_departments",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1800000605000,
+      "tag": "0016_add_operations",
+      "breakpoints": true
     }
   ]
 }
