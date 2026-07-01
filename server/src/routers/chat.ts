@@ -16,6 +16,7 @@ import { users } from '../db/schema/core.js';
 import { trackActivity } from '../services/telemetry.js';
 import { generateText } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { REVIEW_MODEL } from '../services/feedbackReviewService.js';
 
 export const chatRouter = router({
 
@@ -165,7 +166,7 @@ export const chatRouter = router({
           messages.push({ role: 'user', content: input.message });
 
           const result = await generateText({
-            model: anthropic('claude-sonnet-4-20250514'),
+            model: anthropic(REVIEW_MODEL),
             system: assembledContext,
             messages,
             maxOutputTokens: 1024,
