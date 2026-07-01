@@ -11,7 +11,8 @@ import { feedbackApiRouter } from './server/src/http/feedbackApi.js';
 import { createContext } from './server/src/trpc.js';
 import { db } from './server/src/db.js';
 import { inboundEmails } from './server/src/db/schema/email.js';
-import { users } from './server/src/db/schema/index.js';
+import { users, insightsDiscoveryProfiles } from './server/src/db/schema/index.js';
+import { parseInsightsDiscoveryPdf } from './server/src/services/insightsDiscoveryParser.js';
 import { readDoc } from './server/src/services/dropboxDocs.js';
 import { eq } from 'drizzle-orm';
 import { pool, db } from './server/src/db.js';
@@ -104,7 +105,7 @@ async function main() {
 
   // Skip JSON body parsing for file upload routes (handled by express.raw inline)
   app.use((req, res, next) => {
-    if (req.path === '/api/upload/video' || req.path === '/api/webhooks/zoom') return next();
+    if (req.path === '/api/upload/video' || req.path === '/api/upload/insights-pdf' || req.path === '/api/webhooks/zoom') return next();
     express.json()(req, res, next);
   });
 
@@ -178,6 +179,50 @@ async function main() {
       });
     } catch (err: any) {
       console.error('Upload error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Insights Discovery profile upload (PDF) ────────────────
+  // Stores the PDF in Object Storage, parses the Colour Dynamics
+  // page, and persists a profile row linked to the candidate.
+  app.post('/api/upload/insights-pdf', express.raw({ type: '*/*', limit: '25mb' }), async (req, res) => {
+    try {
+      const user = await resolveSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
+      const candidateId = (req.headers['x-candidate-id'] as string) || '';
+      if (!candidateId) return res.status(400).json({ error: 'Missing x-candidate-id header' });
+
+      const filename = (req.headers['x-filename'] as string) || 'insights.pdf';
+      const buffer = req.body as Buffer;
+      if (!buffer || !buffer.length) return res.status(400).json({ error: 'Empty upload' });
+
+      const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
+      const key = `insights/${Date.now()}-${safe}${safe.toLowerCase().endsWith('.pdf') ? '' : '.pdf'}`;
+      const stored = await uploadFile(key, buffer);
+      if (!stored.ok) return res.status(500).json({ error: stored.error });
+
+      const parsed = await parseInsightsDiscoveryPdf(buffer);
+
+      const [row] = await db.insert(insightsDiscoveryProfiles).values({
+        candidateId,
+        pdfKey: key,
+        pdfFilename: safe,
+        typeNumber: parsed.typeNumber,
+        typeName: parsed.typeName,
+        lcTypeNumber: parsed.lcTypeNumber,
+        lcTypeName: parsed.lcTypeName,
+        conscious: parsed.conscious,
+        lessConscious: parsed.lessConscious,
+        parseStatus: parsed.status,
+        parseError: parsed.error ?? null,
+        uploadedBy: user.id,
+      }).returning();
+
+      res.json({ success: true, profile: row, url: `/api/files/${key}` });
+    } catch (err: any) {
+      console.error('Insights upload error:', err);
       res.status(500).json({ error: err.message });
     }
   });

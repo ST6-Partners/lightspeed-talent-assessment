@@ -53,3 +53,7 @@ export { candidateEppScores } from './epp.js';
 
 // Email (1 table) — inbound/test inbox
 export { inboundEmails } from './email.js';
+
+// Insights Discovery (1 table) - uploaded profile PDF + parsed Colour Dynamics
+export { insightsDiscoveryProfiles } from './insightsDiscovery.js';
+export type { ColourEnergies } from './insightsDiscovery.js';

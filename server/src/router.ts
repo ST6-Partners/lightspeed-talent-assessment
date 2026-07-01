@@ -24,6 +24,7 @@ import { docIndexRouter } from './routers/docIndex.js';
 import { requisitionsRouter } from './routers/requisitions.js';
 import { jobDescriptionsRouter } from './routers/jobDescriptions.js';
 import { candidatesRouter } from './routers/candidates.js';
+import { discoveryProfilesRouter } from './routers/discoveryProfiles.js';
 import { insightsRouter } from './routers/insights.js';
 import { workSampleRouter } from './routers/workSample.js';
 import { departmentsRouter } from './routers/departments.js';
@@ -59,6 +60,7 @@ export const appRouter = router({
   titles: titlesRouter,
   employees: employeesRouter,
   values: valuesRouter,
+  discoveryProfiles: discoveryProfilesRouter,
 });
 
 export type AppRouter = typeof appRouter;

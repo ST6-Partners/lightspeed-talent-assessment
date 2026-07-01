@@ -2,6 +2,7 @@ import { useState } from 'react';
 import SubTabs from '../../components/SubTabs';
 import ComingSoon from '../../components/ComingSoon';
 import EppProfiles from './EppProfiles';
+import DiscoveryProfiles from './DiscoveryProfiles';
 
 const TABS = ['CCAT', 'EPP', 'Insights'];
 
@@ -14,7 +15,7 @@ export default function Assessments() {
       <SubTabs tabs={TABS} active={tab} onChange={setTab} />
       {tab === 'CCAT' && <ComingSoon title="CCAT" note="Cognitive aptitude (Criteria Corp) results — coming soon." />}
       {tab === 'EPP' && <EppProfiles />}
-      {tab === 'Insights' && <ComingSoon title="Insights Discovery" note="Insights Discovery assessment (post-hire) — coming soon." />}
+      {tab === 'Insights' && <DiscoveryProfiles />}
     </div>
   );
 }
