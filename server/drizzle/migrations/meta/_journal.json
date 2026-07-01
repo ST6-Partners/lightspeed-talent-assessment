@@ -1,90 +1,97 @@
 {
-  "version": "7",
-  "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1782276904755,
-      "tag": "0000_orange_luke_cage",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1750870000000,
-      "tag": "0001_hiring_pipeline",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1750871000000,
-      "tag": "0002_hiring_pipeline_ifnotexists",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1799999999999,
-      "tag": "0003_add_candidate_columns",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1800000000000,
-      "tag": "0004_company_values",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1800000100000,
-      "tag": "0005_candidate_epp_scores",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1800000200000,
-      "tag": "0006_value_reviews",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1782832020473,
-      "tag": "0007_inbound_emails",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1800000300000,
-      "tag": "0008_drop_ccat_threshold",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1800000400000,
-      "tag": "0009_work_sample_submission",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1800000500000,
-      "tag": "0010_core_data",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1800000600000,
-      "tag": "0011_seed_core_data",
-      "breakpoints": true
-    }
-  ]
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+          {
+                  "idx": 0,
+                  "version": "7",
+                  "when": 1782276904755,
+                  "tag": "0000_orange_luke_cage",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 1,
+                  "version": "7",
+                  "when": 1750870000000,
+                  "tag": "0001_hiring_pipeline",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 2,
+                  "version": "7",
+                  "when": 1750871000000,
+                  "tag": "0002_hiring_pipeline_ifnotexists",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 3,
+                  "version": "7",
+                  "when": 1799999999999,
+                  "tag": "0003_add_candidate_columns",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 4,
+                  "version": "7",
+                  "when": 1800000000000,
+                  "tag": "0004_company_values",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 5,
+                  "version": "7",
+                  "when": 1800000100000,
+                  "tag": "0005_candidate_epp_scores",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 6,
+                  "version": "7",
+                  "when": 1800000200000,
+                  "tag": "0006_value_reviews",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 7,
+                  "version": "7",
+                  "when": 1782832020473,
+                  "tag": "0007_inbound_emails",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 8,
+                  "version": "7",
+                  "when": 1800000300000,
+                  "tag": "0008_drop_ccat_threshold",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 9,
+                  "version": "7",
+                  "when": 1800000400000,
+                  "tag": "0009_work_sample_submission",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 10,
+                  "version": "7",
+                  "when": 1800000500000,
+                  "tag": "0010_core_data",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 11,
+                  "version": "7",
+                  "when": 1800000600000,
+                  "tag": "0011_seed_core_data",
+                  "breakpoints": true
+          },
+          {
+                  "idx": 12,
+                  "version": "7",
+                  "when": 1800000700000,
+                  "tag": "0012_seed_lightspeed_employees",
+                  "breakpoints": true
+          }
+    ]
 }
