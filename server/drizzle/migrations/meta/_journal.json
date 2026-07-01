@@ -127,6 +127,13 @@
       "when": 1800000606000,
       "tag": "0017_jd_work_sample_task",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1800000607000,
+      "tag": "0018_seed_lightspeed_employees",
+      "breakpoints": true
     }
   ]
 }
