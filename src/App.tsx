@@ -15,6 +15,8 @@ import Assessments from './pages/hiring/Assessments';
 import Scorecards from './pages/hiring/Scorecards';
 import Employees from './pages/hiring/Employees';
 import Departments from './pages/hiring/Departments';
+import TaskLibrary from './pages/hiring/TaskLibrary';
+import Assignments from './pages/hiring/Assignments';
 import Titles from './pages/hiring/Titles';
 
 export default function App() {
@@ -39,6 +41,8 @@ export default function App() {
         {/* Core Data */}
         <Route path="/hiring/employees" element={<Employees />} />
         <Route path="/hiring/departments" element={<Departments />} />
+        <Route path="/hiring/tasks" element={<TaskLibrary />} />
+        <Route path="/hiring/assignments" element={<Assignments />} />
         <Route path="/hiring/titles" element={<Titles />} />
         <Route path="/hiring/values" element={<Values />} />
         <Route path="/hiring/jobs" element={<JobDescriptions />} />

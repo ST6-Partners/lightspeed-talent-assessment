@@ -27,6 +27,8 @@ import { candidatesRouter } from './routers/candidates.js';
 import { insightsRouter } from './routers/insights.js';
 import { workSampleRouter } from './routers/workSample.js';
 import { departmentsRouter } from './routers/departments.js';
+import { assessmentTasksRouter } from './routers/assessmentTasks.js';
+import { assessmentPackagesRouter } from './routers/assessmentPackages.js';
 import { titlesRouter } from './routers/titles.js';
 import { employeesRouter } from './routers/employees.js';
 import { valuesRouter } from './routers/values.js';
@@ -56,6 +58,8 @@ export const appRouter = router({
   insights: insightsRouter,
   workSample: workSampleRouter,
   departments: departmentsRouter,
+  tasks: assessmentTasksRouter,
+  packages: assessmentPackagesRouter,
   titles: titlesRouter,
   employees: employeesRouter,
   values: valuesRouter,

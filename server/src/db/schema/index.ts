@@ -53,3 +53,7 @@ export { candidateEppScores } from './epp.js';
 
 // Email (1 table) — inbound/test inbox
 export { inboundEmails } from './email.js';
+
+// Assessment Task Library + Assignments (curated work samples)
+export { assessmentTasks, taskDifficultyEnum, taskStatusEnum } from './assessmentTasks.js';
+export { assessmentPackages } from './assessmentPackages.js';

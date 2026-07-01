@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact } from 'lucide-react';
+import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Layers } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import WhatsNew from './WhatsNew';
@@ -20,6 +20,8 @@ const talentNav = [
   { path: '/hiring/requisitions', label: 'Requisitions', icon: ClipboardList },
   { path: '/hiring/candidates', label: 'Candidates', icon: Users },
   { path: '/hiring/assessments', label: 'Assessments', icon: ClipboardCheck },
+  { path: '/hiring/tasks', label: 'Task Library', icon: Library },
+  { path: '/hiring/assignments', label: 'Assignments', icon: Layers },
   { path: '/hiring/scorecards', label: 'Scorecards', icon: FileCheck },
 ];
 
