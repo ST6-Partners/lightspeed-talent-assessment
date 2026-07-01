@@ -14,9 +14,119 @@ import { chatSessionLogs, chatDebugLog } from '../db/schema/telemetry.js';
 import { promptTemplates, designKnowledge, faqEntries } from '../db/schema/ai.js';
 import { users } from '../db/schema/core.js';
 import { trackActivity } from '../services/telemetry.js';
-import { generateText } from 'ai';
+import { generateText, tool, stepCountIs } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { REVIEW_MODEL } from '../services/feedbackReviewService.js';
+
+// ── Live-data tools for the chat assistant ──────────────────────
+// Read-only lookups against real app data so the assistant can answer
+// factual questions (headcounts, pipeline counts, open reqs, candidate
+// lookups) instead of guessing or declining. No write access — every
+// query here is a SELECT. Table/column names below are fixed literals,
+// not user input, so this is not vulnerable to SQL injection; user-
+// supplied values are always passed as bound parameters via `sql`.
+function buildLiveDataTools(db: any) {
+  return {
+    getSystemCounts: tool({
+      description:
+        'Get current totals for employees, departments, job titles, requisitions ' +
+        '(with a breakdown by status), and candidates (with a breakdown by hiring ' +
+        'stage). Use this for any "how many" question about the app\'s data.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const [[employeeCount], [departmentCount], [titleCount], [reqTotal], reqByStatus, [candidateTotal], candidateByStage] = await Promise.all([
+          db.execute(sql`SELECT COUNT(*)::int AS count FROM employees`).then((r: any) => r.rows),
+          db.execute(sql`SELECT COUNT(*)::int AS count FROM departments`).then((r: any) => r.rows),
+          db.execute(sql`SELECT COUNT(*)::int AS count FROM titles`).then((r: any) => r.rows),
+          db.execute(sql`SELECT COUNT(*)::int AS count FROM job_requisitions`).then((r: any) => r.rows),
+          db.execute(sql`SELECT status, COUNT(*)::int AS count FROM job_requisitions GROUP BY status`).then((r: any) => r.rows),
+          db.execute(sql`SELECT COUNT(*)::int AS count FROM candidates`).then((r: any) => r.rows),
+          db.execute(sql`SELECT current_stage, COUNT(*)::int AS count FROM candidates GROUP BY current_stage`).then((r: any) => r.rows),
+        ]);
+
+        return {
+          employees: employeeCount?.count ?? 0,
+          departments: departmentCount?.count ?? 0,
+          titles: titleCount?.count ?? 0,
+          requisitions: {
+            total: reqTotal?.count ?? 0,
+            byStatus: Object.fromEntries(reqByStatus.map((r: any) => [r.status, r.count])),
+          },
+          candidates: {
+            total: candidateTotal?.count ?? 0,
+            byStage: Object.fromEntries(candidateByStage.map((r: any) => [r.current_stage, r.count])),
+          },
+        };
+      },
+    }),
+
+    listDepartments: tool({
+      description: 'List all departments configured in the app, with their descriptions.',
+      inputSchema: z.object({}),
+      execute: async () => {
+        const result = await db.execute(sql`SELECT name, description FROM departments ORDER BY name`);
+        return result.rows;
+      },
+    }),
+
+    listOpenRequisitions: tool({
+      description: 'List open (actively hiring) job requisitions, optionally filtered by department name.',
+      inputSchema: z.object({
+        department: z.string().optional().describe('Filter to a specific department name (partial match ok)'),
+      }),
+      execute: async ({ department }: { department?: string }) => {
+        const result = department
+          ? await db.execute(sql`
+              SELECT department, hiring_manager, num_openings, location, remote, priority, target_start_date
+              FROM job_requisitions
+              WHERE status = 'Open' AND department ILIKE ${'%' + department + '%'}
+              ORDER BY created_at DESC
+            `)
+          : await db.execute(sql`
+              SELECT department, hiring_manager, num_openings, location, remote, priority, target_start_date
+              FROM job_requisitions
+              WHERE status = 'Open'
+              ORDER BY created_at DESC
+            `);
+        return result.rows;
+      },
+    }),
+
+    searchCandidates: tool({
+      description:
+        'Search candidates by name or email substring, and/or filter by exact hiring stage ' +
+        '(e.g. "Applied", "Assessment", "Work Sample", "Values Review", "Interview Scheduled", ' +
+        '"Interviewed", "Offered", "Hired", "Rejected"). Returns contact info, current stage, ' +
+        'and assessment scores. Only use this when the question is actually about specific ' +
+        'candidates, not for simple counts (use getSystemCounts for counts).',
+      inputSchema: z.object({
+        query: z.string().optional().describe('Name or email substring to search for'),
+        stage: z.string().optional().describe('Exact current_stage value'),
+        limit: z.number().int().min(1).max(25).default(10),
+      }),
+      execute: async ({ query, stage, limit }: { query?: string; stage?: string; limit: number }) => {
+        const conditions = [];
+        if (query) {
+          conditions.push(sql`(first_name ILIKE ${'%' + query + '%'} OR last_name ILIKE ${'%' + query + '%'} OR email ILIKE ${'%' + query + '%'})`);
+        }
+        if (stage) {
+          conditions.push(sql`current_stage = ${stage}`);
+        }
+        const whereClause = conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``;
+        const result = await db.execute(sql`
+          SELECT first_name, last_name, email, phone, current_stage, source,
+                 ccat_score, work_sample_score, resume_review_score, reference_check_score, interview_score,
+                 created_at
+          FROM candidates
+          ${whereClause}
+          ORDER BY created_at DESC
+          LIMIT ${limit}
+        `);
+        return result.rows;
+      },
+    }),
+  };
+}
 
 export const chatRouter = router({
 
@@ -130,6 +240,13 @@ export const chatRouter = router({
         contextParts.push(`\nThe user is currently on the "${input.screenMode}" screen${input.screenTab ? ` (${input.screenTab} tab)` : ''}.`);
       }
 
+      contextParts.push(
+        '\nYou have tools available to look up live data from this app\'s database ' +
+        '(system-wide counts, department lists, open requisitions, and candidate search). ' +
+        'Use them whenever the user asks a factual question about the app\'s actual data ' +
+        'rather than guessing, refusing, or telling them to look it up elsewhere.'
+      );
+
       if (relevantFaq.length > 0) {
         contextParts.push('\nRelevant FAQ entries:');
         relevantFaq.forEach(f => {
@@ -169,6 +286,8 @@ export const chatRouter = router({
             model: anthropic(REVIEW_MODEL),
             system: assembledContext,
             messages,
+            tools: buildLiveDataTools(ctx.db),
+            stopWhen: stepCountIs(4),
             maxOutputTokens: 1024,
           });
 
