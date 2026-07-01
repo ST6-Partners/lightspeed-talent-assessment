@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, X, Trash2, Pencil } from 'lucide-react';
+import { useState, Fragment } from 'react';
+import { Plus, X, Trash2, Pencil, ChevronRight, ChevronDown } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const DIFFICULTIES = ['Entry', 'Mid', 'Senior'] as const;
@@ -26,6 +26,7 @@ const EMPTY: Form = {
 export default function TaskLibrary() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(EMPTY);
 
   const { data: tasks, refetch } = trpc.tasks.list.useQuery();
@@ -198,11 +199,19 @@ export default function TaskLibrary() {
               </tr>
             </thead>
             <tbody>
-              {tasks.map((t: any) => (
-                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50 text-sm align-top">
+              {tasks.map((t: any) => {
+                const open = previewId === t.id;
+                return (
+                <Fragment key={t.id}>
+                <tr onClick={() => setPreviewId(open ? null : t.id)} className="border-b border-gray-50 hover:bg-gray-50 text-sm align-top cursor-pointer">
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{t.title}</div>
-                    <div className="text-gray-500 text-xs mt-0.5 line-clamp-1">{t.brief}</div>
+                    <div className="flex items-start gap-1.5">
+                      <span className="text-gray-400 mt-0.5 shrink-0">{open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}</span>
+                      <div className="min-w-0">
+                        <div className="font-medium text-gray-900">{t.title}</div>
+                        <div className="text-gray-500 text-xs mt-0.5 line-clamp-1">{t.brief}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${t.departmentId ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{deptName(t.departmentId)}</span>
@@ -213,14 +222,42 @@ export default function TaskLibrary() {
                     <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_COLORS[t.status] ?? ''}`}>{t.status}</span>
                   </td>
                   <td className="px-4 py-3 text-gray-500">v{t.version}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
                       <button onClick={() => startEdit(t)} className="p-1.5 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100" title="Edit"><Pencil size={15} /></button>
                       <button onClick={() => { if (confirm(`Delete "${t.title}"?`)) deleteMutation.mutate({ id: t.id }); }} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-gray-100" title="Delete"><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>
-              ))}
+                {open && (
+                  <tr className="border-b border-gray-100 bg-gray-50/40">
+                    <td colSpan={7} className="px-4 py-5">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">How the candidate sees this task</div>
+                      <div className="bg-white border border-gray-200 rounded-lg p-5 max-w-2xl">
+                        <div className="text-lg font-bold text-gray-900">{t.title}</div>
+                        <div className="text-xs text-gray-500 mt-1">{deptName(t.departmentId)} · {t.difficulty}{t.timeLimitMin ? ` · ${t.timeLimitMin} min` : ''}</div>
+                        <div className="mt-4">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Instructions</div>
+                          <div className="text-sm text-gray-800 whitespace-pre-line">{t.brief || '—'}</div>
+                        </div>
+                        {t.showYourWorkInstructions && (
+                          <div className="mt-4">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Show your work</div>
+                            <div className="text-sm text-gray-800 whitespace-pre-line">{t.showYourWorkInstructions}</div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mt-5 mb-2">Internal — not shown to the candidate</div>
+                      <div className="grid grid-cols-2 gap-3 max-w-2xl">
+                        <div className="text-xs text-gray-600 bg-white border border-gray-200 rounded-md p-3"><span className="font-semibold text-gray-700">Scoring — work quality:</span> {t.scoringGuideWork || '—'}</div>
+                        <div className="text-xs text-gray-600 bg-white border border-gray-200 rounded-md p-3"><span className="font-semibold text-gray-700">Scoring — AI skill:</span> {t.scoringGuideAi || '—'}</div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}
