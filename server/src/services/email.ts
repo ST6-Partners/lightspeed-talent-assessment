@@ -246,6 +246,15 @@ export async function emailPostInterviewThankYou(data: CandidateEmailData) {
 }
 
 // 7. Offer extended
+export async function emailOfferLetter(data: { to: string; firstName: string; jobTitle?: string; letterHtml: string }) {
+  await sendEmail({
+    to: data.to,
+    templateId: 'offer_letter',
+    subject: `Your offer from Lightspeed Systems${data.jobTitle ? ` \u2014 ${data.jobTitle}` : ''}`,
+    html: data.letterHtml,
+  });
+}
+
 export async function emailOfferExtended(data: CandidateEmailData) {
   await sendEmail({
     to: data.email,

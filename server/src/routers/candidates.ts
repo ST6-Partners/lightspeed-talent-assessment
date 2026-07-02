@@ -20,10 +20,12 @@ import {
   dispatchStageEmail,
   emailInterviewerQuestions,
   sendEmail,
+  emailOfferLetter,
 } from '../services/email.js';
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
 import { runReferenceCheck } from '../services/ai.js';
+import { renderOfferLetter, type OfferLetterInput } from '../services/offerLetter.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 
 const STAGES = [
@@ -544,6 +546,101 @@ export const candidatesRouter = router({
       trackActivity(ctx.db, ctx.user.id, 'reference_check', 'candidates', { candidateId: input.id }).catch(() => {});
 
       return result;
+    }),
+
+  // Build the offer-letter input from the candidate + JD + requisition + HR inputs.
+  // Deterministic letter (no AI) — editable fields in fixed places + addendum.
+  // (helper below is inlined per-call)
+
+  // Preview the external offer letter (renders HTML; does not send or change stage).
+  offerPreview: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      baseSalary: z.number().int().optional(),
+      startDate: z.string().optional(),
+      reportsTo: z.string().optional(),
+      department: z.string().optional(),
+      employmentType: z.string().optional(),
+      location: z.string().optional(),
+      jobTitle: z.string().optional(),
+      addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const jd = candidate.jdId
+        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null;
+
+      const offer: OfferLetterInput = {
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        jobTitle: input.jobTitle || jd?.jobTitle || 'the role',
+        department: input.department ?? null,
+        reportsTo: input.reportsTo ?? null,
+        employmentType: input.employmentType ?? 'Full-Time',
+        baseSalary: input.baseSalary ?? null,
+        startDate: input.startDate ?? null,
+        location: input.location ?? null,
+        addendum: input.addendum ?? [],
+      };
+      return { html: renderOfferLetter(offer), jobTitle: offer.jobTitle };
+    }),
+
+  // Send the external offer letter via SendGrid and move the candidate to Offered.
+  sendOffer: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      baseSalary: z.number().int().optional(),
+      startDate: z.string().optional(),
+      reportsTo: z.string().optional(),
+      department: z.string().optional(),
+      employmentType: z.string().optional(),
+      location: z.string().optional(),
+      jobTitle: z.string().optional(),
+      addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const jd = candidate.jdId
+        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null;
+      const jobTitle = input.jobTitle || jd?.jobTitle || 'the role';
+
+      const letterHtml = renderOfferLetter({
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        jobTitle,
+        department: input.department ?? null,
+        reportsTo: input.reportsTo ?? null,
+        employmentType: input.employmentType ?? 'Full-Time',
+        baseSalary: input.baseSalary ?? null,
+        startDate: input.startDate ?? null,
+        location: input.location ?? null,
+        addendum: input.addendum ?? [],
+      });
+
+      // Email the letter (SendGrid).
+      await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle, letterHtml }).catch(() => {});
+
+      // Advance to Offered (skip if already there / terminal).
+      if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
+        await ctx.db.update(candidates)
+          .set({ currentStage: 'Offered', updatedAt: new Date() })
+          .where(eq(candidates.id, input.id));
+        await ctx.db.insert(candidateStageHistory).values({
+          candidateId: input.id,
+          fromStage: candidate.currentStage,
+          toStage: 'Offered',
+          changedBy: ctx.user.id,
+          reason: 'External offer letter sent',
+        });
+      }
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'send_offer', 'candidates', { candidateId: input.id }).catch(() => {});
+      return { ok: true, html: letterHtml };
     }),
 
   // Store AI-generated interview questions

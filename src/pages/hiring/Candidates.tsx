@@ -439,6 +439,9 @@ export default function Candidates() {
           {/* Reference check — agent report (after interview, before offer) */}
           <ReferenceCheckSection key={`ref-${selected.id}`} candidateId={selected.id} existingNotes={(selected as any).referenceCheckNotes ?? null} onChanged={refetch} />
 
+          {/* Offer letter (external) */}
+          <OfferSection key={`offer-${selected.id}`} candidateId={selected.id} onChanged={refetch} />
+
           {/* HR notes */}
           <Section title="HR Notes">
             <EditableTextarea
@@ -712,6 +715,86 @@ function ReferenceCheckSection({ candidateId, existingNotes, onChanged }: { cand
 
       {!result && existingNotes && (
         <div className="text-xs text-gray-600 whitespace-pre-wrap mt-1">{existingNotes}</div>
+      )}
+    </Section>
+  );
+}
+
+function OfferSection({ candidateId, onChanged }: { candidateId: string; onChanged?: () => void }) {
+  const [f, setF] = useState({ baseSalary: '', startDate: '', reportsTo: '', department: '', employmentType: 'Full-Time', location: '' });
+  const [addendum, setAddendum] = useState<{ title: string; body: string }[]>([]);
+  const [html, setHtml] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  const payload = () => ({
+    id: candidateId,
+    baseSalary: f.baseSalary.trim() ? parseInt(f.baseSalary.replace(/[^0-9]/g, '')) : undefined,
+    startDate: f.startDate || undefined,
+    reportsTo: f.reportsTo || undefined,
+    department: f.department || undefined,
+    employmentType: f.employmentType || undefined,
+    location: f.location || undefined,
+    addendum: addendum.filter((a) => a.title.trim() || a.body.trim()),
+  });
+
+  const preview = trpc.candidates.offerPreview.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(false); } });
+  const send = trpc.candidates.sendOffer.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(true); onChanged?.(); } });
+
+  const field = (label: string, key: keyof typeof f, placeholder = '') => (
+    <div>
+      <div className="text-xs text-gray-500 mb-0.5">{label}</div>
+      <input value={f[key]} onChange={(e) => setF({ ...f, [key]: e.target.value })} placeholder={placeholder}
+        className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+    </div>
+  );
+
+  return (
+    <Section title="Offer Letter (external)">
+      <div className="text-xs text-gray-500">
+        Editable fields go in fixed places; the rest is stock language. Put anything custom (transition plan, sales comp plan) on an addendum. Generated from a fixed template — not AI.
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {field('Base salary (annual)', 'baseSalary', '120000')}
+        {field('Start date', 'startDate', 'August 4, 2025')}
+        {field('Reports to', 'reportsTo')}
+        {field('Department', 'department')}
+        {field('Employment type', 'employmentType')}
+        {field('Location', 'location')}
+      </div>
+
+      <div className="pt-1">
+        <div className="text-xs text-gray-500 mb-1">Addendum items (custom, optional)</div>
+        {addendum.map((a, i) => (
+          <div key={i} className="mb-1 space-y-1">
+            <input value={a.title} placeholder="Addendum title (e.g. Transition plan)"
+              onChange={(e) => setAddendum(addendum.map((x, j) => j === i ? { ...x, title: e.target.value } : x))}
+              className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+            <textarea value={a.body} placeholder="Addendum details" rows={2}
+              onChange={(e) => setAddendum(addendum.map((x, j) => j === i ? { ...x, body: e.target.value } : x))}
+              className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+            <button onClick={() => setAddendum(addendum.filter((_, j) => j !== i))} className="text-xs text-gray-400 hover:text-red-600">Remove addendum</button>
+          </div>
+        ))}
+        <button onClick={() => setAddendum([...addendum, { title: '', body: '' }])}
+          className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">+ Add addendum</button>
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <button onClick={() => preview.mutate(payload())} disabled={preview.isLoading}
+          className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50">
+          {preview.isLoading ? 'Rendering…' : 'Preview letter'}
+        </button>
+        <button onClick={() => send.mutate(payload())} disabled={send.isLoading}
+          className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
+          {send.isLoading ? 'Sending…' : 'Send offer'}
+        </button>
+      </div>
+
+      {sent && <div className="text-xs text-green-700">Offer sent — candidate moved to Offered.</div>}
+      {html && (
+        <div className="mt-2 border border-gray-200 rounded bg-white max-h-96 overflow-y-auto">
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        </div>
       )}
     </Section>
   );
