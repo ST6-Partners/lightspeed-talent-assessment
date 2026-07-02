@@ -784,6 +784,7 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
 
   const preview = trpc.candidates.offerPreview.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(false); } });
   const send = trpc.candidates.sendOffer.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(true); onChanged?.(); } });
+  const docusign = trpc.candidates.sendOfferViaDocuSign.useMutation({ onSuccess: () => onChanged?.() });
 
   const field = (label: string, key: keyof typeof f, placeholder = '') => (
     <div>
@@ -855,9 +856,22 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
         </button>
         <button onClick={() => send.mutate(payload())} disabled={send.isLoading}
           className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
-          {send.isLoading ? 'Sending…' : 'Send offer'}
+          {send.isLoading ? 'Sending…' : 'Send offer (email)'}
+        </button>
+        <button onClick={() => docusign.mutate(payload())} disabled={docusign.isLoading}
+          className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50">
+          {docusign.isLoading ? 'Sending…' : 'Send via DocuSign'}
         </button>
       </div>
+      {docusign.data && (
+        <div className={`text-xs ${docusign.data.configured && !(docusign.data as any).error ? 'text-green-700' : 'text-amber-700'}`}>
+          {!docusign.data.configured
+            ? (docusign.data as any).message
+            : (docusign.data as any).error
+              ? `DocuSign error: ${(docusign.data as any).error}`
+              : `Sent for e-signature via DocuSign (envelope ${(docusign.data as any).envelopeId}). Candidate moved to Offered.`}
+        </div>
+      )}
 
       {sent && <div className="text-xs text-green-700">Offer sent — candidate moved to Offered.</div>}
       {html && (

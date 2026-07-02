@@ -99,6 +99,10 @@ export default function JobDescriptions() {
     }));
   };
 
+  const getReqDept = (reqId: string) => {
+    const r = (requisitions ?? []).find((x: any) => x.id === reqId);
+    return r?.department ?? '—';
+  };
   const getReqLabel = (reqId: string) => {
     const r = (requisitions ?? []).find((r) => r.id === reqId);
     return r ? `${r.department} · ${r.hiringManager}` : reqId;
@@ -266,6 +270,7 @@ export default function JobDescriptions() {
             <thead>
               <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
                 <th className="px-4 py-3">Job Title</th>
+                <th className="px-4 py-3">Department</th>
                 <th className="px-4 py-3">Requisition</th>
                 <th className="px-4 py-3">EPP Values</th>
                 <th className="px-4 py-3">Status</th>
@@ -280,6 +285,7 @@ export default function JobDescriptions() {
                     {jd.jobTitle}
                     <div className="text-gray-400 text-xs font-normal mt-0.5">Work sample: {taskLabel(jd.workSampleTaskId)}</div>
                   </td>
+                  <td className="px-4 py-3 text-gray-600 text-xs font-medium">{getReqDept(jd.reqId)}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{getReqLabel(jd.reqId)}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">
                     {Array.isArray(jd.eppValues) && (jd.eppValues as string[]).length > 0

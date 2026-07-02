@@ -27,6 +27,7 @@ import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
 import { runReferenceCheck } from '../services/ai.js';
 import { renderOfferLetter, type OfferLetterInput } from '../services/offerLetter.js';
+import { createOfferEnvelope } from '../services/docusign.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 
 const STAGES = [
@@ -709,6 +710,63 @@ export const candidatesRouter = router({
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'send_offer', 'candidates', { candidateId: input.id }).catch(() => {});
       return { ok: true, html: letterHtml };
+    }),
+
+  // Send the offer letter for e-signature via DocuSign. DocuSign emails the
+  // candidate the signable document (not SendGrid). Stub-safe: with no DocuSign
+  // credentials it returns { configured:false } and changes nothing.
+  sendOfferViaDocuSign: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      baseSalary: z.number().int().optional(),
+      startDate: z.string().optional(),
+      reportsTo: z.string().optional(),
+      department: z.string().optional(),
+      employmentType: z.string().optional(),
+      location: z.string().optional(),
+      jobTitle: z.string().optional(),
+      addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const offer = await buildOfferInput(ctx.db, input);
+      const letterHtml = renderOfferLetter(offer);
+
+      const result = await createOfferEnvelope({
+        candidateName: `${candidate.firstName} ${candidate.lastName}`.trim(),
+        candidateEmail: candidate.email,
+        jobTitle: offer.jobTitle,
+        letterHtml,
+      });
+
+      if (!result.configured) {
+        return { configured: false as const, message: 'DocuSign is not connected yet — add DOCUSIGN_BASE_URL, DOCUSIGN_ACCOUNT_ID and DOCUSIGN_ACCESS_TOKEN (Railway) to enable sending.' };
+      }
+      if (result.error) {
+        return { configured: true as const, error: result.error };
+      }
+
+      // Advance to Offered + record for visibility.
+      if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
+        await ctx.db.update(candidates).set({ currentStage: 'Offered', updatedAt: new Date() }).where(eq(candidates.id, input.id));
+        await ctx.db.insert(candidateStageHistory).values({
+          candidateId: input.id, fromStage: candidate.currentStage, toStage: 'Offered',
+          changedBy: ctx.user.id, reason: `Offer sent for e-signature via DocuSign (envelope ${result.envelopeId})`,
+        });
+      }
+      try {
+        await ctx.db.insert(inboundEmails).values({
+          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+          fromName: 'DocuSign (offer)', toEmail: candidate.email,
+          subject: `Offer sent via DocuSign — ${offer.jobTitle}`,
+          body: `DocuSign envelope ${result.envelopeId} (status: ${result.status}) sent to ${candidate.email} for signature.`,
+          replyTag: 'docusign_offer', source: 'simulated', raw: { kind: 'docusign_offer', envelopeId: result.envelopeId, candidateId: input.id },
+        });
+      } catch (err) { console.error('[docusign] inbox record failed:', err); }
+
+      trackActivity(ctx.db, ctx.user.id, 'send_offer_docusign', 'candidates', { candidateId: input.id, envelopeId: result.envelopeId }).catch(() => {});
+      return { configured: true as const, envelopeId: result.envelopeId, status: result.status };
     }),
 
   // Notify an internal candidate's leadership chain (manual list for now;
