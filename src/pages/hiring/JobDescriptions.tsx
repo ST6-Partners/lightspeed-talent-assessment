@@ -34,6 +34,7 @@ export default function JobDescriptions() {
   const { data: requisitions } = trpc.requisitions.list.useQuery();
   const { data: jobDescriptions, refetch } = trpc.jobDescriptions.list.useQuery();
   const { data: workSampleTasks } = trpc.tasks.list.useQuery();
+  const { data: jdQuestions } = trpc.intake.questionsForReq.useQuery({ reqId: form.reqId }, { enabled: !!editingId && !!form.reqId });
 
   const closeForm = () => { setShowForm(false); setEditingId(null); resetForm(); };
 
@@ -229,6 +230,19 @@ export default function JobDescriptions() {
               </div>
             </div>
           </div>
+          {editingId && jdQuestions && (jdQuestions.questions as any[]).length > 0 && (
+            <div className="mt-5 border-t border-gray-100 pt-4">
+              <label className="block text-xs font-medium text-gray-600 mb-2">
+                Standard interview questions — the 70%{jdQuestions.source ? ` · ${jdQuestions.source}` : ''} (auto-generated from this description)
+              </label>
+              <ol className="list-decimal pl-5 space-y-1 text-sm text-gray-700">
+                {(jdQuestions.questions as any[]).map((q: any, i: number) => (
+                  <li key={i}>{q.question}{q.category ? <span className="text-gray-400"> ({q.category})</span> : null}</li>
+                ))}
+              </ol>
+              <p className="text-xs text-gray-400 mt-2">The tailored ~30% is curated and emailed to the interviewer later, after the candidate's EPP/values review.</p>
+            </div>
+          )}
           <div className="flex gap-2 mt-4">
             <button
               onClick={handleSave}
