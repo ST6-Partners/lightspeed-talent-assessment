@@ -298,6 +298,9 @@ export interface ResumeScreenResult {
   metCount: number;
   totalCount: number;
   summary: string;
+  // 'ai' = real Claude screen (trustworthy enough to drive an auto-decision);
+  // 'keyword' = deterministic fallback (advisory only — do NOT auto-reject on it).
+  mode: 'ai' | 'keyword';
 }
 
 // Split a required-qualifications blob into individual requirement lines.
@@ -314,12 +317,12 @@ function splitRequirements(raw: string): string[] {
     } catch { /* fall through to line split */ }
   }
   return trimmed
-    .split(/\r?\n|•|·|•|;/)
+    .split(/\r?\n|•|·/)
     .map((line) => line.replace(/^\s*[-*–—\d.)]+\s*/, '').trim())
     .filter((line) => line.length > 2);
 }
 
-function summarizeScreen(checks: RequirementCheck[]): ResumeScreenResult {
+function summarizeScreen(checks: RequirementCheck[], mode: 'ai' | 'keyword' = 'ai'): ResumeScreenResult {
   const missing = checks.filter((c) => !c.met).map((c) => c.requirement);
   const metCount = checks.length - missing.length;
   const summary =
@@ -328,7 +331,7 @@ function summarizeScreen(checks: RequirementCheck[]): ResumeScreenResult {
       : missing.length === 0
         ? `Resume screen: all ${checks.length} required qualifications appear to be met.`
         : `Resume screen: ${metCount}/${checks.length} required qualifications met. MISSING: ${missing.join('; ')}.`;
-  return { requirements: checks, missing, metCount, totalCount: checks.length, summary };
+  return { requirements: checks, missing, metCount, totalCount: checks.length, summary, mode };
 }
 
 // Deterministic keyword fallback (used in SANDBOX / on AI failure).
@@ -361,7 +364,7 @@ function keywordScreen(requirements: string[], resumeText: string): ResumeScreen
         : `Few/no matching terms found (${hits.length}/${uniq.length}).`,
     };
   });
-  return summarizeScreen(checks);
+  return summarizeScreen(checks, 'keyword');
 }
 
 function extractJsonArray(raw: string): string {
@@ -382,6 +385,7 @@ export async function screenResumeRequirements(
   if (!resumeText || resumeText.trim().length < 20) {
     return summarizeScreen(
       requirements.map((r) => ({ requirement: r, met: false, evidence: 'No resume text provided.' })),
+      'keyword',
     );
   }
 

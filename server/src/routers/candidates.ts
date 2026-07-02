@@ -336,8 +336,18 @@ export const candidatesRouter = router({
 
   // Screen a resume against the job's REQUIRED qualifications only.
   // Flags missing requirements. Does NOT change stage or reject.
+  // Resume screen = decision gate.
+  //  - needs international sponsorship  -> auto-reject (knockout)
+  //  - missing any REQUIRED qualification -> auto-reject
+  //  - all required met                 -> move forward one stage
+  // PREFERRED qualifications are "nice-to-haves": never affect the decision;
+  // any missing ones are recorded as a note for the hiring manager.
   screenResume: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), resumeText: z.string().min(1) }))
+    .input(z.object({
+      id: z.string().uuid(),
+      resumeText: z.string().min(1),
+      needsSponsorship: z.boolean().optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({
         where: eq(candidates.id, input.id),
@@ -348,18 +358,104 @@ export const candidatesRouter = router({
         ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
         : null;
       const required = ((jd as any)?.requiredQualifications ?? '') as string;
+      const preferred = ((jd as any)?.preferredQualifications ?? '') as string;
+      const jobTitle = jd?.jobTitle ?? undefined;
 
-      const result = await screenResumeRequirements(input.resumeText, required);
+      // Screen against must-haves and nice-to-haves separately.
+      const requirements = await screenResumeRequirements(input.resumeText, required);
+      const niceToHaves = await screenResumeRequirements(input.resumeText, preferred);
 
-      // Persist a human-readable summary; leave resumeReviewScore untouched.
+      // Build the hiring-manager note.
+      const noteParts: string[] = [];
+      if (input.needsSponsorship) noteParts.push('KNOCKOUT: requires international sponsorship (not offered).');
+      noteParts.push(
+        requirements.totalCount
+          ? `Requirements: ${requirements.metCount}/${requirements.totalCount} met.`
+          : 'No required qualifications defined on this job description.',
+      );
+      if (requirements.missing.length) noteParts.push(`Missing required: ${requirements.missing.join('; ')}.`);
+      if (niceToHaves.missing.length) {
+        noteParts.push(`Nice-to-haves missing (FYI, not a dealbreaker): ${niceToHaves.missing.join('; ')}.`);
+      } else if (niceToHaves.totalCount) {
+        noteParts.push('All nice-to-haves met.');
+      }
+      const notes = noteParts.join(' ');
+
+      // Decide.
+      const terminal = candidate.currentStage === 'Hired' || candidate.currentStage === 'Rejected';
+      let decision: 'rejected' | 'advanced' | 'flagged' = 'flagged';
+      let reason = '';
+      let movedToStage: string | null = null;
+
+      // The requirement reject/advance is only trusted when the REAL AI screened
+      // the resume. Without the AI key the keyword fallback is advisory only, so
+      // we flag instead of auto-deciding. The sponsorship knockout is a direct
+      // yes/no, so it always acts.
+      const trustworthy = requirements.mode === 'ai';
+
+      if (input.needsSponsorship) {
+        decision = 'rejected';
+        reason = 'Requires international sponsorship, which Lightspeed does not offer.';
+      } else if (!trustworthy) {
+        decision = 'flagged';
+        reason = 'Advisory only — set the AI key (ANTHROPIC_API_KEY) for the resume gate to auto-decide.';
+      } else if (requirements.missing.length > 0) {
+        decision = 'rejected';
+        reason = `Missing required qualification(s): ${requirements.missing.join('; ')}.`;
+      } else {
+        decision = 'advanced';
+      }
+
+      // Persist the note regardless of the decision.
       await ctx.db.update(candidates)
-        .set({ resumeReviewNotes: result.summary, updatedAt: new Date() })
+        .set({ resumeReviewNotes: notes, updatedAt: new Date() })
         .where(eq(candidates.id, input.id));
 
-      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'screen_resume', 'candidates', { candidateId: input.id }).catch(() => {});
+      // Apply the stage change (skip if already Hired/Rejected).
+      const STAGE_ORDER = STAGES as readonly string[];
+      const idx = STAGE_ORDER.indexOf(candidate.currentStage);
 
-      return result;
+      if (!terminal && decision === 'rejected') {
+        await ctx.db.update(candidates)
+          .set({ currentStage: 'Rejected', rejectionReason: reason, updatedAt: new Date() })
+          .where(eq(candidates.id, input.id));
+        await ctx.db.insert(candidateStageHistory).values({
+          candidateId: input.id,
+          fromStage: candidate.currentStage,
+          toStage: 'Rejected',
+          changedBy: ctx.user.id,
+          reason,
+        });
+        movedToStage = 'Rejected';
+        await dispatchStageEmail('Rejected', candidate.currentStage, {
+          firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
+        }).catch(() => {});
+      } else if (!terminal && decision === 'advanced' && idx >= 0 && idx <= 3) {
+        // Advance one stage (only through Values Review; never auto-jump interview+).
+        const nextStage = STAGE_ORDER[idx + 1];
+        await ctx.db.update(candidates)
+          .set({ currentStage: nextStage as any, updatedAt: new Date() })
+          .where(eq(candidates.id, input.id));
+        await ctx.db.insert(candidateStageHistory).values({
+          candidateId: input.id,
+          fromStage: candidate.currentStage,
+          toStage: nextStage as any,
+          changedBy: ctx.user.id,
+          reason: 'Resume screen passed: all required qualifications met',
+        });
+        movedToStage = nextStage;
+        await dispatchStageEmail(nextStage, candidate.currentStage, {
+          firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
+        }).catch(() => {});
+      } else if (decision === 'advanced') {
+        // Passed, but not in an early stage (or terminal): record only, no stage change.
+        decision = 'flagged';
+      }
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'screen_resume', 'candidates', { candidateId: input.id, decision }).catch(() => {});
+
+      return { decision, reason, movedToStage, requirements, niceToHaves, notes };
     }),
 
   // Store AI-generated interview questions

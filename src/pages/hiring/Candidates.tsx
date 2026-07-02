@@ -422,7 +422,7 @@ export default function Candidates() {
           </Section>
 
           {/* Resume screen — checks resume vs REQUIRED qualifications only */}
-          <ResumeScreenSection key={selected.id} candidateId={selected.id} existingNotes={(selected as any).resumeReviewNotes ?? null} />
+          <ResumeScreenSection key={selected.id} candidateId={selected.id} existingNotes={(selected as any).resumeReviewNotes ?? null} onChanged={refetch} />
 
           {/* HR notes */}
           <Section title="HR Notes">
@@ -482,16 +482,32 @@ export default function Candidates() {
 
 // ── Sub-components ─────────────────────────────────────────
 
-function ResumeScreenSection({ candidateId, existingNotes }: { candidateId: string; existingNotes: string | null }) {
+function ResumeScreenSection({ candidateId, existingNotes, onChanged }: { candidateId: string; existingNotes: string | null; onChanged?: () => void }) {
   const [resumeText, setResumeText] = useState('');
+  const [needsSponsorship, setNeedsSponsorship] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const screen = trpc.candidates.screenResume.useMutation({ onSuccess: (r) => setResult(r) });
+  const screen = trpc.candidates.screenResume.useMutation({
+    onSuccess: (r) => { setResult(r); onChanged?.(); },
+  });
+
+  const req = result?.requirements;
+  const nice = result?.niceToHaves;
 
   return (
-    <Section title="Resume Screen (required qualifications)">
+    <Section title="Resume Screen (requirements gate)">
       <div className="text-xs text-gray-500">
-        Checks the resume against the job's <strong>required</strong> qualifications only and flags any that look missing. It does not reject the candidate.
+        Checks the resume against the job's <strong>required</strong> qualifications. Missing a requirement (or needing sponsorship) auto-rejects; all met moves the candidate forward. <strong>Nice-to-haves</strong> never reject — they just leave a note for the hiring manager.
       </div>
+
+      <label className="flex items-center gap-2 text-xs text-gray-700">
+        <input
+          type="checkbox"
+          checked={needsSponsorship}
+          onChange={(e) => setNeedsSponsorship(e.target.checked)}
+        />
+        Candidate requires international sponsorship (auto-decline)
+      </label>
+
       <textarea
         value={resumeText}
         onChange={(e) => setResumeText(e.target.value)}
@@ -500,40 +516,45 @@ function ResumeScreenSection({ candidateId, existingNotes }: { candidateId: stri
         className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-ls-cyan"
       />
       <button
-        onClick={() => screen.mutate({ id: candidateId, resumeText })}
-        disabled={!resumeText.trim() || screen.isLoading}
+        onClick={() => screen.mutate({ id: candidateId, resumeText, needsSponsorship })}
+        disabled={(!resumeText.trim() && !needsSponsorship) || screen.isLoading}
         className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
       >
-        {screen.isLoading ? 'Screening…' : 'Screen against requirements'}
+        {screen.isLoading ? 'Screening…' : 'Screen resume'}
       </button>
 
       {result && (
         <div className="mt-2 space-y-2">
-          <div className="text-xs font-medium text-gray-800">
-            {result.totalCount === 0
-              ? 'No required qualifications listed on this job description.'
-              : `${result.metCount}/${result.totalCount} required qualifications found`}
-          </div>
-
-          {result.missing && result.missing.length > 0 && (
+          {/* Decision banner */}
+          {result.decision === 'rejected' && (
             <div className="bg-red-50 border border-red-200 rounded p-2">
-              <div className="text-xs font-semibold text-red-700 mb-1">Missing requirements</div>
-              <ul className="list-disc list-inside space-y-0.5">
-                {result.missing.map((m: string, i: number) => (
-                  <li key={i} className="text-xs text-red-700">{m}</li>
-                ))}
-              </ul>
+              <div className="text-xs font-semibold text-red-700">Auto-rejected</div>
+              <div className="text-xs text-red-700 mt-0.5">{result.reason}</div>
             </div>
           )}
-          {result.totalCount > 0 && result.missing.length === 0 && (
-            <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
-              All required qualifications appear to be met.
+          {result.decision === 'advanced' && (
+            <div className="bg-green-50 border border-green-200 rounded p-2">
+              <div className="text-xs font-semibold text-green-700">
+                Passed — moved forward{result.movedToStage ? ` to ${result.movedToStage}` : ''}
+              </div>
+            </div>
+          )}
+          {result.decision === 'flagged' && (
+            <div className="bg-gray-50 border border-gray-200 rounded p-2">
+              <div className="text-xs font-semibold text-gray-700">Screen recorded (no stage change)</div>
+              {result.reason ? <div className="text-xs text-gray-600 mt-0.5">{result.reason}</div> : null}
             </div>
           )}
 
-          {result.requirements && result.requirements.length > 0 && (
+          {/* Requirements (must-haves) */}
+          {req && (
             <div className="space-y-1">
-              {result.requirements.map((r: any, i: number) => (
+              <div className="text-xs font-medium text-gray-800">
+                {req.totalCount === 0
+                  ? 'No required qualifications listed on this job description.'
+                  : `Requirements: ${req.metCount}/${req.totalCount} met`}
+              </div>
+              {req.requirements?.map((r: any, i: number) => (
                 <div key={i} className="text-xs flex gap-1.5">
                   <span className={r.met ? 'text-green-600' : 'text-red-600'}>{r.met ? '✓' : '✗'}</span>
                   <span className="text-gray-700">
@@ -542,6 +563,25 @@ function ResumeScreenSection({ candidateId, existingNotes }: { candidateId: stri
                   </span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Nice-to-haves (never reject) */}
+          {nice && nice.totalCount > 0 && (
+            <div className="border-t border-gray-100 pt-2">
+              <div className="text-xs font-medium text-gray-800 mb-1">Nice-to-haves (note only)</div>
+              {nice.missing.length > 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded p-2">
+                  <div className="text-xs text-amber-700">Missing (noted for hiring manager, not a dealbreaker):</div>
+                  <ul className="list-disc list-inside">
+                    {nice.missing.map((m: string, i: number) => (
+                      <li key={i} className="text-xs text-amber-700">{m}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="text-xs text-green-700">All nice-to-haves met.</div>
+              )}
             </div>
           )}
         </div>
