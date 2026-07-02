@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library } from 'lucide-react';
+import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import ChatDrawer from './ChatDrawer';
@@ -32,6 +32,7 @@ const coreNav = [
   { path: '/hiring/titles', label: 'Titles', icon: Tag },
   { path: '/hiring/values', label: 'Company Values', icon: Award },
   { path: '/hiring/jobs', label: 'Job Descriptions', icon: FileText },
+  { path: '/hiring/postings', label: 'Open Roles', icon: Megaphone },
 ];
 
 function BrandMark({ size = 28 }: { size?: number }) {

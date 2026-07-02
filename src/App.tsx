@@ -19,6 +19,7 @@ import Scorecards from './pages/hiring/Scorecards';
 import Employees from './pages/hiring/Employees';
 import Departments from './pages/hiring/Departments';
 import TaskLibrary from './pages/hiring/TaskLibrary';
+import Postings from './pages/hiring/Postings';
 import Titles from './pages/hiring/Titles';
 
 export default function App() {
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/hiring/titles" element={<Titles />} />
         <Route path="/hiring/values" element={<Values />} />
         <Route path="/hiring/jobs" element={<JobDescriptions />} />
+        <Route path="/hiring/postings" element={<Postings />} />
       </Route>
     </Routes>
   );
