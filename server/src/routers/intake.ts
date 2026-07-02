@@ -98,6 +98,7 @@ export const intakeRouter = router({
   saveDraft: protectedProcedure
     .input(IntakeInput.extend({ id: z.string().uuid().optional() }))
     .mutation(async ({ ctx, input }) => {
+     try {
       const { id, rounds, team, awareness, ...reqFields } = input;
 
       const reqValues = {
@@ -146,6 +147,10 @@ export const intakeRouter = router({
 
       trackActivity(ctx.db, ctx.user.id, 'save_intake', 'job_requisitions', { reqId }).catch(() => {});
       return { id: reqId };
+     } catch (e: any) {
+       const reason = e?.cause?.message ?? e?.message ?? String(e);
+       throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: reason });
+     }
     }),
 
   // Submit for approval: validate, move to Pending Approval, seed the approval chain.
