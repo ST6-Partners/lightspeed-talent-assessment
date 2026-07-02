@@ -14,6 +14,7 @@ import {
   boolean,
   timestamp,
   jsonb,
+  date,
 } from 'drizzle-orm/pg-core';
 import { users } from './core.js';
 
@@ -59,6 +60,21 @@ export const jobRequisitions = pgTable('job_requisitions', {
   salaryMax: integer('salary_max'),
   reason: text('reason'),
   priority: varchar('priority', { length: 20 }).notNull().default('Medium'),
+  // ── Intake form fields (migration 0019) ──
+  reasonType: varchar('reason_type', { length: 40 }),
+  roleChangeNote: text('role_change_note'),
+  workArrangement: varchar('work_arrangement', { length: 20 }).default('On-site'),
+  hybridDays: integer('hybrid_days'),
+  compBasis: jsonb('comp_basis').default([]),
+  variableComp: text('variable_comp'),
+  financeConfirmed: boolean('finance_confirmed').notNull().default(false),
+  interviewRounds: integer('interview_rounds').default(1),
+  questionSource: varchar('question_source', { length: 20 }).default('standard'),
+  teamAvailabilityConfirmed: boolean('team_availability_confirmed').notNull().default(false),
+  timelineTemplate: varchar('timeline_template', { length: 20 }).default('standard'),
+  targetPostDate: date('target_post_date'),
+  targetOfferDate: date('target_offer_date'),
+  approvalMode: varchar('approval_mode', { length: 20 }).notNull().default('explicit'),
   status: requisitionStatusEnum('status').notNull().default('Draft'),
   createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

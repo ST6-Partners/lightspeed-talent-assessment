@@ -22,6 +22,7 @@ import { emailTestRouter } from './routers/emailTest.js';
 import { docIndexRouter } from './routers/docIndex.js';
 // Hiring Pipeline
 import { requisitionsRouter } from './routers/requisitions.js';
+import { intakeRouter } from './routers/intake.js';
 import { jobDescriptionsRouter } from './routers/jobDescriptions.js';
 import { candidatesRouter } from './routers/candidates.js';
 import { insightsRouter } from './routers/insights.js';
@@ -53,6 +54,7 @@ export const appRouter = router({
   docIndex: docIndexRouter,
   // Hiring Pipeline
   requisitions: requisitionsRouter,
+  intake: intakeRouter,
   jobDescriptions: jobDescriptionsRouter,
   candidates: candidatesRouter,
   insights: insightsRouter,

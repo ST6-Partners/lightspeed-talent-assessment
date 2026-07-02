@@ -7,6 +7,7 @@ import AdminSettings from './pages/AdminSettings';
 // Hiring Pipeline
 import HiringDashboard from './pages/hiring/HiringDashboard';
 import Requisitions from './pages/hiring/Requisitions';
+import Intake from './pages/hiring/Intake';
 import JobDescriptions from './pages/hiring/JobDescriptions';
 import Candidates from './pages/hiring/Candidates';
 import Values from './pages/hiring/Values';
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/hiring" element={<HiringDashboard />} />
         <Route path="/hiring/metrics" element={<Insights />} />
         {/* Talent Acquisition */}
+        <Route path="/hiring/intake" element={<Intake />} />
         <Route path="/hiring/requisitions" element={<Requisitions />} />
         <Route path="/hiring/candidates" element={<Candidates />} />
         <Route path="/hiring/assessments" element={<Assessments />} />
