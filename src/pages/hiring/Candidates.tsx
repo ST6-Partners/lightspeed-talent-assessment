@@ -496,7 +496,6 @@ export default function Candidates() {
 
 function ResumeScreenSection({ candidateId, existingNotes, onChanged }: { candidateId: string; existingNotes: string | null; onChanged?: () => void }) {
   const [resumeText, setResumeText] = useState('');
-  const [needsSponsorship, setNeedsSponsorship] = useState(false);
   const [result, setResult] = useState<any>(null);
   const screen = trpc.candidates.screenResume.useMutation({
     onSuccess: (r) => { setResult(r); onChanged?.(); },
@@ -511,15 +510,6 @@ function ResumeScreenSection({ candidateId, existingNotes, onChanged }: { candid
         Checks the resume against the job's <strong>required</strong> qualifications. Missing a requirement (or needing sponsorship) auto-rejects; all met moves the candidate forward. <strong>Nice-to-haves</strong> never reject — they just leave a note for the hiring manager.
       </div>
 
-      <label className="flex items-center gap-2 text-xs text-gray-700">
-        <input
-          type="checkbox"
-          checked={needsSponsorship}
-          onChange={(e) => setNeedsSponsorship(e.target.checked)}
-        />
-        Candidate requires international sponsorship (auto-decline)
-      </label>
-
       <textarea
         value={resumeText}
         onChange={(e) => setResumeText(e.target.value)}
@@ -528,8 +518,8 @@ function ResumeScreenSection({ candidateId, existingNotes, onChanged }: { candid
         className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-ls-cyan"
       />
       <button
-        onClick={() => screen.mutate({ id: candidateId, resumeText, needsSponsorship })}
-        disabled={(!resumeText.trim() && !needsSponsorship) || screen.isLoading}
+        onClick={() => screen.mutate({ id: candidateId, resumeText })}
+        disabled={!resumeText.trim() || screen.isLoading}
         className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
       >
         {screen.isLoading ? 'Screening…' : 'Screen resume'}
