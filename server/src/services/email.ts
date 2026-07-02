@@ -581,3 +581,50 @@ export async function sendApprovalRequest(to: string, d: ApprovalRequestData): P
   const { subject, html } = buildApprovalRequestEmail(d);
   await sendEmail({ to, subject, html, templateId: `intake_approval_${d.roleLabel.replace(/\s+/g, '_').toLowerCase()}` });
 }
+
+
+// ============================================================
+// INTAKE KICKOFF (fires on final approval)
+// ============================================================
+
+export const HIRING_TEAM_INBOX = process.env.HIRING_TEAM_INBOX ?? 'hiring-team@lightspeed.test';
+
+interface KickoffData {
+  department: string;
+  jobTitle?: string;
+  hiringManager: string;
+  summaryRows: Array<{ label: string; value: string }>;
+  team: Array<{ personRef: string; roleInProcess?: string | null; roundRef?: string | null }>;
+  awareness: Array<{ personRef: string }>;
+  rounds: Array<{ roundName: string; lengthMin?: number | null; format?: string | null }>;
+}
+
+export function buildKickoffEmail(d: KickoffData): { subject: string; html: string; text: string } {
+  const role = `${d.department}${d.jobTitle ? ' \u00b7 ' + d.jobTitle : ''}`;
+  const subject = `Hiring kickoff: ${role} — approved & open`;
+  const summary = d.summaryRows.map((r) => `
+    <tr><td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#666;white-space:nowrap;">${r.label}</td>
+    <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:14px;">${r.value}</td></tr>`).join('');
+  const roundsList = d.rounds.length
+    ? '<ul style="margin:6px 0 16px;padding-left:18px;font-size:14px;color:#333;">' +
+      d.rounds.map((r) => `<li>${r.roundName}${r.lengthMin ? ' · ' + r.lengthMin + ' min' : ''}${r.format ? ' · ' + r.format : ''}</li>`).join('') + '</ul>'
+    : p('<em>No interview rounds specified.</em>');
+  const teamList = d.team.length
+    ? '<ul style="margin:6px 0 16px;padding-left:18px;font-size:14px;color:#333;">' +
+      d.team.map((t) => `<li>${t.personRef}${t.roleInProcess ? ' — ' + t.roleInProcess : ''}${t.roundRef ? ' (' + t.roundRef + ')' : ''}</li>`).join('') + '</ul>'
+    : p('<em>No interview team set.</em>');
+  const awarenessList = d.awareness.length
+    ? p('Also kept informed: ' + d.awareness.map((a) => a.personRef).join(', '))
+    : '';
+  const html = wrap(`
+    ${h1('Hiring kickoff')}
+    ${p(`The intake for <strong>${role}</strong> (submitted by ${d.hiringManager}) has been <strong>fully approved</strong>. Here's everything the team needs to run this search.`)}
+    <table style="width:100%;border-collapse:collapse;margin:8px 0 18px;background:#fafbfc;border:1px solid #eee;border-radius:8px;">${summary}</table>
+    <p style="font-size:13px;font-weight:700;color:#33465c;margin:0 0 2px;">Interview plan</p>${roundsList}
+    <p style="font-size:13px;font-weight:700;color:#33465c;margin:0 0 2px;">Hiring team</p>${teamList}
+    ${awarenessList}
+    ${p('<span style="font-size:12px;color:#888;">Candidate self-scheduling link will appear here once the scheduling tool is connected.</span>')}
+  `);
+  const text = `Hiring kickoff — ${role} has been fully approved and is open. Hiring manager: ${d.hiringManager}. Team: ${d.team.map((t) => t.personRef).join(', ') || 'none set'}. Rounds: ${d.rounds.map((r) => r.roundName).join(', ') || 'none'}. Scheduling link pending the scheduling-tool integration.`;
+  return { subject, html, text };
+}

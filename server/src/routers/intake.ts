@@ -12,7 +12,7 @@ import { jobRequisitions } from '../db/schema/hiring.js';
 import { interviewPlan, hiringTeam, awarenessList, approvals } from '../db/schema/intake.js';
 import { inboundEmails } from '../db/schema/email.js';
 import type { DrizzleClient } from '../db.js';
-import { APPROVER_EMAILS, APPROVER_LABELS, buildApprovalRequestEmail, sendApprovalRequest } from '../services/email.js';
+import { APPROVER_EMAILS, APPROVER_LABELS, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 
@@ -63,6 +63,36 @@ async function notifyApprover(db: DrizzleClient, req: any, approval: { id: strin
   }
   try { await sendApprovalRequest(to, data); } catch (err) { console.error('[intake] send failed:', err); }
   return error;
+}
+
+// Fires when the intake is fully approved: assembles the kickoff from the intake
+// data and sends it to the hiring team + awareness list (real send to any
+// email-like refs), and records a copy in the test inbox.
+async function sendKickoff(db: DrizzleClient, req: any): Promise<void> {
+  const [team, awareness, rounds] = await Promise.all([
+    db.select().from(hiringTeam).where(eq(hiringTeam.reqId, req.id)),
+    db.select().from(awarenessList).where(eq(awarenessList.reqId, req.id)),
+    db.select().from(interviewPlan).where(eq(interviewPlan.reqId, req.id)).orderBy(asc(interviewPlan.sortOrder)),
+  ]);
+  const { subject, html, text } = buildKickoffEmail({
+    department: req.department, hiringManager: req.hiringManager,
+    summaryRows: intakeSummaryRows(req), team, awareness, rounds,
+  });
+  // Record one copy into the test inbox (team inbox) so the kickoff is verifiable.
+  try {
+    await db.insert(inboundEmails).values({
+      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+      fromName: 'Lightspeed Hiring',
+      toEmail: HIRING_TEAM_INBOX, subject, body: text, replyTag: 'kickoff', source: 'simulated',
+      raw: { kind: 'kickoff', reqId: req.id },
+    });
+  } catch (err) { console.error('[intake] kickoff inbox record failed:', err); }
+  // Real send to any team/awareness refs that look like email addresses.
+  const emailLike = [...team.map((t: any) => t.personRef), ...awareness.map((a: any) => a.personRef)]
+    .filter((x: string) => /.+@.+\..+/.test(x));
+  for (const to of Array.from(new Set(emailLike))) {
+    try { await sendEmail({ to, subject, html, templateId: 'intake_kickoff' }); } catch (err) { console.error('[intake] kickoff send failed:', err); }
+  }
 }
 
 const RoundInput = z.object({
@@ -315,6 +345,8 @@ const notifyErrors: string[] = [];
       const stillPending = rows.some((r) => r.id !== target.id && r.status === 'pending');
       if (!stillPending) {
         await ctx.db.update(jobRequisitions).set({ status: 'Approved', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
+        const approvedReq = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, target.reqId) });
+        if (approvedReq) await sendKickoff(ctx.db, approvedReq);
       }
       if (stillPending) {
         const reqRow = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, target.reqId) });
@@ -356,7 +388,8 @@ const notifyErrors: string[] = [];
       const stillPending = rows.some((r) => r.id !== nextPending.id && r.status === 'pending');
       if (!stillPending) {
         await ctx.db.update(jobRequisitions).set({ status: 'Approved', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
-        // TODO(slice 3): fire the kickoff email + trigger posting here.
+        const approvedReq = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.reqId) });
+        if (approvedReq) await sendKickoff(ctx.db, approvedReq);
       }
       if (stillPending) {
         const reqRow = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.reqId) });
