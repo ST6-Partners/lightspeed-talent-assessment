@@ -554,21 +554,29 @@ interface ApprovalRequestData {
   department: string;
   hiringManager: string;
   jobTitle?: string;
+  approvalUrl?: string;
+  summaryRows?: Array<{ label: string; value: string }>;
 }
 
 export function buildApprovalRequestEmail(d: ApprovalRequestData): { subject: string; html: string; text: string } {
-  const role = `${d.department}${d.jobTitle ? ' · ' + d.jobTitle : ''}`;
+  const role = `${d.department}${d.jobTitle ? ' \u00b7 ' + d.jobTitle : ''}`;
   const subject = `Approval needed (${d.roleLabel}): ${role} intake`;
+  const summary = (d.summaryRows ?? []).map((r) => `
+    <tr>
+      <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#666;white-space:nowrap;">${r.label}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #f0f0f0;font-size:14px;">${r.value}</td>
+    </tr>`).join('');
   const html = wrap(`
     ${h1('An intake needs your approval')}
-    ${p(`A new hiring intake for <strong>${role}</strong> has been submitted by <strong>${d.hiringManager}</strong> and needs <strong>${d.roleLabel}</strong> approval.`)}
-    ${p('Open the Talent Assessment app, go to <strong>Intake</strong>, and review the Approval chain to approve or reject.')}
+    ${p(`A new hiring intake for <strong>${role}</strong> has been submitted by <strong>${d.hiringManager}</strong> and needs your <strong>${d.roleLabel}</strong> approval.`)}
+    ${summary ? `<table style="width:100%;border-collapse:collapse;margin:8px 0 20px;background:#fafbfc;border:1px solid #eee;border-radius:8px;">${summary}</table>` : ''}
+    ${d.approvalUrl ? button('Review & approve this intake', d.approvalUrl) : p('Open the Talent Assessment app \u2192 Intake to review and approve.')}
+    ${d.approvalUrl ? p('<span style="font-size:12px;color:#888;">This opens a secure page with the full intake where you can approve or reject in one click \u2014 no login required.</span>') : ''}
   `);
-  const text = `A new hiring intake for ${role}, submitted by ${d.hiringManager}, needs ${d.roleLabel} approval. Open the Talent Assessment app → Intake → Approval chain to approve or reject.`;
+  const text = `A new hiring intake for ${role}, submitted by ${d.hiringManager}, needs your ${d.roleLabel} approval.${d.approvalUrl ? ' Review & approve: ' + d.approvalUrl : ' Open the app \u2192 Intake to approve.'}`;
   return { subject, html, text };
 }
 
-/** Send an approval-request email to a single approver (real send when configured). */
 export async function sendApprovalRequest(to: string, d: ApprovalRequestData): Promise<void> {
   const { subject, html } = buildApprovalRequestEmail(d);
   await sendEmail({ to, subject, html, templateId: `intake_approval_${d.roleLabel.replace(/\s+/g, '_').toLowerCase()}` });
