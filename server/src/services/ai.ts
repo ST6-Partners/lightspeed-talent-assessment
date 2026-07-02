@@ -593,10 +593,18 @@ export function standardQuestionSet(department: string): InterviewQuestion[] {
 
 // Generate the fixed standard set for a NEW/changed role via Claude (falls back to
 // the canonical set). Candidate-agnostic — no tailored 30%.
-export async function generateStandardQuestions(input: { department: string; jobTitle: string }): Promise<InterviewQuestion[]> {
+export async function generateStandardQuestions(input: {
+  department: string; jobTitle: string;
+  jdSummary?: string; jdResponsibilities?: string; jdQualifications?: string;
+}): Promise<InterviewQuestion[]> {
   if (SANDBOX) { console.log(`[AI SANDBOX] generateStandardQuestions | ${input.jobTitle}`); return standardQuestionSet(input.department); }
-  const system = `You are an expert interviewer at Lightspeed Systems (K-12 edtech). Core values: ${LIGHTSPEED_VALUES.join(', ')}. Generate ONLY the FIXED standard interview question set that is asked of EVERY candidate for this role (this is the "70%"). Do NOT include candidate-specific or tailored questions — those are added later. Keep them role-appropriate but candidate-agnostic. Return ONLY a JSON array; each item {category ("Standard"|"Values"|"Behavioral"), question, rationale}. 7–9 questions.`;
-  const user = `Role: ${input.jobTitle} in ${input.department}.`;
+  const system = `You are an expert interviewer at Lightspeed Systems (K-12 edtech). Core values: ${LIGHTSPEED_VALUES.join(', ')}. Generate ONLY the FIXED standard interview question set asked of EVERY candidate for this role (the "70%"). Curate them from the job description provided. Do NOT include candidate-specific or tailored questions — those are added later. Keep them role-appropriate but candidate-agnostic. Return ONLY a JSON array; each item {category ("Standard"|"Values"|"Behavioral"), question, rationale}. 7–9 questions.`;
+  const jd = [
+    input.jdSummary ? `Summary: ${input.jdSummary}` : '',
+    input.jdResponsibilities ? `Responsibilities:\n${input.jdResponsibilities}` : '',
+    input.jdQualifications ? `Required qualifications:\n${input.jdQualifications}` : '',
+  ].filter(Boolean).join('\n\n');
+  const user = `Role: ${input.jobTitle} in ${input.department}.${jd ? `\n\nJob description:\n${jd}` : ''}\n\nWrite the standard question set curated from this description.`;
   try { return JSON.parse(await callClaude(system, user)) as InterviewQuestion[]; }
   catch (err) { console.error('[AI] generateStandardQuestions failed:', err); return standardQuestionSet(input.department); }
 }

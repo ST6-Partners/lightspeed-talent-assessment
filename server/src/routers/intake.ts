@@ -5,7 +5,7 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq, desc, asc } from 'drizzle-orm';
+import { eq, desc, asc, and, ne, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure, publicProcedure } from '../trpc.js';
 import { jobRequisitions } from '../db/schema/hiring.js';
@@ -103,33 +103,54 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
 // the role (internal now, external in 3 days), then send the kickoff.
 async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> {
   let jdTitle: string | undefined;
-  try {
-    const jd = await generateRoleJD({
-      department: req.department, workArrangement: req.workArrangement,
-      location: req.location, salaryMin: req.salaryMin, salaryMax: req.salaryMax,
-    });
-    jdTitle = jd.jobTitle;
-    await db.insert(jobDescriptions).values({
-      reqId: req.id, jobTitle: jd.jobTitle, summary: jd.summary,
-      responsibilities: jd.responsibilities, requiredQualifications: jd.requiredQualifications,
-      preferredQualifications: jd.preferredQualifications, status: 'Draft',
-    });
-  } catch (err) { console.error('[intake] JD generation failed:', err); }
-
-  // Only the fixed 70% standard set here. New/changed JD (questionSource
-  // 'ai_generate') -> generate a fresh standard set; otherwise reuse the
-  // canonical standard set (same questions as before). The tailored 30% is
-  // curated + emailed to the interviewer later, after EPP/values review.
   let questions: Array<{ category?: string; question: string }> = [];
   try {
-    if (req.questionSource === 'ai_generate') {
-      questions = await generateStandardQuestions({ department: req.department, jobTitle: jdTitle ?? `${req.department} Position` });
-      await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'ai' });
-    } else {
-      questions = standardQuestionSet(req.department);
-      await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'standard' });
+    // Auto-detect: is there already a JD for this department (another req)?
+    const sameDeptReqs = await db.select().from(jobRequisitions)
+      .where(and(eq(jobRequisitions.department, req.department), ne(jobRequisitions.id, req.id)));
+    const otherReqIds = sameDeptReqs.map((r: any) => r.id);
+    let existingJd: any = null;
+    if (otherReqIds.length) {
+      existingJd = (await db.select().from(jobDescriptions)
+        .where(inArray(jobDescriptions.reqId, otherReqIds))
+        .orderBy(desc(jobDescriptions.createdAt)).limit(1))[0] ?? null;
     }
-  } catch (err) { console.error('[intake] question generation failed:', err); }
+    // Treat as NEW when the submitter flagged a changed role, or no existing JD found.
+    const isNew = req.questionSource === 'ai_generate' || !existingJd;
+
+    if (!isNew && existingJd) {
+      // REUSE the existing department JD + its questions (same role -> same questions).
+      jdTitle = existingJd.jobTitle;
+      await db.insert(jobDescriptions).values({
+        reqId: req.id, jobTitle: existingJd.jobTitle, summary: existingJd.summary,
+        responsibilities: existingJd.responsibilities, requiredQualifications: existingJd.requiredQualifications,
+        preferredQualifications: existingJd.preferredQualifications, eppValues: existingJd.eppValues,
+        workSampleInstructions: existingJd.workSampleInstructions, status: 'Draft',
+      });
+      const prevQ = (await db.select().from(interviewQuestions)
+        .where(eq(interviewQuestions.reqId, existingJd.reqId))
+        .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0];
+      questions = (prevQ?.questions as any[]) ?? standardQuestionSet(req.department);
+      await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'reused' });
+    } else {
+      // NEW/changed role: generate a JD, then curate the standard questions FROM the JD text.
+      const jd = await generateRoleJD({
+        department: req.department, workArrangement: req.workArrangement,
+        location: req.location, salaryMin: req.salaryMin, salaryMax: req.salaryMax,
+      });
+      jdTitle = jd.jobTitle;
+      await db.insert(jobDescriptions).values({
+        reqId: req.id, jobTitle: jd.jobTitle, summary: jd.summary,
+        responsibilities: jd.responsibilities, requiredQualifications: jd.requiredQualifications,
+        preferredQualifications: jd.preferredQualifications, status: 'Draft',
+      });
+      questions = await generateStandardQuestions({
+        department: req.department, jobTitle: jd.jobTitle,
+        jdSummary: jd.summary, jdResponsibilities: jd.responsibilities, jdQualifications: jd.requiredQualifications,
+      });
+      await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'ai' });
+    }
+  } catch (err) { console.error('[intake] JD/question generation failed:', err); }
 
   const externalPostDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   try {
@@ -342,6 +363,16 @@ const notifyErrors: string[] = [];
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_requisitions', 'delete');
       trackActivity(ctx.db, ctx.user.id, 'delete_intake', 'job_requisitions', { reqId: input.id }).catch(() => {});
       return { id: input.id };
+    }),
+
+  // Standard interview questions for a requisition (shown on its JD).
+  questionsForReq: protectedProcedure
+    .input(z.object({ reqId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const row = (await ctx.db.select().from(interviewQuestions)
+        .where(eq(interviewQuestions.reqId, input.reqId))
+        .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0];
+      return { questions: (row?.questions as any[]) ?? [], source: row?.source ?? null };
     }),
 
   // ── Public, no-login approval via a tokenized link (the approval row id) ──
