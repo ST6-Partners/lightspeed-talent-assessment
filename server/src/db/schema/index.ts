@@ -60,4 +60,4 @@ export { assessmentTasks, taskDifficultyEnum, taskStatusEnum } from './assessmen
 export { assessmentPackages } from './assessmentPackages.js';
 
 // Intake Form child tables (migration 0019)
-export { interviewPlan, hiringTeam, awarenessList, approvals } from './intake.js';
+export { interviewPlan, hiringTeam, awarenessList, approvals, interviewQuestions } from './intake.js';

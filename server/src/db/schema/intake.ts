@@ -4,7 +4,7 @@
 // awareness_list, approvals.
 // ============================================================
 
-import { pgTable, uuid, varchar, text, integer, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, integer, timestamp, jsonb } from 'drizzle-orm/pg-core';
 import { jobRequisitions } from './hiring.js';
 
 export const interviewPlan = pgTable('interview_plan', {
@@ -43,5 +43,13 @@ export const approvals = pgTable('approvals', {
   status: varchar('status', { length: 20 }).notNull().default('pending'),
   note: text('note'),
   actedAt: timestamp('acted_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const interviewQuestions = pgTable('interview_questions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  reqId: uuid('req_id').references(() => jobRequisitions.id, { onDelete: 'cascade' }).notNull(),
+  questions: jsonb('questions').default([]).notNull(),
+  source: varchar('source', { length: 20 }).notNull().default('standard'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

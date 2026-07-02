@@ -12,6 +12,9 @@ import { jobRequisitions } from '../db/schema/hiring.js';
 import { interviewPlan, hiringTeam, awarenessList, approvals } from '../db/schema/intake.js';
 import { inboundEmails } from '../db/schema/email.js';
 import type { DrizzleClient } from '../db.js';
+import { jobDescriptions } from '../db/schema/hiring.js';
+import { interviewQuestions } from '../db/schema/intake.js';
+import { generateRoleJD, generateRoleQuestions } from '../services/ai.js';
 import { APPROVER_EMAILS, APPROVER_LABELS, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
@@ -68,7 +71,7 @@ async function notifyApprover(db: DrizzleClient, req: any, approval: { id: strin
 // Fires when the intake is fully approved: assembles the kickoff from the intake
 // data and sends it to the hiring team + awareness list (real send to any
 // email-like refs), and records a copy in the test inbox.
-async function sendKickoff(db: DrizzleClient, req: any): Promise<void> {
+async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: string; questions?: Array<{ category?: string; question: string }>; externalPostDate?: string }): Promise<void> {
   const [team, awareness, rounds] = await Promise.all([
     db.select().from(hiringTeam).where(eq(hiringTeam.reqId, req.id)),
     db.select().from(awarenessList).where(eq(awarenessList.reqId, req.id)),
@@ -77,6 +80,7 @@ async function sendKickoff(db: DrizzleClient, req: any): Promise<void> {
   const { subject, html, text } = buildKickoffEmail({
     department: req.department, hiringManager: req.hiringManager,
     summaryRows: intakeSummaryRows(req), team, awareness, rounds,
+    jdTitle: extras?.jdTitle, questions: extras?.questions, externalPostDate: extras?.externalPostDate,
   });
   // Record one copy into the test inbox (team inbox) so the kickoff is verifiable.
   try {
@@ -93,6 +97,39 @@ async function sendKickoff(db: DrizzleClient, req: any): Promise<void> {
   for (const to of Array.from(new Set(emailLike))) {
     try { await sendEmail({ to, subject, html, templateId: 'intake_kickoff' }); } catch (err) { console.error('[intake] kickoff send failed:', err); }
   }
+}
+
+// On final approval: generate a draft JD, generate role interview questions, post
+// the role (internal now, external in 3 days), then send the kickoff.
+async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> {
+  let jdTitle: string | undefined;
+  try {
+    const jd = await generateRoleJD({
+      department: req.department, workArrangement: req.workArrangement,
+      location: req.location, salaryMin: req.salaryMin, salaryMax: req.salaryMax,
+    });
+    jdTitle = jd.jobTitle;
+    await db.insert(jobDescriptions).values({
+      reqId: req.id, jobTitle: jd.jobTitle, summary: jd.summary,
+      responsibilities: jd.responsibilities, requiredQualifications: jd.requiredQualifications,
+      preferredQualifications: jd.preferredQualifications, status: 'Draft',
+    });
+  } catch (err) { console.error('[intake] JD generation failed:', err); }
+
+  let questions: Array<{ category?: string; question: string }> = [];
+  try {
+    questions = await generateRoleQuestions({ department: req.department, jobTitle: jdTitle ?? `${req.department} Position` });
+    await db.insert(interviewQuestions).values({
+      reqId: req.id, questions, source: req.questionSource === 'ai_generate' ? 'ai' : 'standard',
+    });
+  } catch (err) { console.error('[intake] question generation failed:', err); }
+
+  const externalPostDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  try {
+    await db.update(jobRequisitions).set({ status: 'Open', updatedAt: new Date() }).where(eq(jobRequisitions.id, req.id));
+  } catch (err) { console.error('[intake] posting (status Open) failed:', err); }
+
+  await sendKickoff(db, req, { jdTitle, questions, externalPostDate });
 }
 
 const RoundInput = z.object({
@@ -346,7 +383,7 @@ const notifyErrors: string[] = [];
       if (!stillPending) {
         await ctx.db.update(jobRequisitions).set({ status: 'Approved', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
         const approvedReq = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, target.reqId) });
-        if (approvedReq) await sendKickoff(ctx.db, approvedReq);
+        if (approvedReq) await runKickoffAndPosting(ctx.db, approvedReq);
       }
       if (stillPending) {
         const reqRow = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, target.reqId) });
@@ -389,7 +426,7 @@ const notifyErrors: string[] = [];
       if (!stillPending) {
         await ctx.db.update(jobRequisitions).set({ status: 'Approved', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
         const approvedReq = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.reqId) });
-        if (approvedReq) await sendKickoff(ctx.db, approvedReq);
+        if (approvedReq) await runKickoffAndPosting(ctx.db, approvedReq);
       }
       if (stillPending) {
         const reqRow = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.reqId) });

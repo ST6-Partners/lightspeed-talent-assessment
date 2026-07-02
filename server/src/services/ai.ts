@@ -538,3 +538,61 @@ External reference material: ${external || 'none gathered (no compliant referenc
     return placeholderReference(input);
   }
 }
+
+
+// ============================================================
+// ROLE-LEVEL GENERATION (fires when an intake is approved)
+// ============================================================
+
+export interface RoleJD {
+  jobTitle: string;
+  summary: string;
+  responsibilities: string;
+  requiredQualifications: string;
+  preferredQualifications: string;
+}
+
+function templateJD(title: string, department: string): RoleJD {
+  return {
+    jobTitle: title,
+    summary: `Lightspeed Systems is hiring a ${title} to join our ${department} team. [Draft auto-generated from the intake — review and refine before publishing.]`,
+    responsibilities: '- Own key deliverables for the team\n- Collaborate across functions to ship outcomes\n- Bring an ownership mindset to day-to-day work',
+    requiredQualifications: `- Relevant experience in ${department}\n- Strong communication and follow-through\n- Alignment with Lightspeed's values`,
+    preferredQualifications: '- Prior K-12 or edtech experience\n- Comfort using AI tools in daily work',
+  };
+}
+
+export async function generateRoleJD(input: {
+  department: string; seniority?: string | null; workArrangement?: string | null;
+  location?: string | null; salaryMin?: number | null; salaryMax?: number | null;
+}): Promise<RoleJD> {
+  const title = `${input.department}${input.seniority ? ' ' + input.seniority : ''}`.trim() + (input.seniority ? '' : ' Position');
+  if (SANDBOX) { console.log(`[AI SANDBOX] generateRoleJD | ${title}`); return templateJD(title, input.department); }
+  const system = `You write concise, inclusive job descriptions for Lightspeed Systems, a K-12 edtech company. Core values: ${LIGHTSPEED_VALUES.join(', ')}. Return ONLY JSON with keys: jobTitle, summary, responsibilities, requiredQualifications, preferredQualifications. The list fields should be short newline-separated bullets using "- ".`;
+  const user = `Draft a job description for a ${title} in ${input.department}. Work arrangement: ${input.workArrangement ?? 'On-site'}${input.location ? ', ' + input.location : ''}.${input.salaryMin && input.salaryMax ? ` Salary band $${input.salaryMin}–$${input.salaryMax}.` : ''} Keep it realistic and concise.`;
+  try {
+    const jd = JSON.parse(await callClaude(system, user));
+    return { jobTitle: jd.jobTitle || title, summary: jd.summary || '', responsibilities: jd.responsibilities || '', requiredQualifications: jd.requiredQualifications || '', preferredQualifications: jd.preferredQualifications || '' };
+  } catch (err) { console.error('[AI] generateRoleJD failed:', err); return templateJD(title, input.department); }
+}
+
+function standardRoleQuestions(department: string): InterviewQuestion[] {
+  return [
+    { category: 'Standard', question: 'Walk me through your background and what drew you to this role.', rationale: 'Consistent opener across candidates.' },
+    { category: 'Standard', question: 'Tell me about a time you owned a difficult problem end to end.', rationale: 'Ownership — a Lightspeed value.' },
+    { category: 'Standard', question: 'Describe a time you collaborated across teams to ship something.', rationale: 'Collaboration.' },
+    { category: 'Standard', question: 'Tell me about a time you received tough feedback and what you did with it.', rationale: 'Coachability.' },
+    { category: 'Values', question: 'How do you keep the customer — educators and students — in mind day to day?', rationale: 'Customer focus.' },
+    { category: 'Behavioral', question: 'Tell me about a time you had to move fast with incomplete information.', rationale: 'Drive / adaptability.' },
+    { category: 'Role-Specific', question: `What does great work look like in a ${department} role, and how do you measure it?`, rationale: 'Role calibration.' },
+    { category: 'Role-Specific', question: `Describe a recent ${department} project you're proud of and your specific contribution.`, rationale: 'Depth in the function.' },
+  ];
+}
+
+export async function generateRoleQuestions(input: { department: string; jobTitle: string }): Promise<InterviewQuestion[]> {
+  if (SANDBOX) { console.log(`[AI SANDBOX] generateRoleQuestions | ${input.jobTitle}`); return standardRoleQuestions(input.department); }
+  const system = `You are an expert interviewer at Lightspeed Systems (K-12 edtech). Core values: ${LIGHTSPEED_VALUES.join(', ')}. Generate a ROLE-LEVEL interview question set: ~70% standard questions asked of every candidate for this role, ~30% role-specific. Return ONLY a JSON array; each item {category ("Standard"|"Role-Specific"|"Values"|"Behavioral"), question, rationale}. 10–12 questions.`;
+  const user = `Role: ${input.jobTitle} in ${input.department}.`;
+  try { return JSON.parse(await callClaude(system, user)) as InterviewQuestion[]; }
+  catch (err) { console.error('[AI] generateRoleQuestions failed:', err); return standardRoleQuestions(input.department); }
+}
