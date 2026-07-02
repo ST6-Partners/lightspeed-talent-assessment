@@ -11,6 +11,7 @@ import { router, protectedProcedure, publicProcedure } from '../trpc.js';
 import { jobRequisitions } from '../db/schema/hiring.js';
 import { interviewPlan, hiringTeam, awarenessList, approvals } from '../db/schema/intake.js';
 import { inboundEmails } from '../db/schema/email.js';
+import type { DrizzleClient } from '../db.js';
 import { APPROVER_EMAILS, APPROVER_LABELS, buildApprovalRequestEmail, sendApprovalRequest } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
@@ -39,6 +40,29 @@ function intakeSummaryRows(req: any): Array<{ label: string; value: string }> {
   ];
   if (req.variableComp) rows.push({ label: 'Variable comp', value: req.variableComp });
   return rows;
+}
+
+// Email + test-inbox record for ONE approver (their step's tokenized review link).
+async function notifyApprover(db: DrizzleClient, req: any, approval: { id: string; approverRole: string }): Promise<string | null> {
+  const to = APPROVER_EMAILS[approval.approverRole] ?? APPROVER_EMAILS.hr;
+  const roleLabel = APPROVER_LABELS[approval.approverRole] ?? approval.approverRole;
+  const approvalUrl = `${appBaseUrl()}/approve/${approval.id}`;
+  const data = { roleLabel, department: req.department, hiringManager: req.hiringManager, approvalUrl, summaryRows: intakeSummaryRows(req) };
+  const { subject, text } = buildApprovalRequestEmail(data);
+  let error: string | null = null;
+  try {
+    await db.insert(inboundEmails).values({
+      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+      fromName: 'Lightspeed Hiring',
+      toEmail: to, subject, body: text, replyTag: approval.approverRole, source: 'simulated',
+      raw: { kind: 'intake_approval', approvalId: approval.id, approvalUrl },
+    });
+  } catch (err: any) {
+    error = `${roleLabel}: ${err?.cause?.message ?? err?.message ?? String(err)}`;
+    console.error('[intake] inbox record failed:', err);
+  }
+  try { await sendApprovalRequest(to, data); } catch (err) { console.error('[intake] send failed:', err); }
+  return error;
 }
 
 const RoundInput = z.object({
@@ -215,41 +239,16 @@ export const intakeRouter = router({
           actedAt: s.step === 1 ? new Date() : null,
         })),
       ).returning();
-      const approvalIdByRole: Record<string, string> = {};
-      for (const a of insertedApprovals) approvalIdByRole[a.approverRole] = a.id;
-      const summaryRows = intakeSummaryRows(req);
-
-      // Notify each needed department (pending approvers) that an intake awaits
-      // their approval — real send via SendGrid, plus a copy dropped into the
-      // test inbox (one per department) so it's verifiable without live mail.
-      const pendingApprovers = APPROVAL_STEPS.filter((s) => s.step !== 1);
-      const notifyErrors: string[] = [];
-      for (const s of pendingApprovers) {
-        const to = APPROVER_EMAILS[s.approverRole] ?? APPROVER_EMAILS.hr;
-        const roleLabel = APPROVER_LABELS[s.approverRole] ?? s.approverRole;
-        const approvalId = approvalIdByRole[s.approverRole];
-        const approvalUrl = approvalId ? `${appBaseUrl()}/approve/${approvalId}` : undefined;
-        const data = { roleLabel, department: req.department, hiringManager: req.hiringManager, approvalUrl, summaryRows };
-        const { subject, text } = buildApprovalRequestEmail(data);
-        // Record into the test inbox FIRST, so it shows even if the real send fails.
-        try {
-          await ctx.db.insert(inboundEmails).values({
-            fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
-            fromName: 'Lightspeed Hiring',
-            toEmail: to,
-            subject,
-            body: text,
-            replyTag: s.approverRole,
-            source: 'simulated',
-            raw: approvalId ? { kind: 'intake_approval', approvalId, approvalUrl } : null,
-          });
-        } catch (err: any) {
-          const reason = err?.cause?.message ?? err?.message ?? String(err);
-          notifyErrors.push(`${roleLabel}: ${reason}`);
-          console.error('[intake] inbox record failed:', err);
-        }
-        // Real send is best-effort and never throws.
-        try { await sendApprovalRequest(to, data); } catch (err) { console.error('[intake] send failed:', err); }
+const notifyErrors: string[] = [];
+      // Sequential: notify ONLY the first pending approver (ELT). Each later
+      // approval triggers the next person\'s email, so nobody is emailed before
+      // they can act.
+      const firstPending = insertedApprovals
+        .filter((a) => a.status === 'pending')
+        .sort((a, b) => a.step - b.step)[0];
+      if (firstPending) {
+        const e = await notifyApprover(ctx.db, req, firstPending);
+        if (e) notifyErrors.push(e);
       }
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_requisitions', 'update');
@@ -317,6 +316,11 @@ export const intakeRouter = router({
       if (!stillPending) {
         await ctx.db.update(jobRequisitions).set({ status: 'Approved', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
       }
+      if (stillPending) {
+        const reqRow = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, target.reqId) });
+        const upNext = rows.filter((r) => r.id !== target.id && r.status === 'pending').sort((a, b) => a.step - b.step)[0];
+        if (reqRow && upNext) await notifyApprover(ctx.db, reqRow, upNext);
+      }
       return { ok: true as const, fullyApproved: !stillPending, roleLabel: APPROVER_LABELS[target.approverRole] ?? target.approverRole };
     }),
 
@@ -353,6 +357,11 @@ export const intakeRouter = router({
       if (!stillPending) {
         await ctx.db.update(jobRequisitions).set({ status: 'Approved', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
         // TODO(slice 3): fire the kickoff email + trigger posting here.
+      }
+      if (stillPending) {
+        const reqRow = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.reqId) });
+        const upNext = rows.filter((r) => r.id !== nextPending.id && r.status === 'pending').sort((a, b) => a.step - b.step)[0];
+        if (reqRow && upNext) await notifyApprover(ctx.db, reqRow, upNext);
       }
       await auditChange(ctx.db, ctx.user.id, input.reqId, 'job_requisitions', 'update');
       trackActivity(ctx.db, ctx.user.id, 'approve_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch(() => {});
