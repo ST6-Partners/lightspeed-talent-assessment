@@ -206,4 +206,50 @@ export const intakeRouter = router({
       trackActivity(ctx.db, ctx.user.id, 'delete_intake', 'job_requisitions', { reqId: input.id }).catch(() => {});
       return { id: input.id };
     }),
+
+  // Approve the current step in the sequence. Enforces order (must be the
+  // lowest pending step). Finance approval sets finance_confirmed; the final
+  // approval moves the intake to Approved (slice 3 fires the kickoff here).
+  approve: protectedProcedure
+    .input(z.object({ reqId: z.string().uuid(), step: z.number().int(), note: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const rows = await ctx.db.select().from(approvals).where(eq(approvals.reqId, input.reqId)).orderBy(asc(approvals.step));
+      if (!rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'No approval chain — submit the intake first.' });
+      const nextPending = rows.find((r) => r.status === 'pending');
+      if (!nextPending || nextPending.step !== input.step) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That is not the current pending approval step.' });
+      }
+      await ctx.db.update(approvals)
+        .set({ status: 'approved', approverRef: ctx.user.id, note: input.note ?? nextPending.note, actedAt: new Date() })
+        .where(eq(approvals.id, nextPending.id));
+
+      if (nextPending.approverRole === 'finance') {
+        await ctx.db.update(jobRequisitions).set({ financeConfirmed: true, updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
+      }
+      const stillPending = rows.some((r) => r.id !== nextPending.id && r.status === 'pending');
+      if (!stillPending) {
+        await ctx.db.update(jobRequisitions).set({ status: 'Approved', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
+        // TODO(slice 3): fire the kickoff email + trigger posting here.
+      }
+      await auditChange(ctx.db, ctx.user.id, input.reqId, 'job_requisitions', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'approve_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch(() => {});
+      return { id: input.reqId, fullyApproved: !stillPending };
+    }),
+
+  // Reject a step: records the note and sends the intake back to Draft.
+  // Re-submitting re-seeds the chain from the start.
+  reject: protectedProcedure
+    .input(z.object({ reqId: z.string().uuid(), step: z.number().int(), note: z.string().min(1, 'A reason is required to reject.') }))
+    .mutation(async ({ ctx, input }) => {
+      const rows = await ctx.db.select().from(approvals).where(eq(approvals.reqId, input.reqId)).orderBy(asc(approvals.step));
+      const target = rows.find((r) => r.step === input.step);
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND' });
+      await ctx.db.update(approvals)
+        .set({ status: 'rejected', approverRef: ctx.user.id, note: input.note, actedAt: new Date() })
+        .where(eq(approvals.id, target.id));
+      await ctx.db.update(jobRequisitions).set({ status: 'Draft', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
+      await auditChange(ctx.db, ctx.user.id, input.reqId, 'job_requisitions', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'reject_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch(() => {});
+      return { id: input.reqId };
+    }),
 });
