@@ -3,7 +3,7 @@
 // Admin-only. Send a test email; receive replies / simulated mail.
 // ============================================================
 
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { trpc } from '../../lib/trpc';
 
 const c = {
@@ -37,6 +37,7 @@ export default function EmailTestPanel() {
   const cfg = trpc.emailTest.config.useQuery();
   const inbox = trpc.emailTest.listInbound.useQuery(undefined, { refetchInterval: 5000 });
   const [inboxFilter, setInboxFilter] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const toAddrs: string[] = Array.from(new Set((inbox.data ?? []).map((m: any) => m.toEmail).filter(Boolean))) as string[];
   const inboxRows = (inbox.data ?? []).filter((m: any) => !inboxFilter || m.toEmail === inboxFilter);
 
@@ -147,16 +148,21 @@ export default function EmailTestPanel() {
               </tr>
             </thead>
             <tbody>
-              {inboxRows.map((m: any) => (
-                <tr key={m.id}>
+              {inboxRows.map((m: any) => {
+                const isOpen = openId === m.id;
+                const isHtml = (m.body || '').trim().startsWith('<');
+                return (
+                <Fragment key={m.id}>
+                <tr onClick={() => setOpenId(isOpen ? null : m.id)} style={{ cursor: 'pointer', background: isOpen ? '#f3f4f6' : undefined }}>
                   <td style={c.td}>{fmt(m.receivedAt)}</td>
                   <td style={c.td}>{m.fromName ? `${m.fromName} ` : ''}&lt;{m.fromEmail}&gt;</td>
                   <td style={c.td}>{m.toEmail || '—'}</td>
-                  <td style={c.td}>{m.subject}</td>
-                  <td style={{ ...c.td, maxWidth: 280, color: '#4b5563' }}>{(m.body || '').slice(0, 160)}</td>
+                  <td style={{ ...c.td, color: '#1d4ed8', fontWeight: 600 }}>{m.subject}</td>
+                  <td style={{ ...c.td, maxWidth: 280, color: '#4b5563' }}>{(m.body || '').replace(/<[^>]+>/g, ' ').slice(0, 160)}</td>
                   <td style={c.td}><span style={{ ...c.code, color: m.source === 'webhook' ? '#1d4ed8' : '#92400e' }}>{m.source}</span></td>
-                  <td style={c.td}>
+                  <td style={c.td} onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6 }}>
+                      <button style={c.btnGhost} onClick={() => setOpenId(isOpen ? null : m.id)}>{isOpen ? 'Hide' : 'View'}</button>
                       {m.raw?.approvalUrl && (
                         <a href={m.raw.approvalUrl} target="_blank" rel="noreferrer" style={{ ...c.btnGhost, textDecoration: 'none', color: '#1d4ed8', borderColor: '#bfd4ff' }}>Open &amp; review</a>
                       )}
@@ -165,7 +171,21 @@ export default function EmailTestPanel() {
                     </div>
                   </td>
                 </tr>
-              ))}
+                {isOpen && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '12px 16px', background: '#f9fafb', borderBottom: '1px solid #eee' }}>
+                      <div style={{ fontWeight: 700, marginBottom: 8, color: '#111' }}>{m.subject}</div>
+                      {isHtml ? (
+                        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, maxHeight: 500, overflow: 'auto' }} dangerouslySetInnerHTML={{ __html: m.body }} />
+                      ) : (
+                        <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{m.body || '(no body)'}</div>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}
