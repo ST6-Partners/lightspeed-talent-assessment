@@ -176,6 +176,13 @@
       "when": 1900000002000,
       "tag": "0023_interview_questions",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1900000003000,
+      "tag": "0024_intake_base_jd",
+      "breakpoints": true
     }
   ]
 }

@@ -75,6 +75,7 @@ export const jobRequisitions = pgTable('job_requisitions', {
   targetPostDate: date('target_post_date'),
   targetOfferDate: date('target_offer_date'),
   approvalMode: varchar('approval_mode', { length: 20 }).notNull().default('explicit'),
+  baseJdId: uuid('base_jd_id'),
   status: requisitionStatusEnum('status').notNull().default('Draft'),
   createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

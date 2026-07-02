@@ -27,7 +27,7 @@ interface Person { personRef: string; roleInProcess?: string; roundRef?: string;
 interface Aware { personRef: string; source: 'auto' | 'manual'; }
 
 const EMPTY = {
-  reasonType: '', roleChangeNote: '',
+  reasonType: '', roleChangeNote: '', baseJdId: '',
   department: '', hiringManager: '', numOpenings: 1, priority: 'Medium',
   employmentType: 'Full-Time', location: '', workArrangement: 'On-site', hybridDays: '',
   salaryMin: '', salaryMax: '', compBasis: [] as string[], variableComp: '',
@@ -52,12 +52,17 @@ export default function Intake() {
 
   const { data: intakes, refetch } = trpc.intake.list.useQuery();
   const { data: full, refetch: refetchFull } = trpc.intake.get.useQuery({ id: editingId! }, { enabled: !!editingId });
+  const { data: allReqs } = trpc.requisitions.list.useQuery();
+  const { data: allJds } = trpc.jobDescriptions.list.useQuery(undefined);
+  const deptByReq: Record<string, string> = {};
+  for (const r of (allReqs ?? []) as any[]) deptByReq[r.id] = r.department;
+  const jdOptions = ((allJds ?? []) as any[]).filter((jd) => form.department && deptByReq[jd.reqId] === form.department);
 
   useEffect(() => {
     if (full && editingId) {
       const f: any = full;
       setForm({
-        reasonType: f.reasonType ?? '', roleChangeNote: f.roleChangeNote ?? '',
+        reasonType: f.reasonType ?? '', roleChangeNote: f.roleChangeNote ?? '', baseJdId: f.baseJdId ?? '',
         department: f.department ?? '', hiringManager: f.hiringManager ?? '',
         numOpenings: f.numOpenings ?? 1, priority: f.priority ?? 'Medium',
         employmentType: f.employmentType ?? 'Full-Time', location: f.location ?? '',
@@ -113,6 +118,7 @@ export default function Intake() {
   const buildPayload = () => ({
     ...(editingId ? { id: editingId } : {}),
     reasonType: form.reasonType ? (form.reasonType as any) : undefined,
+    baseJdId: form.baseJdId || null,
     roleChangeNote: form.roleChangeNote || undefined,
     department: form.department, hiringManager: form.hiringManager,
     numOpenings: Number(form.numOpenings) || 1, priority: form.priority as any,
@@ -257,6 +263,14 @@ export default function Intake() {
                 <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className={inp}>
                   {['Low', 'Medium', 'High', 'Critical'].map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
+              </div>
+              <div className="col-span-2">
+                <label className={lbl}>Job description (optional — base this role on an existing JD)</label>
+                <select value={form.baseJdId} onChange={(e) => setForm({ ...form, baseJdId: e.target.value })} className={inp} disabled={!form.department}>
+                  <option value="">{form.department ? '— none (new role) —' : 'Select a department first'}</option>
+                  {jdOptions.map((jd) => <option key={jd.id} value={jd.id}>{jd.jobTitle}</option>)}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Leave "How the role should differ" (above) blank to reuse this JD as-is; fill it in to generate an updated JD + questions from it.</p>
               </div>
             </div>
           </section>

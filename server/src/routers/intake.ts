@@ -5,7 +5,7 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq, desc, asc, and, ne, inArray } from 'drizzle-orm';
+import { eq, desc, asc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure, publicProcedure } from '../trpc.js';
 import { jobRequisitions } from '../db/schema/hiring.js';
@@ -105,38 +105,32 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
   let jdTitle: string | undefined;
   let questions: Array<{ category?: string; question: string }> = [];
   try {
-    // Auto-detect: is there already a JD for this department (another req)?
-    const sameDeptReqs = await db.select().from(jobRequisitions)
-      .where(and(eq(jobRequisitions.department, req.department), ne(jobRequisitions.id, req.id)));
-    const otherReqIds = sameDeptReqs.map((r: any) => r.id);
-    let existingJd: any = null;
-    if (otherReqIds.length) {
-      existingJd = (await db.select().from(jobDescriptions)
-        .where(inArray(jobDescriptions.reqId, otherReqIds))
-        .orderBy(desc(jobDescriptions.createdAt)).limit(1))[0] ?? null;
-    }
-    // Treat as NEW when the submitter flagged a changed role, or no existing JD found.
-    const isNew = req.questionSource === 'ai_generate' || !existingJd;
+    const baseJd = req.baseJdId
+      ? (await db.select().from(jobDescriptions).where(eq(jobDescriptions.id, req.baseJdId)))[0] ?? null
+      : null;
+    const differ = (req.roleChangeNote ?? '').trim();
 
-    if (!isNew && existingJd) {
-      // REUSE the existing department JD + its questions (same role -> same questions).
-      jdTitle = existingJd.jobTitle;
+    if (baseJd && !differ) {
+      // Selected JD, no changes noted -> REUSE it and its questions as-is.
+      jdTitle = baseJd.jobTitle;
       await db.insert(jobDescriptions).values({
-        reqId: req.id, jobTitle: existingJd.jobTitle, summary: existingJd.summary,
-        responsibilities: existingJd.responsibilities, requiredQualifications: existingJd.requiredQualifications,
-        preferredQualifications: existingJd.preferredQualifications, eppValues: existingJd.eppValues,
-        workSampleInstructions: existingJd.workSampleInstructions, status: 'Draft',
+        reqId: req.id, jobTitle: baseJd.jobTitle, summary: baseJd.summary,
+        responsibilities: baseJd.responsibilities, requiredQualifications: baseJd.requiredQualifications,
+        preferredQualifications: baseJd.preferredQualifications, eppValues: baseJd.eppValues,
+        workSampleInstructions: baseJd.workSampleInstructions, status: 'Draft',
       });
       const prevQ = (await db.select().from(interviewQuestions)
-        .where(eq(interviewQuestions.reqId, existingJd.reqId))
+        .where(eq(interviewQuestions.reqId, baseJd.reqId))
         .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0];
       questions = (prevQ?.questions as any[]) ?? standardQuestionSet(req.department);
       await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'reused' });
     } else {
-      // NEW/changed role: generate a JD, then curate the standard questions FROM the JD text.
+      // NEW: from (selected JD + how-it-should-differ) if a base was picked, else fresh from the intake.
       const jd = await generateRoleJD({
         department: req.department, workArrangement: req.workArrangement,
         location: req.location, salaryMin: req.salaryMin, salaryMax: req.salaryMax,
+        baseJd: baseJd ? { jobTitle: baseJd.jobTitle, summary: baseJd.summary, responsibilities: baseJd.responsibilities, requiredQualifications: baseJd.requiredQualifications, preferredQualifications: baseJd.preferredQualifications } : null,
+        changeNote: differ || null,
       });
       jdTitle = jd.jobTitle;
       await db.insert(jobDescriptions).values({
@@ -179,6 +173,7 @@ const IntakeInput = z.object({
   // Section 1 — why
   reasonType: z.enum(['backfill', 'new_headcount', 'replacement_diff', 'termination_diff']).optional(),
   roleChangeNote: z.string().optional(),
+  baseJdId: z.string().uuid().nullable().optional(),
   reason: z.string().optional(),
   // Section 2 — role
   department: z.string().min(1).max(200),
