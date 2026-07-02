@@ -197,6 +197,13 @@
       "when": 1900000004000,
       "tag": "0025_recover_real_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1950000000000,
+      "tag": "0026_recover_jds_high_ts",
+      "breakpoints": true
     }
   ]
 }
