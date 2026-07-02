@@ -277,6 +277,15 @@ async function main() {
       }).where(eq(candidates.id, candidate.id));
 
       console.log('[Criteria] Scores saved for candidate:', candidate.id);
+
+      // Automatic pass/fail decision now that the CCAT score is stored.
+      // (SendGrid advance/rejection emails fire inside.)
+      try {
+        const { applyAssessmentDecision } = await import('./server/src/services/assessmentDecision.js');
+        await applyAssessmentDecision(db, candidate.id);
+      } catch (e) {
+        console.error('[Criteria] assessment decision failed:', e);
+      }
     }).catch((err) => console.error('[Criteria] Webhook handler error:', err));
   });
 

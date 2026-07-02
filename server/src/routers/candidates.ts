@@ -22,6 +22,7 @@ import {
   sendEmail,
 } from '../services/email.js';
 import { generateInterviewQuestions } from '../services/ai.js';
+import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 
 const STAGES = [
   'Applied',
@@ -150,6 +151,11 @@ export const candidatesRouter = router({
         .set({ ...updates, updatedAt: new Date() })
         .where(eq(candidates.id, id))
         .returning();
+
+      // If a CCAT score was just set/changed, run the automatic pass/fail decision.
+      if (input.ccatScore !== undefined) {
+        await applyAssessmentDecision(ctx.db, id);
+      }
 
       await auditChange(ctx.db, ctx.user.id, id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'update_candidate', 'candidates', { candidateId: id }).catch(() => {});
@@ -432,6 +438,9 @@ export const candidatesRouter = router({
           .set({ eppValuesMatchScore: analysis.score ?? undefined, updatedAt: new Date() })
           .where(eq(candidates.id, input.id));
       }
+
+      // Automatic pass/fail decision on the CCAT score (SendGrid emails inside)
+      await applyAssessmentDecision(ctx.db, input.id);
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       return { status: 'completed', scores };
