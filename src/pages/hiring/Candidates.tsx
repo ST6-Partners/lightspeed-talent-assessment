@@ -333,25 +333,6 @@ export default function Candidates() {
             ))}
           </div>
 
-          {/* Assessment — enter a CCAT score to trigger the automatic pass/fail */}
-          <Section title="Assessment (test)">
-            <EditableField
-              label="CCAT Score (0–50) — saving triggers the auto decision"
-              value={selected.ccatScore != null ? String(selected.ccatScore) : ''}
-              onSave={(v) =>
-                updateMutation.mutate({
-                  id: selected.id,
-                  ccatScore: v.trim() === '' ? undefined : Math.max(0, Math.min(50, parseInt(v) || 0)),
-                })
-              }
-            />
-            {selected.currentStage !== 'Assessment' && (
-              <div className="text-xs text-gray-400 italic">
-                Candidate must be in the Assessment stage for the score to auto-advance (30+) or auto-reject (&lt;30).
-              </div>
-            )}
-          </Section>
-
           {/* Work Sample */}
           <Section title="Work Sample">
             {(selected as any).workSampleSubmittedAt ? (
