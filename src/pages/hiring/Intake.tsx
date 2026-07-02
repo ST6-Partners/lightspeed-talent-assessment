@@ -89,7 +89,15 @@ export default function Intake() {
     onError: (e) => { setErr(e.message); setSaved(false); },
   });
   const submitMutation = trpc.intake.submit.useMutation({
-    onSuccess: () => { refetch(); close(); },
+    onSuccess: (data: any) => {
+      refetch();
+      if (data?.notifyErrors?.length) {
+        refetchFull();
+        setErr(`Submitted (Pending Approval), but department notifications failed: ${data.notifyErrors.join('; ')}`);
+      } else {
+        close();
+      }
+    },
     onError: (e) => setErr(e.message),
   });
   const deleteMutation = trpc.intake.delete.useMutation({ onSuccess: () => refetch() });
