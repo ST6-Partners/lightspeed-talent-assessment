@@ -565,15 +565,39 @@ function templateJD(title: string, department: string): RoleJD {
 export async function generateRoleJD(input: {
   department: string; seniority?: string | null; workArrangement?: string | null;
   location?: string | null; salaryMin?: number | null; salaryMax?: number | null;
+  baseJd?: { jobTitle: string; summary?: string | null; responsibilities?: string | null; requiredQualifications?: string | null; preferredQualifications?: string | null } | null;
+  changeNote?: string | null;
 }): Promise<RoleJD> {
-  const title = `${input.department}${input.seniority ? ' ' + input.seniority : ''}`.trim() + (input.seniority ? '' : ' Position');
-  if (SANDBOX) { console.log(`[AI SANDBOX] generateRoleJD | ${title}`); return templateJD(title, input.department); }
+  const title = input.baseJd?.jobTitle ?? (`${input.department}${input.seniority ? ' ' + input.seniority : ''}`.trim() + (input.seniority ? '' : ' Position'));
+  if (SANDBOX) {
+    console.log(`[AI SANDBOX] generateRoleJD | ${title}${input.baseJd ? ' (from base + change note)' : ''}`);
+    if (input.baseJd) {
+      return {
+        jobTitle: input.baseJd.jobTitle,
+        summary: `${input.baseJd.summary ?? ''}${input.changeNote ? `\n\n[Updated per intake — how the role differs: ${input.changeNote}]` : ''}`.trim(),
+        responsibilities: input.baseJd.responsibilities ?? '',
+        requiredQualifications: input.baseJd.requiredQualifications ?? '',
+        preferredQualifications: input.baseJd.preferredQualifications ?? '',
+      };
+    }
+    return templateJD(title, input.department);
+  }
   const system = `You write concise, inclusive job descriptions for Lightspeed Systems, a K-12 edtech company. Core values: ${LIGHTSPEED_VALUES.join(', ')}. Return ONLY JSON with keys: jobTitle, summary, responsibilities, requiredQualifications, preferredQualifications. The list fields should be short newline-separated bullets using "- ".`;
-  const user = `Draft a job description for a ${title} in ${input.department}. Work arrangement: ${input.workArrangement ?? 'On-site'}${input.location ? ', ' + input.location : ''}.${input.salaryMin && input.salaryMax ? ` Salary band $${input.salaryMin}–$${input.salaryMax}.` : ''} Keep it realistic and concise.`;
+  const user = input.baseJd
+    ? `Here is an existing job description for ${input.baseJd.jobTitle} (${input.department}):
+Summary: ${input.baseJd.summary ?? ''}
+Responsibilities: ${input.baseJd.responsibilities ?? ''}
+Required qualifications: ${input.baseJd.requiredQualifications ?? ''}
+Preferred qualifications: ${input.baseJd.preferredQualifications ?? ''}
+
+The role should DIFFER from that as follows: ${input.changeNote ?? ''}
+
+Produce the UPDATED job description reflecting those differences — keep what still applies, change what should change.`
+    : `Draft a job description for a ${title} in ${input.department}. Work arrangement: ${input.workArrangement ?? 'On-site'}${input.location ? ', ' + input.location : ''}.${input.salaryMin && input.salaryMax ? ` Salary band $${input.salaryMin}–$${input.salaryMax}.` : ''} Keep it realistic and concise.`;
   try {
     const jd = JSON.parse(await callClaude(system, user));
     return { jobTitle: jd.jobTitle || title, summary: jd.summary || '', responsibilities: jd.responsibilities || '', requiredQualifications: jd.requiredQualifications || '', preferredQualifications: jd.preferredQualifications || '' };
-  } catch (err) { console.error('[AI] generateRoleJD failed:', err); return templateJD(title, input.department); }
+  } catch (err) { console.error('[AI] generateRoleJD failed:', err); return input.baseJd ? { jobTitle: input.baseJd.jobTitle, summary: input.baseJd.summary ?? '', responsibilities: input.baseJd.responsibilities ?? '', requiredQualifications: input.baseJd.requiredQualifications ?? '', preferredQualifications: input.baseJd.preferredQualifications ?? '' } : templateJD(title, input.department); }
 }
 
 // The FIXED standard question set — asked of EVERY candidate for a role (the "70%").
