@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import WorkSample from './pages/WorkSample';
+import Approve from './pages/Approve';
 import Chat from './pages/Chat';
 import AdminSettings from './pages/AdminSettings';
 // Hiring Pipeline
@@ -24,6 +25,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/work-sample/:token" element={<WorkSample />} />
+      <Route path="/approve/:token" element={<Approve />} />
       <Route element={<Layout />}>
         {/* Landing → hiring overview */}
         <Route path="/" element={<HiringDashboard />} />

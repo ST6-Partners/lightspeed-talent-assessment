@@ -61,6 +61,7 @@ export default function EmailTestPanel() {
   const [simBody, setSimBody] = useState('');
   const simulate = trpc.emailTest.simulateInbound.useMutation({ onSuccess: () => { setSimFrom(''); setSimBody(''); inbox.refetch(); } });
   const clearInbox = trpc.emailTest.clearInbound.useMutation({ onSuccess: () => inbox.refetch() });
+  const deleteMsg = trpc.emailTest.deleteInbound.useMutation({ onSuccess: () => inbox.refetch() });
 
   const config = cfg.data;
   const webhookUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/inbound-email`;
@@ -155,7 +156,13 @@ export default function EmailTestPanel() {
                   <td style={{ ...c.td, maxWidth: 280, color: '#4b5563' }}>{(m.body || '').slice(0, 160)}</td>
                   <td style={c.td}><span style={{ ...c.code, color: m.source === 'webhook' ? '#1d4ed8' : '#92400e' }}>{m.source}</span></td>
                   <td style={c.td}>
-                    <button style={c.btnGhost} onClick={() => { setTo(m.fromEmail); setName(m.fromName || ''); setSubject(`Re: ${m.subject || ''}`); setMessage(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Reply</button>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {m.raw?.approvalUrl && (
+                        <a href={m.raw.approvalUrl} target="_blank" rel="noreferrer" style={{ ...c.btnGhost, textDecoration: 'none', color: '#1d4ed8', borderColor: '#bfd4ff' }}>Open &amp; review</a>
+                      )}
+                      <button style={c.btnGhost} onClick={() => { setTo(m.fromEmail); setName(m.fromName || ''); setSubject(`Re: ${m.subject || ''}`); setMessage(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Reply</button>
+                      <button style={{ ...c.btnGhost, color: '#b91c1c', borderColor: '#f3c9c9' }} disabled={deleteMsg.isLoading} onClick={() => { if (window.confirm('Delete this message?')) deleteMsg.mutate({ id: m.id }); }}>Delete</button>
+                    </div>
                   </td>
                 </tr>
               ))}

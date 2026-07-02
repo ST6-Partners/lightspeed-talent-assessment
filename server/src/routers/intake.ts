@@ -7,13 +7,39 @@
 import { z } from 'zod';
 import { eq, desc, asc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
-import { router, protectedProcedure } from '../trpc.js';
+import { router, protectedProcedure, publicProcedure } from '../trpc.js';
 import { jobRequisitions } from '../db/schema/hiring.js';
 import { interviewPlan, hiringTeam, awarenessList, approvals } from '../db/schema/intake.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { APPROVER_EMAILS, APPROVER_LABELS, buildApprovalRequestEmail, sendApprovalRequest } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
+
+function appBaseUrl(): string {
+  const explicit = process.env.APP_BASE_URL;
+  if (explicit) return explicit.replace(/\/$/, '');
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (railway) return `https://${railway}`;
+  return '';
+}
+
+function money(n: number | null | undefined): string { return n != null ? `$${Number(n).toLocaleString()}` : '—'; }
+
+function intakeSummaryRows(req: any): Array<{ label: string; value: string }> {
+  const rows: Array<{ label: string; value: string }> = [
+    { label: 'Department', value: req.department ?? '—' },
+    { label: 'Hiring manager', value: req.hiringManager ?? '—' },
+    { label: 'Openings', value: String(req.numOpenings ?? 1) },
+    { label: 'Priority', value: req.priority ?? '—' },
+    { label: 'Employment', value: `${req.employmentType ?? '—'}${req.workArrangement ? ' · ' + req.workArrangement : ''}${req.workArrangement === 'Hybrid' && req.hybridDays != null ? ' (' + req.hybridDays + ' days in office)' : ''}` },
+    { label: 'Location', value: req.location || '—' },
+    { label: 'Salary range', value: `${money(req.salaryMin)} – ${money(req.salaryMax)}` },
+    { label: 'Interview rounds', value: String(req.interviewRounds ?? 1) },
+    { label: 'Timeline', value: `${req.timelineTemplate ?? 'standard'}${req.targetOfferDate ? ' · offer by ' + req.targetOfferDate : ''}` },
+  ];
+  if (req.variableComp) rows.push({ label: 'Variable comp', value: req.variableComp });
+  return rows;
+}
 
 const RoundInput = z.object({
   roundName: z.string().min(1).max(120),
@@ -179,7 +205,7 @@ export const intakeRouter = router({
       // Seed the sequential approval chain (slice 2 drives it forward).
       // Default mode 'explicit'; step 1 (hiring manager submitting) is auto-approved.
       await ctx.db.delete(approvals).where(eq(approvals.reqId, input.id));
-      await ctx.db.insert(approvals).values(
+      const insertedApprovals = await ctx.db.insert(approvals).values(
         APPROVAL_STEPS.map((s) => ({
           reqId: input.id,
           step: s.step,
@@ -188,7 +214,10 @@ export const intakeRouter = router({
           approverRef: s.step === 1 ? req.hiringManager : null,
           actedAt: s.step === 1 ? new Date() : null,
         })),
-      );
+      ).returning();
+      const approvalIdByRole: Record<string, string> = {};
+      for (const a of insertedApprovals) approvalIdByRole[a.approverRole] = a.id;
+      const summaryRows = intakeSummaryRows(req);
 
       // Notify each needed department (pending approvers) that an intake awaits
       // their approval — real send via SendGrid, plus a copy dropped into the
@@ -198,7 +227,9 @@ export const intakeRouter = router({
       for (const s of pendingApprovers) {
         const to = APPROVER_EMAILS[s.approverRole] ?? APPROVER_EMAILS.hr;
         const roleLabel = APPROVER_LABELS[s.approverRole] ?? s.approverRole;
-        const data = { roleLabel, department: req.department, hiringManager: req.hiringManager };
+        const approvalId = approvalIdByRole[s.approverRole];
+        const approvalUrl = approvalId ? `${appBaseUrl()}/approve/${approvalId}` : undefined;
+        const data = { roleLabel, department: req.department, hiringManager: req.hiringManager, approvalUrl, summaryRows };
         const { subject, text } = buildApprovalRequestEmail(data);
         // Record into the test inbox FIRST, so it shows even if the real send fails.
         try {
@@ -210,6 +241,7 @@ export const intakeRouter = router({
             body: text,
             replyTag: s.approverRole,
             source: 'simulated',
+            raw: approvalId ? { kind: 'intake_approval', approvalId, approvalUrl } : null,
           });
         } catch (err: any) {
           const reason = err?.cause?.message ?? err?.message ?? String(err);
@@ -237,6 +269,65 @@ export const intakeRouter = router({
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_requisitions', 'delete');
       trackActivity(ctx.db, ctx.user.id, 'delete_intake', 'job_requisitions', { reqId: input.id }).catch(() => {});
       return { id: input.id };
+    }),
+
+  // ── Public, no-login approval via a tokenized link (the approval row id) ──
+  approvalView: publicProcedure
+    .input(z.object({ token: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const target = (await ctx.db.select().from(approvals).where(eq(approvals.id, input.token)))[0];
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'This approval link is invalid or has expired.' });
+      const req = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, target.reqId) });
+      if (!req) throw new TRPCError({ code: 'NOT_FOUND' });
+      const [rounds, team, awareness, chainRows] = await Promise.all([
+        ctx.db.select().from(interviewPlan).where(eq(interviewPlan.reqId, target.reqId)).orderBy(asc(interviewPlan.sortOrder)),
+        ctx.db.select().from(hiringTeam).where(eq(hiringTeam.reqId, target.reqId)),
+        ctx.db.select().from(awarenessList).where(eq(awarenessList.reqId, target.reqId)),
+        ctx.db.select().from(approvals).where(eq(approvals.reqId, target.reqId)).orderBy(asc(approvals.step)),
+      ]);
+      const nextPending = chainRows.find((r) => r.status === 'pending');
+      return {
+        approvalId: target.id,
+        step: target.step,
+        roleLabel: APPROVER_LABELS[target.approverRole] ?? target.approverRole,
+        stepStatus: target.status,
+        isCurrentStep: !!nextPending && nextPending.id === target.id,
+        overallStatus: req.status,
+        requisition: req,
+        rounds, team, awareness,
+        chain: chainRows.map((r) => ({ step: r.step, roleLabel: APPROVER_LABELS[r.approverRole] ?? r.approverRole, status: r.status, note: r.note })),
+      };
+    }),
+
+  approveViaToken: publicProcedure
+    .input(z.object({ token: z.string().uuid(), note: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const target = (await ctx.db.select().from(approvals).where(eq(approvals.id, input.token)))[0];
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'This approval link is invalid.' });
+      const rows = await ctx.db.select().from(approvals).where(eq(approvals.reqId, target.reqId)).orderBy(asc(approvals.step));
+      const nextPending = rows.find((r) => r.status === 'pending');
+      if (!nextPending || nextPending.id !== target.id) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This step is not currently awaiting your approval (it may already be decided, or an earlier step is still pending).' });
+      }
+      await ctx.db.update(approvals).set({ status: 'approved', approverRef: 'via approval link', note: input.note ?? target.note, actedAt: new Date() }).where(eq(approvals.id, target.id));
+      if (target.approverRole === 'finance') {
+        await ctx.db.update(jobRequisitions).set({ financeConfirmed: true, updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
+      }
+      const stillPending = rows.some((r) => r.id !== target.id && r.status === 'pending');
+      if (!stillPending) {
+        await ctx.db.update(jobRequisitions).set({ status: 'Approved', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
+      }
+      return { ok: true as const, fullyApproved: !stillPending, roleLabel: APPROVER_LABELS[target.approverRole] ?? target.approverRole };
+    }),
+
+  rejectViaToken: publicProcedure
+    .input(z.object({ token: z.string().uuid(), note: z.string().min(1, 'A reason is required to reject.') }))
+    .mutation(async ({ ctx, input }) => {
+      const target = (await ctx.db.select().from(approvals).where(eq(approvals.id, input.token)))[0];
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'This approval link is invalid.' });
+      await ctx.db.update(approvals).set({ status: 'rejected', approverRef: 'via approval link', note: input.note, actedAt: new Date() }).where(eq(approvals.id, target.id));
+      await ctx.db.update(jobRequisitions).set({ status: 'Draft', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
+      return { ok: true as const, roleLabel: APPROVER_LABELS[target.approverRole] ?? target.approverRole };
     }),
 
   // Approve the current step in the sequence. Enforces order (must be the

@@ -3,7 +3,7 @@
 // ============================================================
 
 import { z } from 'zod';
-import { desc } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { router, protectedProcedure } from '../trpc.js';
 import { requireAdmin } from '../services/permissions.js';
 import { inboundEmails } from '../db/schema/email.js';
@@ -73,6 +73,14 @@ export const emailTestRouter = router({
     .use(requireAdmin)
     .mutation(async ({ ctx }) => {
       await ctx.db.delete(inboundEmails);
+      return { ok: true as const };
+    }),
+
+  deleteInbound: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      await ctx.db.delete(inboundEmails).where(eq(inboundEmails.id, input.id));
       return { ok: true as const };
     }),
 });
