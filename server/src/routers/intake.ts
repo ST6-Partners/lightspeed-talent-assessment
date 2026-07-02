@@ -15,7 +15,7 @@ import type { DrizzleClient } from '../db.js';
 import { jobDescriptions } from '../db/schema/hiring.js';
 import { interviewQuestions } from '../db/schema/intake.js';
 import { generateRoleJD, generateStandardQuestions, standardQuestionSet } from '../services/ai.js';
-import { APPROVER_EMAILS, APPROVER_LABELS, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
+import { approverEmail, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 
@@ -47,8 +47,8 @@ function intakeSummaryRows(req: any): Array<{ label: string; value: string }> {
 
 // Email + test-inbox record for ONE approver (their step's tokenized review link).
 async function notifyApprover(db: DrizzleClient, req: any, approval: { id: string; approverRole: string }): Promise<string | null> {
-  const to = APPROVER_EMAILS[approval.approverRole] ?? APPROVER_EMAILS.hr;
-  const roleLabel = APPROVER_LABELS[approval.approverRole] ?? approval.approverRole;
+  const to = approverEmail(approval.approverRole);
+  const roleLabel = approval.approverRole;
   const approvalUrl = `${appBaseUrl()}/approve/${approval.id}`;
   const data = { roleLabel, department: req.department, hiringManager: req.hiringManager, approvalUrl, summaryRows: intakeSummaryRows(req) };
   const { subject, text } = buildApprovalRequestEmail(data);
@@ -174,6 +174,7 @@ const IntakeInput = z.object({
   reasonType: z.enum(['backfill', 'new_headcount', 'replacement_diff', 'termination_diff']).optional(),
   roleChangeNote: z.string().optional(),
   baseJdId: z.string().uuid().nullable().optional(),
+  approvalPlan: z.array(z.object({ role: z.string().min(1), concurrent: z.boolean().default(false) })).optional(),
   reason: z.string().optional(),
   // Section 2 — role
   department: z.string().min(1).max(200),
@@ -316,28 +317,33 @@ export const intakeRouter = router({
         .set({ status: 'Pending Approval', updatedAt: new Date() })
         .where(eq(jobRequisitions.id, input.id));
 
-      // Seed the sequential approval chain (slice 2 drives it forward).
-      // Default mode 'explicit'; step 1 (hiring manager submitting) is auto-approved.
+      // Seed the approval chain from the configured plan (or the default 4).
+      // Concurrency: rows are grouped — a row "concurrent with previous" shares
+      // the prior row's group; a "dependent" row starts a new group. Groups are
+      // actioned in order; within a group everyone is notified together and the
+      // chain advances only when the whole group has approved.
+      const rawPlan: Array<{ role: string; concurrent?: boolean }> =
+        Array.isArray(req.approvalPlan) && (req.approvalPlan as any[]).length
+          ? (req.approvalPlan as any[])
+          : [
+              { role: 'Hiring Manager', concurrent: false },
+              { role: 'ELT Leader', concurrent: false },
+              { role: 'Finance', concurrent: false },
+              { role: 'HR', concurrent: false },
+            ];
+      let g = 0;
+      const seedRows = rawPlan.map((p, i) => {
+        if (i > 0 && !p.concurrent) g++;
+        return { reqId: input.id, step: i + 1, approverRole: p.role, status: 'pending', groupIdx: g };
+      });
       await ctx.db.delete(approvals).where(eq(approvals.reqId, input.id));
-      const insertedApprovals = await ctx.db.insert(approvals).values(
-        APPROVAL_STEPS.map((s) => ({
-          reqId: input.id,
-          step: s.step,
-          approverRole: s.approverRole,
-          status: s.step === 1 ? 'approved' : 'pending',
-          approverRef: s.step === 1 ? req.hiringManager : null,
-          actedAt: s.step === 1 ? new Date() : null,
-        })),
-      ).returning();
-const notifyErrors: string[] = [];
-      // Sequential: notify ONLY the first pending approver (ELT). Each later
-      // approval triggers the next person\'s email, so nobody is emailed before
-      // they can act.
-      const firstPending = insertedApprovals
-        .filter((a) => a.status === 'pending')
-        .sort((a, b) => a.step - b.step)[0];
-      if (firstPending) {
-        const e = await notifyApprover(ctx.db, req, firstPending);
+      const insertedApprovals = await ctx.db.insert(approvals).values(seedRows).returning();
+
+      const notifyErrors: string[] = [];
+      // Notify everyone in the first group only.
+      const firstGroup = Math.min(...insertedApprovals.map((r: any) => r.groupIdx));
+      for (const r of insertedApprovals.filter((r: any) => r.groupIdx === firstGroup)) {
+        const e = await notifyApprover(ctx.db, req, r);
         if (e) notifyErrors.push(e);
       }
 
@@ -384,17 +390,18 @@ const notifyErrors: string[] = [];
         ctx.db.select().from(awarenessList).where(eq(awarenessList.reqId, target.reqId)),
         ctx.db.select().from(approvals).where(eq(approvals.reqId, target.reqId)).orderBy(asc(approvals.step)),
       ]);
-      const nextPending = chainRows.find((r) => r.status === 'pending');
+      const pendingRows = chainRows.filter((r) => r.status === 'pending');
+      const activeGroup = pendingRows.length ? Math.min(...pendingRows.map((r) => r.groupIdx)) : -1;
       return {
         approvalId: target.id,
         step: target.step,
-        roleLabel: APPROVER_LABELS[target.approverRole] ?? target.approverRole,
+        roleLabel: target.approverRole,
         stepStatus: target.status,
-        isCurrentStep: !!nextPending && nextPending.id === target.id,
+        isCurrentStep: target.status === 'pending' && target.groupIdx === activeGroup,
         overallStatus: req.status,
         requisition: req,
         rounds, team, awareness,
-        chain: chainRows.map((r) => ({ step: r.step, roleLabel: APPROVER_LABELS[r.approverRole] ?? r.approverRole, status: r.status, note: r.note })),
+        chain: chainRows.map((r) => ({ step: r.step, roleLabel: r.approverRole, status: r.status, note: r.note, group: r.groupIdx })),
       };
     }),
 
@@ -404,26 +411,29 @@ const notifyErrors: string[] = [];
       const target = (await ctx.db.select().from(approvals).where(eq(approvals.id, input.token)))[0];
       if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'This approval link is invalid.' });
       const rows = await ctx.db.select().from(approvals).where(eq(approvals.reqId, target.reqId)).orderBy(asc(approvals.step));
-      const nextPending = rows.find((r) => r.status === 'pending');
-      if (!nextPending || nextPending.id !== target.id) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This step is not currently awaiting your approval (it may already be decided, or an earlier step is still pending).' });
+      if (target.status !== 'pending') throw new TRPCError({ code: 'BAD_REQUEST', message: 'This step has already been decided.' });
+      const pending = rows.filter((r) => r.status === 'pending');
+      const activeGroup = pending.length ? Math.min(...pending.map((r) => r.groupIdx)) : -1;
+      if (target.groupIdx !== activeGroup) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'An earlier group of approvers still needs to sign off before this one.' });
       }
       await ctx.db.update(approvals).set({ status: 'approved', approverRef: 'via approval link', note: input.note ?? target.note, actedAt: new Date() }).where(eq(approvals.id, target.id));
-      if (target.approverRole === 'finance') {
+      if (target.approverRole.toLowerCase().includes('finance')) {
         await ctx.db.update(jobRequisitions).set({ financeConfirmed: true, updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
       }
-      const stillPending = rows.some((r) => r.id !== target.id && r.status === 'pending');
-      if (!stillPending) {
+      const restPending = rows.filter((r) => r.id !== target.id && r.status === 'pending');
+      if (!restPending.length) {
         await ctx.db.update(jobRequisitions).set({ status: 'Approved', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
         const approvedReq = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, target.reqId) });
         if (approvedReq) await runKickoffAndPosting(ctx.db, approvedReq);
+      } else {
+        const newActive = Math.min(...restPending.map((r) => r.groupIdx));
+        if (newActive > activeGroup) {
+          const reqRow = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, target.reqId) });
+          if (reqRow) for (const r of restPending.filter((r) => r.groupIdx === newActive)) await notifyApprover(ctx.db, reqRow, r);
+        }
       }
-      if (stillPending) {
-        const reqRow = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, target.reqId) });
-        const upNext = rows.filter((r) => r.id !== target.id && r.status === 'pending').sort((a, b) => a.step - b.step)[0];
-        if (reqRow && upNext) await notifyApprover(ctx.db, reqRow, upNext);
-      }
-      return { ok: true as const, fullyApproved: !stillPending, roleLabel: APPROVER_LABELS[target.approverRole] ?? target.approverRole };
+      return { ok: true as const, fullyApproved: !restPending.length, roleLabel: target.approverRole };
     }),
 
   rejectViaToken: publicProcedure
@@ -433,7 +443,7 @@ const notifyErrors: string[] = [];
       if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'This approval link is invalid.' });
       await ctx.db.update(approvals).set({ status: 'rejected', approverRef: 'via approval link', note: input.note, actedAt: new Date() }).where(eq(approvals.id, target.id));
       await ctx.db.update(jobRequisitions).set({ status: 'Draft', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
-      return { ok: true as const, roleLabel: APPROVER_LABELS[target.approverRole] ?? target.approverRole };
+      return { ok: true as const, roleLabel: target.approverRole };
     }),
 
   // Approve the current step in the sequence. Enforces order (must be the
@@ -444,31 +454,35 @@ const notifyErrors: string[] = [];
     .mutation(async ({ ctx, input }) => {
       const rows = await ctx.db.select().from(approvals).where(eq(approvals.reqId, input.reqId)).orderBy(asc(approvals.step));
       if (!rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'No approval chain — submit the intake first.' });
-      const nextPending = rows.find((r) => r.status === 'pending');
-      if (!nextPending || nextPending.step !== input.step) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That is not the current pending approval step.' });
-      }
-      await ctx.db.update(approvals)
-        .set({ status: 'approved', approverRef: ctx.user.id, note: input.note ?? nextPending.note, actedAt: new Date() })
-        .where(eq(approvals.id, nextPending.id));
+      const pending = rows.filter((r) => r.status === 'pending');
+      if (!pending.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This intake is already fully decided.' });
+      const activeGroup = Math.min(...pending.map((r) => r.groupIdx));
+      const target = rows.find((r) => r.step === input.step);
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (target.status !== 'pending') throw new TRPCError({ code: 'BAD_REQUEST', message: 'That step is already decided.' });
+      if (target.groupIdx !== activeGroup) throw new TRPCError({ code: 'BAD_REQUEST', message: 'An earlier group of approvers still needs to sign off.' });
 
-      if (nextPending.approverRole === 'finance') {
+      await ctx.db.update(approvals)
+        .set({ status: 'approved', approverRef: ctx.user.id, note: input.note ?? target.note, actedAt: new Date() })
+        .where(eq(approvals.id, target.id));
+      if (target.approverRole.toLowerCase().includes('finance')) {
         await ctx.db.update(jobRequisitions).set({ financeConfirmed: true, updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
       }
-      const stillPending = rows.some((r) => r.id !== nextPending.id && r.status === 'pending');
-      if (!stillPending) {
+      const restPending = rows.filter((r) => r.id !== target.id && r.status === 'pending');
+      if (!restPending.length) {
         await ctx.db.update(jobRequisitions).set({ status: 'Approved', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
         const approvedReq = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.reqId) });
         if (approvedReq) await runKickoffAndPosting(ctx.db, approvedReq);
-      }
-      if (stillPending) {
-        const reqRow = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.reqId) });
-        const upNext = rows.filter((r) => r.id !== nextPending.id && r.status === 'pending').sort((a, b) => a.step - b.step)[0];
-        if (reqRow && upNext) await notifyApprover(ctx.db, reqRow, upNext);
+      } else {
+        const newActive = Math.min(...restPending.map((r) => r.groupIdx));
+        if (newActive > activeGroup) {
+          const reqRow = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.reqId) });
+          if (reqRow) for (const r of restPending.filter((r) => r.groupIdx === newActive)) await notifyApprover(ctx.db, reqRow, r);
+        }
       }
       await auditChange(ctx.db, ctx.user.id, input.reqId, 'job_requisitions', 'update');
       trackActivity(ctx.db, ctx.user.id, 'approve_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch(() => {});
-      return { id: input.reqId, fullyApproved: !stillPending };
+      return { id: input.reqId, fullyApproved: !restPending.length };
     }),
 
   // Reject a step: records the note and sends the intake back to Draft.

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, X, Trash2, Pencil, Send } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
@@ -34,6 +34,12 @@ const EMPTY = {
   interviewRounds: 1, questionSource: 'standard',
   teamAvailabilityConfirmed: false,
   timelineTemplate: 'standard', targetPostDate: '', targetOfferDate: '',
+  approvalPlan: [
+    { role: 'Hiring Manager', concurrent: false },
+    { role: 'ELT Leader', concurrent: false },
+    { role: 'Finance', concurrent: false },
+    { role: 'HR', concurrent: false },
+  ] as Array<{ role: string; concurrent: boolean }>,
 };
 
 const lbl = 'block text-xs font-medium text-gray-600 mb-1';
@@ -49,6 +55,12 @@ export default function Intake() {
   const [err, setErr] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [approvalNote, setApprovalNote] = useState('');
+  const dragIx = useRef<number | null>(null);
+  const setPlan = (p: Array<{ role: string; concurrent: boolean }>) => setForm({ ...form, approvalPlan: p });
+  const addApprover = () => setPlan([...form.approvalPlan, { role: '', concurrent: false }]);
+  const updApprover = (i: number, patch: Partial<{ role: string; concurrent: boolean }>) => setPlan(form.approvalPlan.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const delApprover = (i: number) => setPlan(form.approvalPlan.filter((_, j) => j !== i));
+  const moveRow = (from: number, to: number) => { const a = [...form.approvalPlan]; const [m] = a.splice(from, 1); a.splice(to, 0, m); setPlan(a); };
 
   const { data: intakes, refetch } = trpc.intake.list.useQuery();
   const { data: full, refetch: refetchFull } = trpc.intake.get.useQuery({ id: editingId! }, { enabled: !!editingId });
@@ -73,6 +85,7 @@ export default function Intake() {
         teamAvailabilityConfirmed: !!f.teamAvailabilityConfirmed,
         timelineTemplate: f.timelineTemplate ?? 'standard',
         targetPostDate: f.targetPostDate ?? '', targetOfferDate: f.targetOfferDate ?? '',
+        approvalPlan: Array.isArray(f.approvalPlan) && f.approvalPlan.length ? f.approvalPlan : EMPTY.approvalPlan,
       });
       setRounds(f.rounds?.map((r: any) => ({ roundName: r.roundName, lengthMin: r.lengthMin ?? undefined, format: r.format ?? undefined })) ?? []);
       setTeam(f.team?.map((p: any) => ({ personRef: p.personRef, roleInProcess: p.roleInProcess ?? undefined, roundRef: p.roundRef ?? undefined })) ?? []);
@@ -132,6 +145,7 @@ export default function Intake() {
     teamAvailabilityConfirmed: form.teamAvailabilityConfirmed,
     timelineTemplate: form.timelineTemplate as any,
     targetPostDate: form.targetPostDate || undefined, targetOfferDate: form.targetOfferDate || undefined,
+    approvalPlan: form.approvalPlan.filter((r) => r.role && r.role.trim()).map((r, i) => ({ role: r.role.trim(), concurrent: i > 0 && !!r.concurrent })),
     rounds: rounds.filter((r) => r.roundName),
     team: team.filter((p) => p.personRef),
     awareness: awareness.filter((a) => a.personRef),
@@ -174,14 +188,16 @@ export default function Intake() {
 
           {editingId && Array.isArray((full as any)?.approvals) && (full as any).approvals.length > 0 && (() => {
             const rows = (full as any).approvals as any[];
-            const active = rows.find((r) => r.status === 'pending');
+            const pendingRows = rows.filter((r) => r.status === 'pending');
+            const activeGroup = pendingRows.length ? Math.min(...pendingRows.map((r) => r.groupIdx ?? 0)) : -1;
+            const activeRows = rows.filter((r) => r.status === 'pending' && (r.groupIdx ?? 0) === activeGroup);
             const rejected = rows.find((r) => r.status === 'rejected');
             return (
               <section className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold text-ls-primary">Approval chain</h3>
                   <span className="text-xs text-gray-500">
-                    {rejected ? 'Rejected — back to Draft' : active ? `In approval · step ${active.step} of ${rows.length}` : 'Fully approved'}
+                    {rejected ? 'Rejected — back to Draft' : activeRows.length ? `In approval · ${activeRows.length} awaiting${activeRows.length > 1 ? ' (concurrent)' : ''}` : 'Fully approved'}
                   </span>
                 </div>
                 <div className="space-y-1.5">
@@ -195,25 +211,30 @@ export default function Intake() {
                     </div>
                   ))}
                 </div>
-                {active && (
+                {activeRows.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
+                    {activeRows.length > 1 && <p className="text-xs text-gray-500 mb-2">These {activeRows.length} approvals are concurrent — approve in any order; the chain advances once all have signed off.</p>}
                     <label className={lbl}>Note (required to reject, optional to approve)</label>
                     <input value={approvalNote} onChange={(e) => setApprovalNote(e.target.value)} placeholder="Add a note..." className={inp} />
-                    <div className="flex gap-2 mt-2">
-                      <button
-                        onClick={() => approveMutation.mutate({ reqId: editingId, step: active.step, note: approvalNote || undefined })}
-                        disabled={approveMutation.isLoading || rejectMutation.isLoading}
-                        className="px-3 py-1.5 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50"
-                      >
-                        Approve — {ROLE_LABEL[active.approverRole] ?? active.approverRole}
-                      </button>
-                      <button
-                        onClick={() => { if (!approvalNote.trim()) { setErr('A reason is required to reject.'); return; } rejectMutation.mutate({ reqId: editingId, step: active.step, note: approvalNote }); }}
-                        disabled={approveMutation.isLoading || rejectMutation.isLoading}
-                        className="px-3 py-1.5 bg-white border border-red-300 text-red-600 rounded-md text-sm font-medium hover:bg-red-50 disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
+                    <div className="space-y-2 mt-2">
+                      {activeRows.map((a) => (
+                        <div key={a.id} className="flex gap-2 items-center">
+                          <button
+                            onClick={() => approveMutation.mutate({ reqId: editingId, step: a.step, note: approvalNote || undefined })}
+                            disabled={approveMutation.isLoading || rejectMutation.isLoading}
+                            className="px-3 py-1.5 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+                          >
+                            Approve — {a.approverRole}
+                          </button>
+                          <button
+                            onClick={() => { if (!approvalNote.trim()) { setErr('A reason is required to reject.'); return; } rejectMutation.mutate({ reqId: editingId, step: a.step, note: approvalNote }); }}
+                            disabled={approveMutation.isLoading || rejectMutation.isLoading}
+                            className="px-3 py-1.5 bg-white border border-red-300 text-red-600 rounded-md text-sm font-medium hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -388,6 +409,39 @@ export default function Intake() {
               <input type="checkbox" id="avail" checked={form.teamAvailabilityConfirmed} onChange={(e) => setForm({ ...form, teamAvailabilityConfirmed: e.target.checked })} className="rounded" />
               <label htmlFor="avail" className="text-sm text-gray-700">The hiring team is available within the target window (required to submit)</label>
             </div>
+          </section>
+
+          {/* 6b — Approval chain builder */}
+          <section>
+            <h3 className="text-sm font-semibold text-ls-primary mb-2">Approval chain</h3>
+            <p className="text-xs text-gray-400 mb-3">Drag to reorder. Each row is notified in order; mark a row "concurrent with the one above" to have them approve in parallel (the chain waits until the whole group signs off).</p>
+            <datalist id="approver-roles">
+              <option value="Hiring Manager" /><option value="ELT Leader" /><option value="Finance" /><option value="HR" />
+            </datalist>
+            <div className="space-y-2">
+              {form.approvalPlan.map((row, i) => (
+                <div
+                  key={i}
+                  draggable
+                  onDragStart={() => { dragIx.current = i; }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => { if (dragIx.current !== null && dragIx.current !== i) moveRow(dragIx.current, i); dragIx.current = null; }}
+                  className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-2 py-1.5"
+                >
+                  <span className="cursor-grab text-gray-300 select-none" title="Drag to reorder">⠿</span>
+                  <span className="w-5 text-center text-xs font-semibold text-gray-500">{i + 1}</span>
+                  <input list="approver-roles" value={row.role} onChange={(e) => updApprover(i, { role: e.target.value })} placeholder="Approver role (e.g. Finance)" className="flex-1 px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+                  {i > 0 ? (
+                    <label className="flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap">
+                      <input type="checkbox" checked={!!row.concurrent} onChange={(e) => updApprover(i, { concurrent: e.target.checked })} className="rounded" />
+                      concurrent with above
+                    </label>
+                  ) : <span className="text-xs text-gray-400 whitespace-nowrap">first</span>}
+                  <button onClick={() => delApprover(i)} className="p-1 text-gray-400 hover:text-red-600" title="Remove"><Trash2 size={15} /></button>
+                </div>
+              ))}
+            </div>
+            <button onClick={addApprover} className="text-sm text-ls-primary hover:underline mt-2">+ Add approver</button>
           </section>
 
           {/* 7 — Timeline */}

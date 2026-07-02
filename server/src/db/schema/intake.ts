@@ -38,6 +38,7 @@ export const approvals = pgTable('approvals', {
   id: uuid('id').primaryKey().defaultRandom(),
   reqId: uuid('req_id').references(() => jobRequisitions.id, { onDelete: 'cascade' }).notNull(),
   step: integer('step').notNull(),
+  groupIdx: integer('group_idx').notNull().default(0),
   approverRef: varchar('approver_ref', { length: 200 }),
   approverRole: varchar('approver_role', { length: 40 }).notNull(),
   status: varchar('status', { length: 20 }).notNull().default('pending'),

@@ -551,6 +551,21 @@ export const APPROVER_LABELS: Record<string, string> = {
   hiring_manager: 'Hiring Manager', elt: 'ELT Leader', finance: 'Finance', hr: 'HR',
 };
 
+export function approverEmail(label: string): string {
+  const key = (label ?? '').trim().toLowerCase();
+  const map: Record<string, string> = {
+    'hiring manager': process.env.HIRING_MANAGER_INBOX ?? 'hiring-manager@lightspeed.test',
+    'elt leader': process.env.ELT_INBOX ?? 'elt@lightspeed.test',
+    'elt': process.env.ELT_INBOX ?? 'elt@lightspeed.test',
+    'finance': process.env.FINANCE_INBOX ?? 'finance@lightspeed.test',
+    'hr': process.env.HR_INBOX ?? 'hr@lightspeed.test',
+    'human resources': process.env.HR_INBOX ?? 'hr@lightspeed.test',
+  };
+  if (map[key]) return map[key];
+  const slug = key.replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'approver';
+  return `${slug}@lightspeed.test`;
+}
+
 export const APPROVER_EMAILS: Record<string, string> = {
   hiring_manager: process.env.HIRING_MANAGER_INBOX ?? 'hiring-manager@lightspeed.test',
   elt: process.env.ELT_INBOX ?? 'elt@lightspeed.test',
