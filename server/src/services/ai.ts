@@ -576,23 +576,27 @@ export async function generateRoleJD(input: {
   } catch (err) { console.error('[AI] generateRoleJD failed:', err); return templateJD(title, input.department); }
 }
 
-function standardRoleQuestions(department: string): InterviewQuestion[] {
+// The FIXED standard question set — asked of EVERY candidate for a role (the "70%").
+// The tailored ~30% is NOT generated here; it is curated and emailed to the
+// interviewer later, after the candidate's EPP/values are reviewed.
+export function standardQuestionSet(department: string): InterviewQuestion[] {
   return [
     { category: 'Standard', question: 'Walk me through your background and what drew you to this role.', rationale: 'Consistent opener across candidates.' },
     { category: 'Standard', question: 'Tell me about a time you owned a difficult problem end to end.', rationale: 'Ownership — a Lightspeed value.' },
     { category: 'Standard', question: 'Describe a time you collaborated across teams to ship something.', rationale: 'Collaboration.' },
     { category: 'Standard', question: 'Tell me about a time you received tough feedback and what you did with it.', rationale: 'Coachability.' },
+    { category: 'Standard', question: `What does great work look like in a ${department} role, and how do you measure it?`, rationale: 'Role calibration — same for every candidate.' },
     { category: 'Values', question: 'How do you keep the customer — educators and students — in mind day to day?', rationale: 'Customer focus.' },
     { category: 'Behavioral', question: 'Tell me about a time you had to move fast with incomplete information.', rationale: 'Drive / adaptability.' },
-    { category: 'Role-Specific', question: `What does great work look like in a ${department} role, and how do you measure it?`, rationale: 'Role calibration.' },
-    { category: 'Role-Specific', question: `Describe a recent ${department} project you're proud of and your specific contribution.`, rationale: 'Depth in the function.' },
   ];
 }
 
-export async function generateRoleQuestions(input: { department: string; jobTitle: string }): Promise<InterviewQuestion[]> {
-  if (SANDBOX) { console.log(`[AI SANDBOX] generateRoleQuestions | ${input.jobTitle}`); return standardRoleQuestions(input.department); }
-  const system = `You are an expert interviewer at Lightspeed Systems (K-12 edtech). Core values: ${LIGHTSPEED_VALUES.join(', ')}. Generate a ROLE-LEVEL interview question set: ~70% standard questions asked of every candidate for this role, ~30% role-specific. Return ONLY a JSON array; each item {category ("Standard"|"Role-Specific"|"Values"|"Behavioral"), question, rationale}. 10–12 questions.`;
+// Generate the fixed standard set for a NEW/changed role via Claude (falls back to
+// the canonical set). Candidate-agnostic — no tailored 30%.
+export async function generateStandardQuestions(input: { department: string; jobTitle: string }): Promise<InterviewQuestion[]> {
+  if (SANDBOX) { console.log(`[AI SANDBOX] generateStandardQuestions | ${input.jobTitle}`); return standardQuestionSet(input.department); }
+  const system = `You are an expert interviewer at Lightspeed Systems (K-12 edtech). Core values: ${LIGHTSPEED_VALUES.join(', ')}. Generate ONLY the FIXED standard interview question set that is asked of EVERY candidate for this role (this is the "70%"). Do NOT include candidate-specific or tailored questions — those are added later. Keep them role-appropriate but candidate-agnostic. Return ONLY a JSON array; each item {category ("Standard"|"Values"|"Behavioral"), question, rationale}. 7–9 questions.`;
   const user = `Role: ${input.jobTitle} in ${input.department}.`;
   try { return JSON.parse(await callClaude(system, user)) as InterviewQuestion[]; }
-  catch (err) { console.error('[AI] generateRoleQuestions failed:', err); return standardRoleQuestions(input.department); }
+  catch (err) { console.error('[AI] generateStandardQuestions failed:', err); return standardQuestionSet(input.department); }
 }

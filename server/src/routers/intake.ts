@@ -14,7 +14,7 @@ import { inboundEmails } from '../db/schema/email.js';
 import type { DrizzleClient } from '../db.js';
 import { jobDescriptions } from '../db/schema/hiring.js';
 import { interviewQuestions } from '../db/schema/intake.js';
-import { generateRoleJD, generateRoleQuestions } from '../services/ai.js';
+import { generateRoleJD, generateStandardQuestions, standardQuestionSet } from '../services/ai.js';
 import { APPROVER_EMAILS, APPROVER_LABELS, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
@@ -116,12 +116,19 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
     });
   } catch (err) { console.error('[intake] JD generation failed:', err); }
 
+  // Only the fixed 70% standard set here. New/changed JD (questionSource
+  // 'ai_generate') -> generate a fresh standard set; otherwise reuse the
+  // canonical standard set (same questions as before). The tailored 30% is
+  // curated + emailed to the interviewer later, after EPP/values review.
   let questions: Array<{ category?: string; question: string }> = [];
   try {
-    questions = await generateRoleQuestions({ department: req.department, jobTitle: jdTitle ?? `${req.department} Position` });
-    await db.insert(interviewQuestions).values({
-      reqId: req.id, questions, source: req.questionSource === 'ai_generate' ? 'ai' : 'standard',
-    });
+    if (req.questionSource === 'ai_generate') {
+      questions = await generateStandardQuestions({ department: req.department, jobTitle: jdTitle ?? `${req.department} Position` });
+      await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'ai' });
+    } else {
+      questions = standardQuestionSet(req.department);
+      await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'standard' });
+    }
   } catch (err) { console.error('[intake] question generation failed:', err); }
 
   const externalPostDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
