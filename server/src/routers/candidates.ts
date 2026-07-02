@@ -104,9 +104,10 @@ export const candidatesRouter = router({
     }),
 
   create: protectedProcedure
-    .input(CandidateInput)
+    .input(CandidateInput.extend({ needsSponsorship: z.boolean().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const [candidate] = await ctx.db.insert(candidates).values(input).returning();
+      const { needsSponsorship, ...candidateData } = input;
+      const [candidate] = await ctx.db.insert(candidates).values(candidateData).returning();
 
       // Log initial stage to history
       await ctx.db.insert(candidateStageHistory).values({
@@ -117,10 +118,39 @@ export const candidatesRouter = router({
         reason: 'Application received',
       });
 
-      // Fire emails (non-blocking)
-      const jobTitle = await getJobTitle(ctx.db, input.jdId);
-      emailApplicationReceived({ ...input, jobTitle }).catch(() => {});
-      emailNewApplicationHR({ ...input, jobTitle }).catch(() => {});
+      const jobTitle = await getJobTitle(ctx.db, candidateData.jdId);
+
+      // Sponsorship knockout: the candidate checked "requires international
+      // sponsorship" on the application -> auto-reject on submit. This is the
+      // hook the Greenhouse intake maps its sponsorship answer to.
+      if (needsSponsorship) {
+        await ctx.db.update(candidates)
+          .set({
+            currentStage: 'Rejected',
+            rejectionReason: 'Requires international sponsorship, which Lightspeed does not offer.',
+            updatedAt: new Date(),
+          })
+          .where(eq(candidates.id, candidate.id));
+        await ctx.db.insert(candidateStageHistory).values({
+          candidateId: candidate.id,
+          fromStage: 'Applied',
+          toStage: 'Rejected',
+          changedBy: ctx.user.id,
+          reason: 'Auto-declined on application: requires international sponsorship (not offered).',
+        });
+        // SendGrid rejection email to the candidate.
+        dispatchStageEmail('Rejected', 'Applied', {
+          firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
+        }).catch(() => {});
+
+        await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'create');
+        trackActivity(ctx.db, ctx.user.id, 'create_candidate', 'candidates', { candidateId: candidate.id, autoDeclined: 'sponsorship' }).catch(() => {});
+        return { ...candidate, currentStage: 'Rejected' as const };
+      }
+
+      // Normal path — fire emails (non-blocking)
+      emailApplicationReceived({ ...candidateData, jobTitle }).catch(() => {});
+      emailNewApplicationHR({ ...candidateData, jobTitle }).catch(() => {});
 
       await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'create');
       trackActivity(ctx.db, ctx.user.id, 'create_candidate', 'candidates', { candidateId: candidate.id }).catch(() => {});

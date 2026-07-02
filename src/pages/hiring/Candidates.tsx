@@ -31,6 +31,7 @@ export default function Candidates() {
   const [form, setForm] = useState({
     jdId: '', firstName: '', lastName: '', email: '',
     phone: '', linkedinUrl: '', resumeUrl: '', source: '', notes: '',
+    needsSponsorship: false,
   });
 
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(
@@ -60,6 +61,7 @@ export default function Candidates() {
   const resetForm = () => setForm({
     jdId: '', firstName: '', lastName: '', email: '',
     phone: '', linkedinUrl: '', resumeUrl: '', source: '', notes: '',
+    needsSponsorship: false,
   });
 
   const getNextStage = (current: Stage): Stage | null => {
@@ -190,6 +192,16 @@ export default function Candidates() {
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   rows={2}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+              </div>
+              <div className="col-span-2">
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={form.needsSponsorship}
+                    onChange={(e) => setForm({ ...form, needsSponsorship: e.target.checked })}
+                  />
+                  Requires international sponsorship (candidate self-reports on the application — auto-declines on submit)
+                </label>
               </div>
             </div>
             <div className="flex gap-2 mt-4">
