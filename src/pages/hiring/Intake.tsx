@@ -45,6 +45,7 @@ export default function Intake() {
   const [team, setTeam] = useState<Person[]>([]);
   const [awareness, setAwareness] = useState<Aware[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
   const { data: intakes, refetch } = trpc.intake.list.useQuery();
   const { data: full } = trpc.intake.get.useQuery({ id: editingId! }, { enabled: !!editingId });
@@ -71,11 +72,19 @@ export default function Intake() {
     }
   }, [full, editingId]);
 
-  const close = () => { setShowForm(false); setEditingId(null); setForm({ ...EMPTY }); setRounds([]); setTeam([]); setAwareness([]); setErr(null); };
+  const close = () => { setShowForm(false); setEditingId(null); setForm({ ...EMPTY }); setRounds([]); setTeam([]); setAwareness([]); setErr(null); setSaved(false); };
   const startCreate = () => { close(); setShowForm(true); };
   const startEdit = (r: any) => { setErr(null); setEditingId(r.id); setShowForm(true); };
 
-  const saveMutation = trpc.intake.saveDraft.useMutation({ onSuccess: () => { refetch(); close(); } });
+  const saveMutation = trpc.intake.saveDraft.useMutation({
+    onSuccess: (data) => {
+      refetch();
+      setErr(null);
+      setSaved(true);
+      if (!editingId) setEditingId(data.id); // keep editing the same draft; avoids duplicates
+    },
+    onError: (e) => { setErr(e.message); setSaved(false); },
+  });
   const submitMutation = trpc.intake.submit.useMutation({
     onSuccess: () => { refetch(); close(); },
     onError: (e) => setErr(e.message),
@@ -102,7 +111,7 @@ export default function Intake() {
     awareness: awareness.filter((a) => a.personRef),
   });
 
-  const handleSave = () => { setErr(null); if (!form.department || !form.hiringManager) { setErr('Department and hiring manager are required.'); return; } saveMutation.mutate(buildPayload() as any); };
+  const handleSave = () => { setErr(null); setSaved(false); if (!form.department || !form.hiringManager) { setErr('Department and hiring manager are required.'); return; } saveMutation.mutate(buildPayload() as any); };
   const handleSubmit = async () => {
     setErr(null);
     if (!form.department || !form.hiringManager) { setErr('Department and hiring manager are required.'); return; }
@@ -315,7 +324,8 @@ export default function Intake() {
             </div>
           </section>
 
-          {err && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{err}</div>}
+          {err && <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">Couldn't save: {err}</div>}
+          {saved && !err && <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">Draft saved ✓ — it's in the list below and will still be here when you come back.</div>}
 
           <div className="flex gap-2 pt-2 border-t border-gray-100">
             <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-white border border-ls-primary text-ls-primary rounded-md text-sm font-medium hover:bg-ls-bg-2 disabled:opacity-50">
