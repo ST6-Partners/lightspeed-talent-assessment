@@ -436,6 +436,9 @@ export default function Candidates() {
           {/* Resume screen — checks resume vs REQUIRED qualifications only */}
           <ResumeScreenSection key={selected.id} candidateId={selected.id} existingNotes={(selected as any).resumeReviewNotes ?? null} onChanged={refetch} />
 
+          {/* Reference check — agent report (after interview, before offer) */}
+          <ReferenceCheckSection key={`ref-${selected.id}`} candidateId={selected.id} existingNotes={(selected as any).referenceCheckNotes ?? null} onChanged={refetch} />
+
           {/* HR notes */}
           <Section title="HR Notes">
             <EditableTextarea
@@ -584,6 +587,67 @@ function ResumeScreenSection({ candidateId, existingNotes, onChanged }: { candid
               ) : (
                 <div className="text-xs text-green-700">All nice-to-haves met.</div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!result && existingNotes && (
+        <div className="text-xs text-gray-600 whitespace-pre-wrap mt-1">{existingNotes}</div>
+      )}
+    </Section>
+  );
+}
+
+function ReferenceCheckSection({ candidateId, existingNotes, onChanged }: { candidateId: string; existingNotes: string | null; onChanged?: () => void }) {
+  const [result, setResult] = useState<any>(null);
+  const run = trpc.candidates.referenceCheck.useMutation({ onSuccess: (r) => { setResult(r); onChanged?.(); } });
+
+  const recLabel: Record<string, string> = {
+    proceed: 'Proceed',
+    proceed_with_caution: 'Proceed with caution',
+    flag_for_review: 'Flag for review',
+  };
+  const recColor: Record<string, string> = {
+    proceed: 'text-green-700 bg-green-50 border-green-200',
+    proceed_with_caution: 'text-amber-700 bg-amber-50 border-amber-200',
+    flag_for_review: 'text-red-700 bg-red-50 border-red-200',
+  };
+
+  return (
+    <Section title="Reference Check (agent)">
+      <div className="text-xs text-gray-500">
+        Runs after the interview, before the offer. Produces a balanced report of positive signals and concerns to inform the decision. It's an AI draft to verify — it does not reject the candidate, and it does not perform live background research on real applicants.
+      </div>
+      <button
+        onClick={() => run.mutate({ id: candidateId })}
+        disabled={run.isLoading}
+        className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+      >
+        {run.isLoading ? 'Checking…' : 'Run reference check'}
+      </button>
+
+      {result && (
+        <div className="mt-2 space-y-2">
+          <div className={`text-xs font-semibold rounded border p-2 ${recColor[result.recommendation] ?? 'text-gray-700 bg-gray-50 border-gray-200'}`}>
+            {recLabel[result.recommendation] ?? result.recommendation} · confidence {result.confidence}
+            {result.mode === 'placeholder' ? ' · AI draft (no external references gathered)' : ' · AI draft — verify'}
+          </div>
+          {result.summary && <div className="text-xs text-gray-700">{result.summary}</div>}
+          {result.positives?.length > 0 && (
+            <div>
+              <div className="text-xs font-medium text-green-700 mb-0.5">Positive signals</div>
+              <ul className="list-disc list-inside">
+                {result.positives.map((x: string, i: number) => <li key={i} className="text-xs text-green-700">{x}</li>)}
+              </ul>
+            </div>
+          )}
+          {result.concerns?.length > 0 && (
+            <div>
+              <div className="text-xs font-medium text-amber-700 mb-0.5">Concerns</div>
+              <ul className="list-disc list-inside">
+                {result.concerns.map((x: string, i: number) => <li key={i} className="text-xs text-amber-700">{x}</li>)}
+              </ul>
             </div>
           )}
         </div>

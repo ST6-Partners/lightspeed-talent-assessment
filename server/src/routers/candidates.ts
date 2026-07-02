@@ -23,6 +23,7 @@ import {
 } from '../services/email.js';
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
+import { runReferenceCheck } from '../services/ai.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 
 const STAGES = [
@@ -486,6 +487,49 @@ export const candidatesRouter = router({
       trackActivity(ctx.db, ctx.user.id, 'screen_resume', 'candidates', { candidateId: input.id, decision }).catch(() => {});
 
       return { decision, reason, movedToStage, requirements, niceToHaves, notes };
+    }),
+
+  // Reference check = agent-assembled report of positive signals + concerns for
+  // a finalist, run after the interview and before the offer. Informational and
+  // human-reviewed: it does NOT change stage or reject. (See ai.ts for the
+  // compliance note — no live web-scraping of real applicants.)
+  referenceCheck: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({
+        where: eq(candidates.id, input.id),
+      });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const jobTitle = await getJobTitle(ctx.db, candidate.jdId);
+      const result = await runReferenceCheck({
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        jobTitle,
+        linkedinUrl: candidate.linkedinUrl,
+        notes: candidate.notes,
+        interviewFeedbackHr: (candidate as any).interviewFeedbackHr,
+        interviewScore: (candidate as any).interviewScore,
+      });
+
+      const report = [
+        result.summary,
+        result.positives.length ? `Positives: ${result.positives.join('; ')}` : '',
+        result.concerns.length ? `Concerns: ${result.concerns.join('; ')}` : '',
+        `Recommendation: ${result.recommendation} (confidence ${result.confidence}). ` +
+          (result.mode === 'placeholder'
+            ? '[AI draft — no external references gathered; connect a reference source]'
+            : '[AI draft — verify with real references]'),
+      ].filter(Boolean).join('\n');
+
+      await ctx.db.update(candidates)
+        .set({ referenceCheckNotes: report, referenceCheckScore: result.confidence, updatedAt: new Date() })
+        .where(eq(candidates.id, input.id));
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'reference_check', 'candidates', { candidateId: input.id }).catch(() => {});
+
+      return result;
     }),
 
   // Store AI-generated interview questions
