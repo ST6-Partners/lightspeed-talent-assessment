@@ -10,6 +10,8 @@ import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { jobRequisitions } from '../db/schema/hiring.js';
 import { interviewPlan, hiringTeam, awarenessList, approvals } from '../db/schema/intake.js';
+import { inboundEmails } from '../db/schema/email.js';
+import { APPROVER_EMAILS, APPROVER_LABELS, buildApprovalRequestEmail, sendApprovalRequest } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 
@@ -187,6 +189,31 @@ export const intakeRouter = router({
           actedAt: s.step === 1 ? new Date() : null,
         })),
       );
+
+      // Notify each needed department (pending approvers) that an intake awaits
+      // their approval — real send via SendGrid, plus a copy dropped into the
+      // test inbox (one per department) so it's verifiable without live mail.
+      const pendingApprovers = APPROVAL_STEPS.filter((s) => s.step !== 1);
+      for (const s of pendingApprovers) {
+        const to = APPROVER_EMAILS[s.approverRole] ?? APPROVER_EMAILS.hr;
+        const roleLabel = APPROVER_LABELS[s.approverRole] ?? s.approverRole;
+        const data = { roleLabel, department: req.department, hiringManager: req.hiringManager };
+        try {
+          await sendApprovalRequest(to, data);
+          const { subject, text } = buildApprovalRequestEmail(data);
+          await ctx.db.insert(inboundEmails).values({
+            fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+            fromName: 'Lightspeed Hiring',
+            toEmail: to,
+            subject,
+            body: text,
+            replyTag: s.approverRole,
+            source: 'simulated',
+          });
+        } catch (err) {
+          console.error('[intake] approver notification failed:', err);
+        }
+      }
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_requisitions', 'update');
       trackActivity(ctx.db, ctx.user.id, 'submit_intake', 'job_requisitions', { reqId: input.id }).catch(() => {});

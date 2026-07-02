@@ -36,6 +36,9 @@ function fmt(ts: string | Date | null) {
 export default function EmailTestPanel() {
   const cfg = trpc.emailTest.config.useQuery();
   const inbox = trpc.emailTest.listInbound.useQuery(undefined, { refetchInterval: 5000 });
+  const [inboxFilter, setInboxFilter] = useState<string | null>(null);
+  const toAddrs: string[] = Array.from(new Set((inbox.data ?? []).map((m: any) => m.toEmail).filter(Boolean))) as string[];
+  const inboxRows = (inbox.data ?? []).filter((m: any) => !inboxFilter || m.toEmail === inboxFilter);
 
   // send form
   const [name, setName] = useState('');
@@ -121,12 +124,21 @@ export default function EmailTestPanel() {
       <div style={{ ...c.card, marginTop: 16 }}>
         <p style={c.h}>Received messages</p>
         <p style={c.sub}>{inbox.data?.length ? `${inbox.data.length} message(s) · auto-refreshing` : 'Nothing received yet.'}</p>
+        {toAddrs.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '4px 0 12px' }}>
+            <button onClick={() => setInboxFilter(null)} style={{ ...c.btnGhost, fontWeight: inboxFilter === null ? 700 : 400 }}>All inboxes</button>
+            {toAddrs.map((addr) => (
+              <button key={addr} onClick={() => setInboxFilter(addr)} style={{ ...c.btnGhost, fontWeight: inboxFilter === addr ? 700 : 400 }}>{addr}</button>
+            ))}
+          </div>
+        )}
         {inbox.data && inbox.data.length > 0 && (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
                 <th style={c.th}>When</th>
                 <th style={c.th}>From</th>
+                <th style={c.th}>To</th>
                 <th style={c.th}>Subject</th>
                 <th style={c.th}>Message</th>
                 <th style={c.th}>Source</th>
@@ -134,10 +146,11 @@ export default function EmailTestPanel() {
               </tr>
             </thead>
             <tbody>
-              {inbox.data.map((m: any) => (
+              {inboxRows.map((m: any) => (
                 <tr key={m.id}>
                   <td style={c.td}>{fmt(m.receivedAt)}</td>
                   <td style={c.td}>{m.fromName ? `${m.fromName} ` : ''}&lt;{m.fromEmail}&gt;</td>
+                  <td style={c.td}>{m.toEmail || '—'}</td>
                   <td style={c.td}>{m.subject}</td>
                   <td style={{ ...c.td, maxWidth: 280, color: '#4b5563' }}>{(m.body || '').slice(0, 160)}</td>
                   <td style={c.td}><span style={{ ...c.code, color: m.source === 'webhook' ? '#1d4ed8' : '#92400e' }}>{m.source}</span></td>

@@ -531,3 +531,45 @@ export async function dispatchStageEmail(
       break;
   }
 }
+
+
+// ============================================================
+// INTAKE APPROVAL NOTIFICATIONS
+// Fake per-department inboxes for testing (override via env).
+// ============================================================
+
+export const APPROVER_LABELS: Record<string, string> = {
+  hiring_manager: 'Hiring Manager', elt: 'ELT Leader', finance: 'Finance', hr: 'HR',
+};
+
+export const APPROVER_EMAILS: Record<string, string> = {
+  hiring_manager: process.env.HIRING_MANAGER_INBOX ?? 'hiring-manager@lightspeed.test',
+  elt: process.env.ELT_INBOX ?? 'elt@lightspeed.test',
+  finance: process.env.FINANCE_INBOX ?? 'finance@lightspeed.test',
+  hr: process.env.HR_INBOX ?? 'hr@lightspeed.test',
+};
+
+interface ApprovalRequestData {
+  roleLabel: string;
+  department: string;
+  hiringManager: string;
+  jobTitle?: string;
+}
+
+export function buildApprovalRequestEmail(d: ApprovalRequestData): { subject: string; html: string; text: string } {
+  const role = `${d.department}${d.jobTitle ? ' · ' + d.jobTitle : ''}`;
+  const subject = `Approval needed (${d.roleLabel}): ${role} intake`;
+  const html = wrap(`
+    ${h1('An intake needs your approval')}
+    ${p(`A new hiring intake for <strong>${role}</strong> has been submitted by <strong>${d.hiringManager}</strong> and needs <strong>${d.roleLabel}</strong> approval.`)}
+    ${p('Open the Talent Assessment app, go to <strong>Intake</strong>, and review the Approval chain to approve or reject.')}
+  `);
+  const text = `A new hiring intake for ${role}, submitted by ${d.hiringManager}, needs ${d.roleLabel} approval. Open the Talent Assessment app → Intake → Approval chain to approve or reject.`;
+  return { subject, html, text };
+}
+
+/** Send an approval-request email to a single approver (real send when configured). */
+export async function sendApprovalRequest(to: string, d: ApprovalRequestData): Promise<void> {
+  const { subject, html } = buildApprovalRequestEmail(d);
+  await sendEmail({ to, subject, html, templateId: `intake_approval_${d.roleLabel.replace(/\s+/g, '_').toLowerCase()}` });
+}
