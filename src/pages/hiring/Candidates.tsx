@@ -421,6 +421,9 @@ export default function Candidates() {
             />
           </Section>
 
+          {/* Resume screen — checks resume vs REQUIRED qualifications only */}
+          <ResumeScreenSection key={selected.id} candidateId={selected.id} existingNotes={(selected as any).resumeReviewNotes ?? null} />
+
           {/* HR notes */}
           <Section title="HR Notes">
             <EditableTextarea
@@ -478,6 +481,78 @@ export default function Candidates() {
 }
 
 // ── Sub-components ─────────────────────────────────────────
+
+function ResumeScreenSection({ candidateId, existingNotes }: { candidateId: string; existingNotes: string | null }) {
+  const [resumeText, setResumeText] = useState('');
+  const [result, setResult] = useState<any>(null);
+  const screen = trpc.candidates.screenResume.useMutation({ onSuccess: (r) => setResult(r) });
+
+  return (
+    <Section title="Resume Screen (required qualifications)">
+      <div className="text-xs text-gray-500">
+        Checks the resume against the job's <strong>required</strong> qualifications only and flags any that look missing. It does not reject the candidate.
+      </div>
+      <textarea
+        value={resumeText}
+        onChange={(e) => setResumeText(e.target.value)}
+        rows={5}
+        placeholder="Paste the candidate's resume text here..."
+        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-ls-cyan"
+      />
+      <button
+        onClick={() => screen.mutate({ id: candidateId, resumeText })}
+        disabled={!resumeText.trim() || screen.isLoading}
+        className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+      >
+        {screen.isLoading ? 'Screening…' : 'Screen against requirements'}
+      </button>
+
+      {result && (
+        <div className="mt-2 space-y-2">
+          <div className="text-xs font-medium text-gray-800">
+            {result.totalCount === 0
+              ? 'No required qualifications listed on this job description.'
+              : `${result.metCount}/${result.totalCount} required qualifications found`}
+          </div>
+
+          {result.missing && result.missing.length > 0 && (
+            <div className="bg-red-50 border border-red-200 rounded p-2">
+              <div className="text-xs font-semibold text-red-700 mb-1">Missing requirements</div>
+              <ul className="list-disc list-inside space-y-0.5">
+                {result.missing.map((m: string, i: number) => (
+                  <li key={i} className="text-xs text-red-700">{m}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {result.totalCount > 0 && result.missing.length === 0 && (
+            <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2">
+              All required qualifications appear to be met.
+            </div>
+          )}
+
+          {result.requirements && result.requirements.length > 0 && (
+            <div className="space-y-1">
+              {result.requirements.map((r: any, i: number) => (
+                <div key={i} className="text-xs flex gap-1.5">
+                  <span className={r.met ? 'text-green-600' : 'text-red-600'}>{r.met ? '✓' : '✗'}</span>
+                  <span className="text-gray-700">
+                    <span className="font-medium">{r.requirement}</span>
+                    {r.evidence ? <span className="text-gray-400 italic"> — {r.evidence}</span> : null}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!result && existingNotes && (
+        <div className="text-xs text-gray-600 whitespace-pre-wrap mt-1">{existingNotes}</div>
+      )}
+    </Section>
+  );
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);

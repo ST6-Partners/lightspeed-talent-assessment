@@ -22,6 +22,7 @@ import {
   sendEmail,
 } from '../services/email.js';
 import { generateInterviewQuestions } from '../services/ai.js';
+import { screenResumeRequirements } from '../services/ai.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 
 const STAGES = [
@@ -331,6 +332,34 @@ export const candidatesRouter = router({
         .where(eq(candidates.id, input.id))
         .returning();
       return candidate;
+    }),
+
+  // Screen a resume against the job's REQUIRED qualifications only.
+  // Flags missing requirements. Does NOT change stage or reject.
+  screenResume: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), resumeText: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({
+        where: eq(candidates.id, input.id),
+      });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const jd = candidate.jdId
+        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null;
+      const required = ((jd as any)?.requiredQualifications ?? '') as string;
+
+      const result = await screenResumeRequirements(input.resumeText, required);
+
+      // Persist a human-readable summary; leave resumeReviewScore untouched.
+      await ctx.db.update(candidates)
+        .set({ resumeReviewNotes: result.summary, updatedAt: new Date() })
+        .where(eq(candidates.id, input.id));
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'screen_resume', 'candidates', { candidateId: input.id }).catch(() => {});
+
+      return result;
     }),
 
   // Store AI-generated interview questions

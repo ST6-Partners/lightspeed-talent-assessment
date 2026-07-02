@@ -32,7 +32,7 @@ export interface InterviewFeedback {
 
 // ── Core Claude caller ─────────────────────────────────────
 
-async function callClaude(systemPrompt: string, userPrompt: string): Promise<string> {
+async function callClaude(systemPrompt: string, userPrompt: string, model: string = MODEL): Promise<string> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -41,7 +41,7 @@ async function callClaude(systemPrompt: string, userPrompt: string): Promise<str
       'content-type': 'application/json',
     },
     body: JSON.stringify({
-      model: MODEL,
+      model,
       max_tokens: 2048,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
@@ -272,4 +272,148 @@ As you continue in your career, one area to develop is connecting your contribut
 
 We'll be in touch with next steps shortly.`,
   };
+}
+
+
+// ============================================================
+// RESUME SCREEN — check a resume against a job's REQUIRED
+// qualifications only. Flags missing requirements. Never judges
+// the candidate on anything else (no preferred quals, no
+// subjective quality). Flag-only — does not reject.
+// ============================================================
+
+// Current Sonnet (ai.ts MODEL above is an older 3.5 snapshot; use the
+// same current model the feedback/chat paths use for this screen).
+const RESUME_SCREEN_MODEL = 'claude-sonnet-4-6';
+
+export interface RequirementCheck {
+  requirement: string;
+  met: boolean;
+  evidence: string;   // where found in resume, or why not found
+}
+
+export interface ResumeScreenResult {
+  requirements: RequirementCheck[];
+  missing: string[];
+  metCount: number;
+  totalCount: number;
+  summary: string;
+}
+
+// Split a required-qualifications blob into individual requirement lines.
+// Handles newline / bullet / semicolon separators and JSON-array strings.
+function splitRequirements(raw: string): string[] {
+  if (!raw) return [];
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('[')) {
+    try {
+      const arr = JSON.parse(trimmed);
+      if (Array.isArray(arr)) {
+        return arr.map((x) => String(x).trim()).filter((x) => x.length > 2);
+      }
+    } catch { /* fall through to line split */ }
+  }
+  return trimmed
+    .split(/\r?\n|•|·|•|;/)
+    .map((line) => line.replace(/^\s*[-*–—\d.)]+\s*/, '').trim())
+    .filter((line) => line.length > 2);
+}
+
+function summarizeScreen(checks: RequirementCheck[]): ResumeScreenResult {
+  const missing = checks.filter((c) => !c.met).map((c) => c.requirement);
+  const metCount = checks.length - missing.length;
+  const summary =
+    checks.length === 0
+      ? 'No required qualifications listed on this job description — nothing to screen.'
+      : missing.length === 0
+        ? `Resume screen: all ${checks.length} required qualifications appear to be met.`
+        : `Resume screen: ${metCount}/${checks.length} required qualifications met. MISSING: ${missing.join('; ')}.`;
+  return { requirements: checks, missing, metCount, totalCount: checks.length, summary };
+}
+
+// Deterministic keyword fallback (used in SANDBOX / on AI failure).
+// Marks a requirement "met" when enough of its significant words appear
+// in the resume. Rough, but lets the flow be tested without an API key.
+const STOPWORDS = new Set([
+  'and','or','the','a','an','of','to','in','with','for','on','at','by','as','is','are','be',
+  'experience','years','strong','proven','track','record','ability','including','related','field',
+  'plus','equivalent','practical','hands','skills','knowledge','expertise','using','across','level',
+]);
+
+function keywordScreen(requirements: string[], resumeText: string): ResumeScreenResult {
+  const hay = resumeText.toLowerCase();
+  const checks: RequirementCheck[] = requirements.map((req) => {
+    const words = req
+      .toLowerCase()
+      .replace(/[^a-z0-9+ ]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length > 3 && !STOPWORDS.has(w));
+    const uniq = Array.from(new Set(words));
+    if (uniq.length === 0) return { requirement: req, met: true, evidence: 'No specific keywords to check.' };
+    const hits = uniq.filter((w) => hay.includes(w));
+    const ratio = hits.length / uniq.length;
+    const met = ratio >= 0.5;
+    return {
+      requirement: req,
+      met,
+      evidence: met
+        ? `Matched keywords: ${hits.slice(0, 6).join(', ')}`
+        : `Few/no matching terms found (${hits.length}/${uniq.length}).`,
+    };
+  });
+  return summarizeScreen(checks);
+}
+
+function extractJsonArray(raw: string): string {
+  const fenced = raw.replace(/```json|```/g, '');
+  const start = fenced.indexOf('[');
+  const end = fenced.lastIndexOf(']');
+  if (start !== -1 && end !== -1 && end > start) return fenced.slice(start, end + 1);
+  return fenced.trim();
+}
+
+export async function screenResumeRequirements(
+  resumeText: string,
+  requiredQualificationsRaw: string,
+): Promise<ResumeScreenResult> {
+  const requirements = splitRequirements(requiredQualificationsRaw || '');
+  if (requirements.length === 0) return summarizeScreen([]);
+
+  if (!resumeText || resumeText.trim().length < 20) {
+    return summarizeScreen(
+      requirements.map((r) => ({ requirement: r, met: false, evidence: 'No resume text provided.' })),
+    );
+  }
+
+  if (SANDBOX) {
+    console.log('[AI SANDBOX] screenResumeRequirements | keyword fallback (no ANTHROPIC_API_KEY)');
+    return keywordScreen(requirements, resumeText);
+  }
+
+  const system = `You screen a candidate's resume against a job's REQUIRED qualifications ONLY.
+For EACH required qualification, decide whether the resume shows evidence the candidate meets it.
+Be generous: mark "met": false only when there is genuinely no supporting evidence in the resume.
+Do NOT evaluate the candidate on anything beyond these required qualifications — ignore preferred/
+nice-to-have items and do not make any subjective quality judgement. The goal is only to flag
+requirements that are missing, not to rank or reject the candidate.
+Return ONLY a JSON array. Each element:
+  { "requirement": "<exact requirement text>", "met": true|false, "evidence": "<short reason / where found>" }`;
+
+  const user = `REQUIRED QUALIFICATIONS:\n${requirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\nRESUME:\n${resumeText}`;
+
+  try {
+    const raw = await callClaude(system, user, RESUME_SCREEN_MODEL);
+    const parsed = JSON.parse(extractJsonArray(raw)) as RequirementCheck[];
+    // Normalize + guard against the model dropping/renaming items.
+    const checks: RequirementCheck[] = requirements.map((req) => {
+      const hit = parsed.find((p) => p && typeof p.requirement === 'string'
+        && p.requirement.trim().toLowerCase().slice(0, 40) === req.trim().toLowerCase().slice(0, 40));
+      if (hit) return { requirement: req, met: !!hit.met, evidence: String(hit.evidence ?? '') };
+      return { requirement: req, met: false, evidence: 'Not assessed by the model — treat as unverified.' };
+    });
+    return summarizeScreen(checks);
+  } catch (err) {
+    console.error('[AI] screenResumeRequirements failed — falling back to keyword screen:', err);
+    return keywordScreen(requirements, resumeText);
+  }
 }
