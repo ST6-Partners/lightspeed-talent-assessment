@@ -9,6 +9,7 @@ import { TRPCError } from '@trpc/server';
 import { randomUUID } from 'node:crypto';
 import { router, protectedProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions, emailLog, candidateReferences } from '../db/schema/hiring.js';
+import { inboundEmails } from '../db/schema/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { analyzeEpp } from '../services/eppAnalyzer.js';
@@ -668,6 +669,24 @@ export const candidatesRouter = router({
 
       // Email the letter (SendGrid).
       await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle, letterHtml }).catch(() => {});
+
+      // Also drop a copy into the test inbox (Received messages), matching the
+      // intake-notification pattern — SendGrid send above, inbox copy here.
+      const offerSubject = `Your offer from Lightspeed Systems${jobTitle ? ` \u2014 ${jobTitle}` : ''}`;
+      try {
+        await ctx.db.insert(inboundEmails).values({
+          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+          fromName: 'Lightspeed Hiring',
+          toEmail: candidate.email,
+          subject: offerSubject,
+          body: letterHtml,
+          replyTag: 'offer',
+          source: 'simulated',
+          raw: { kind: 'offer_letter', candidateId: input.id },
+        });
+      } catch (err) {
+        console.error('[offer] inbox record failed:', err);
+      }
 
       // Advance to Offered (skip if already there / terminal).
       if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
