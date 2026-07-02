@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, X, ChevronRight, Ban, ChevronDown } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
@@ -721,11 +721,27 @@ function ReferenceCheckSection({ candidateId, existingNotes, onChanged }: { cand
 }
 
 function OfferSection({ candidateId, onChanged }: { candidateId: string; onChanged?: () => void }) {
+  const defaults = trpc.candidates.offerDefaults.useQuery({ id: candidateId });
   const [f, setF] = useState({ baseSalary: '', startDate: '', reportsTo: '', department: '', employmentType: 'Full-Time', location: '' });
   const [addendum, setAddendum] = useState<{ title: string; body: string }[]>([]);
   const [html, setHtml] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
+  // Prefill from the requisition (intake) once it loads.
+  useEffect(() => {
+    const d = defaults.data;
+    if (!d) return;
+    setF({
+      baseSalary: d.suggestedSalary != null ? String(d.suggestedSalary) : '',
+      startDate: d.targetStartDate ?? '',
+      reportsTo: d.reportsTo ?? '',
+      department: d.department ?? '',
+      employmentType: d.employmentType ?? 'Full-Time',
+      location: d.location ?? '',
+    });
+  }, [defaults.data]);
+
+  const d = defaults.data;
   const payload = () => ({
     id: candidateId,
     baseSalary: f.baseSalary.trim() ? parseInt(f.baseSalary.replace(/[^0-9]/g, '')) : undefined,
@@ -748,18 +764,42 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
     </div>
   );
 
+  const band = d && (d.bandMin != null || d.bandMax != null)
+    ? `$${(d.bandMin ?? d.bandMax)?.toLocaleString()} – $${(d.bandMax ?? d.bandMin)?.toLocaleString()}`
+    : null;
+
   return (
     <Section title="Offer Letter (external)">
       <div className="text-xs text-gray-500">
-        Editable fields go in fixed places; the rest is stock language. Put anything custom (transition plan, sales comp plan) on an addendum. Generated from a fixed template — not AI.
+        Prefilled from the approved intake. Confirm the <strong>salary</strong> (within the approved band) and the <strong>start date</strong>; everything else comes from the requisition. Custom items go on an addendum. Generated from a fixed template — not AI.
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        {field('Base salary (annual)', 'baseSalary', '120000')}
+
+      {/* Confirm fields (candidate-specific) */}
+      <div className="bg-blue-50 border border-blue-100 rounded p-2 space-y-2">
+        <div className="text-xs font-semibold text-blue-800">Confirm for this candidate</div>
+        <div>
+          <div className="text-xs text-gray-600 mb-0.5">
+            Base salary (annual){band ? <span className="text-gray-400"> · approved band {band}{d?.financeConfirmed ? ' · finance ✓' : ''}</span> : null}
+          </div>
+          <input value={f.baseSalary} onChange={(e) => setF({ ...f, baseSalary: e.target.value })} placeholder="120000"
+            className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+        </div>
         {field('Start date', 'startDate', 'August 4, 2025')}
-        {field('Reports to', 'reportsTo')}
-        {field('Department', 'department')}
-        {field('Employment type', 'employmentType')}
-        {field('Location', 'location')}
+      </div>
+
+      {/* From intake (prefilled, editable to override) */}
+      <div className="pt-1">
+        <div className="text-xs font-medium text-gray-500 mb-1">From intake (edit only to override)</div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <div className="text-xs text-gray-500 mb-0.5">Position</div>
+            <input value={d?.jobTitle ?? ''} disabled className="w-full px-2 py-1 border border-gray-200 bg-gray-50 rounded text-xs text-gray-600" />
+          </div>
+          {field('Reports to', 'reportsTo')}
+          {field('Department', 'department')}
+          {field('Employment type', 'employmentType')}
+          {field('Location', 'location')}
+        </div>
       </div>
 
       <div className="pt-1">

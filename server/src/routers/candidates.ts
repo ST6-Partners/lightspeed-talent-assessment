@@ -8,7 +8,7 @@ import { eq, desc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { randomUUID } from 'node:crypto';
 import { router, protectedProcedure } from '../trpc.js';
-import { candidates, candidateStageHistory, jobDescriptions, emailLog, candidateReferences } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions, emailLog, candidateReferences } from '../db/schema/hiring.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { analyzeEpp } from '../services/eppAnalyzer.js';
@@ -69,6 +69,44 @@ async function getJobTitle(db: any, jdId: string | null | undefined): Promise<st
     where: eq(jobDescriptions.id, jdId),
   });
   return jd?.jobTitle;
+}
+
+// Build the offer-letter input by pulling defaults from the requisition (intake
+// data) and letting explicit inputs override. So HR only confirms the salary
+// figure and start date; everything else flows from intake.
+async function buildOfferInput(db: any, input: any): Promise<OfferLetterInput> {
+  const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+  if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+  const jd = candidate.jdId
+    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+    : null;
+  const req = jd?.reqId
+    ? await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) })
+    : null;
+
+  const min = req?.salaryMin ?? null;
+  const max = req?.salaryMax ?? null;
+  const suggested = (min != null && max != null) ? Math.round((min + max) / 2) : (max ?? min ?? null);
+  const arrangement = req?.workArrangement && req.workArrangement !== 'On-site'
+    ? `${req.workArrangement}${req.hybridDays ? ` (${req.hybridDays} days)` : ''}`
+    : null;
+  const location = [req?.location, arrangement].filter(Boolean).join(' \u00b7 ') || null;
+  const targetStart = req?.targetStartDate
+    ? new Date(req.targetStartDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    : null;
+
+  return {
+    firstName: candidate.firstName,
+    lastName: candidate.lastName,
+    jobTitle: input.jobTitle || jd?.jobTitle || 'the role',
+    department: input.department ?? req?.department ?? null,
+    reportsTo: input.reportsTo ?? req?.hiringManager ?? null,
+    employmentType: input.employmentType ?? req?.employmentType ?? 'Full-Time',
+    baseSalary: input.baseSalary ?? suggested ?? null,
+    startDate: input.startDate ?? targetStart ?? null,
+    location: input.location ?? location ?? null,
+    addendum: input.addendum ?? [],
+  };
 }
 
 export const candidatesRouter = router({
@@ -552,6 +590,44 @@ export const candidatesRouter = router({
   // Deterministic letter (no AI) — editable fields in fixed places + addendum.
   // (helper below is inlined per-call)
 
+  // Resolve the requisition (intake data) behind a candidate, for offer prefill.
+  offerDefaults: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const jd = candidate.jdId
+        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null;
+      const req = jd?.reqId
+        ? await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) })
+        : null;
+
+      const min = (req as any)?.salaryMin ?? null;
+      const max = (req as any)?.salaryMax ?? null;
+      const suggestedSalary = (min != null && max != null) ? Math.round((min + max) / 2) : (max ?? min ?? null);
+      const arrangement = (req as any)?.workArrangement && (req as any).workArrangement !== 'On-site'
+        ? `${(req as any).workArrangement}${(req as any)?.hybridDays ? ` (${(req as any).hybridDays} days)` : ''}`
+        : null;
+      const location = [(req as any)?.location, arrangement].filter(Boolean).join(' · ') || null;
+      const targetStart = (req as any)?.targetStartDate
+        ? new Date((req as any).targetStartDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        : null;
+
+      return {
+        jobTitle: jd?.jobTitle ?? null,
+        department: (req as any)?.department ?? null,
+        reportsTo: (req as any)?.hiringManager ?? null,
+        employmentType: (req as any)?.employmentType ?? 'Full-Time',
+        location,
+        bandMin: min,
+        bandMax: max,
+        suggestedSalary,
+        targetStartDate: targetStart,
+        financeConfirmed: !!(req as any)?.financeConfirmed,
+      };
+    }),
+
   // Preview the external offer letter (renders HTML; does not send or change stage).
   offerPreview: protectedProcedure
     .input(z.object({
@@ -566,24 +642,7 @@ export const candidatesRouter = router({
       addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
-      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
-      const jd = candidate.jdId
-        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
-        : null;
-
-      const offer: OfferLetterInput = {
-        firstName: candidate.firstName,
-        lastName: candidate.lastName,
-        jobTitle: input.jobTitle || jd?.jobTitle || 'the role',
-        department: input.department ?? null,
-        reportsTo: input.reportsTo ?? null,
-        employmentType: input.employmentType ?? 'Full-Time',
-        baseSalary: input.baseSalary ?? null,
-        startDate: input.startDate ?? null,
-        location: input.location ?? null,
-        addendum: input.addendum ?? [],
-      };
+      const offer = await buildOfferInput(ctx.db, input);
       return { html: renderOfferLetter(offer), jobTitle: offer.jobTitle };
     }),
 
@@ -603,23 +662,9 @@ export const candidatesRouter = router({
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
-      const jd = candidate.jdId
-        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
-        : null;
-      const jobTitle = input.jobTitle || jd?.jobTitle || 'the role';
-
-      const letterHtml = renderOfferLetter({
-        firstName: candidate.firstName,
-        lastName: candidate.lastName,
-        jobTitle,
-        department: input.department ?? null,
-        reportsTo: input.reportsTo ?? null,
-        employmentType: input.employmentType ?? 'Full-Time',
-        baseSalary: input.baseSalary ?? null,
-        startDate: input.startDate ?? null,
-        location: input.location ?? null,
-        addendum: input.addendum ?? [],
-      });
+      const offer = await buildOfferInput(ctx.db, input);
+      const jobTitle = offer.jobTitle;
+      const letterHtml = renderOfferLetter(offer);
 
       // Email the letter (SendGrid).
       await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle, letterHtml }).catch(() => {});
