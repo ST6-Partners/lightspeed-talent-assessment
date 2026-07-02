@@ -192,4 +192,18 @@ export const intakeRouter = router({
       trackActivity(ctx.db, ctx.user.id, 'submit_intake', 'job_requisitions', { reqId: input.id }).catch(() => {});
       return { id: input.id, status: 'Pending Approval' };
     }),
+
+  // Delete an intake/requisition. Child rows (interview_plan, hiring_team,
+  // awareness_list, approvals, job_descriptions) cascade via FK; linked
+  // candidates are detached (jd_id ON DELETE set null).
+  delete: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.id) });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      await ctx.db.delete(jobRequisitions).where(eq(jobRequisitions.id, input.id));
+      await auditChange(ctx.db, ctx.user.id, input.id, 'job_requisitions', 'delete');
+      trackActivity(ctx.db, ctx.user.id, 'delete_intake', 'job_requisitions', { reqId: input.id }).catch(() => {});
+      return { id: input.id };
+    }),
 });
