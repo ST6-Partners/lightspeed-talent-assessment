@@ -57,3 +57,6 @@ export { inboundEmails } from './email.js';
 // Assessment Task Library + Assignments (curated work samples)
 export { assessmentTasks, taskDifficultyEnum, taskStatusEnum } from './assessmentTasks.js';
 export { assessmentPackages } from './assessmentPackages.js';
+
+// Intake Form child tables (migration 0019)
+export { interviewPlan, hiringTeam, awarenessList, approvals } from './intake.js';
