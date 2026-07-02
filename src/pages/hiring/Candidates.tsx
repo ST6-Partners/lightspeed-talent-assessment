@@ -601,53 +601,110 @@ function ResumeScreenSection({ candidateId, existingNotes, onChanged }: { candid
 
 function ReferenceCheckSection({ candidateId, existingNotes, onChanged }: { candidateId: string; existingNotes: string | null; onChanged?: () => void }) {
   const [result, setResult] = useState<any>(null);
+  const [form, setForm] = useState({ name: '', email: '', relationship: '' });
+
+  const refsQuery = trpc.references.list.useQuery({ candidateId });
+  const addRef = trpc.references.add.useMutation({ onSuccess: () => { setForm({ name: '', email: '', relationship: '' }); refsQuery.refetch(); } });
+  const removeRef = trpc.references.remove.useMutation({ onSuccess: () => refsQuery.refetch() });
+  const sendReqs = trpc.references.sendRequests.useMutation({ onSuccess: () => refsQuery.refetch() });
   const run = trpc.candidates.referenceCheck.useMutation({ onSuccess: (r) => { setResult(r); onChanged?.(); } });
 
-  const recLabel: Record<string, string> = {
-    proceed: 'Proceed',
-    proceed_with_caution: 'Proceed with caution',
-    flag_for_review: 'Flag for review',
-  };
+  const refs = refsQuery.data ?? [];
+  const responded = refs.filter((r: any) => r.status === 'responded').length;
+
+  const recLabel: Record<string, string> = { proceed: 'Proceed', proceed_with_caution: 'Proceed with caution', flag_for_review: 'Flag for review' };
   const recColor: Record<string, string> = {
     proceed: 'text-green-700 bg-green-50 border-green-200',
     proceed_with_caution: 'text-amber-700 bg-amber-50 border-amber-200',
     flag_for_review: 'text-red-700 bg-red-50 border-red-200',
   };
+  const statusColor: Record<string, string> = {
+    pending: 'bg-gray-100 text-gray-600', requested: 'bg-blue-100 text-blue-700', responded: 'bg-green-100 text-green-700',
+  };
 
   return (
-    <Section title="Reference Check (agent)">
+    <Section title="Reference Check (finalists)">
       <div className="text-xs text-gray-500">
-        Runs after the interview, before the offer. Produces a balanced report of positive signals and concerns to inform the decision. It's an AI draft to verify — it does not reject the candidate, and it does not perform live background research on real applicants.
+        Run at the finalist stage. Add the references the candidate provided, email them a short questionnaire, then summarize the replies into a red-flags / positives report. Informational — it does not reject the candidate.
+      </div>
+
+      {/* Reference list */}
+      <div className="space-y-1">
+        {refs.length === 0 && <div className="text-xs text-gray-400 italic">No references added yet.</div>}
+        {refs.map((r: any) => (
+          <div key={r.id} className="flex items-center justify-between gap-2 bg-gray-50 rounded p-2">
+            <div className="min-w-0">
+              <div className="text-xs font-medium text-gray-800 truncate">{r.name} <span className="text-gray-400 font-normal">{r.relationship ? `· ${r.relationship}` : ''}</span></div>
+              <div className="text-xs text-gray-500 truncate">{r.email}</div>
+              {r.status === 'responded' && r.response && (
+                <div className="text-xs text-gray-700 mt-1 whitespace-pre-wrap">
+                  {r.wouldRehire ? <span className="font-medium">Would rehire: {r.wouldRehire}. </span> : null}{r.response}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${statusColor[r.status] ?? 'bg-gray-100 text-gray-600'}`}>{r.status}</span>
+              <button onClick={() => removeRef.mutate({ id: r.id })} className="text-xs text-gray-400 hover:text-red-600">✕</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Add a reference */}
+      <div className="grid grid-cols-3 gap-1">
+        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Name"
+          className="px-2 py-1 border border-gray-300 rounded text-xs" />
+        <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email"
+          className="px-2 py-1 border border-gray-300 rounded text-xs" />
+        <input value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} placeholder="Relationship"
+          className="px-2 py-1 border border-gray-300 rounded text-xs" />
       </div>
       <button
-        onClick={() => run.mutate({ id: candidateId })}
-        disabled={run.isLoading}
-        className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+        onClick={() => addRef.mutate({ candidateId, name: form.name, email: form.email, relationship: form.relationship || undefined })}
+        disabled={!form.name.trim() || !form.email.trim() || addRef.isLoading}
+        className="text-xs px-3 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 disabled:opacity-50"
       >
-        {run.isLoading ? 'Checking…' : 'Run reference check'}
+        + Add reference
       </button>
 
+      {/* Actions */}
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={() => sendReqs.mutate({ candidateId })}
+          disabled={refs.length === 0 || sendReqs.isLoading}
+          className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50"
+        >
+          {sendReqs.isLoading ? 'Sending…' : 'Email reference requests'}
+        </button>
+        <button
+          onClick={() => run.mutate({ id: candidateId })}
+          disabled={run.isLoading}
+          className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+        >
+          {run.isLoading ? 'Summarizing…' : 'Summarize references'}
+        </button>
+      </div>
+      {sendReqs.data && <div className="text-xs text-gray-500">Sent {sendReqs.data.sent} request(s).</div>}
+      <div className="text-xs text-gray-400">{responded}/{refs.length} references responded.</div>
+
+      {/* Summary */}
       {result && (
-        <div className="mt-2 space-y-2">
+        <div className="mt-1 space-y-2">
           <div className={`text-xs font-semibold rounded border p-2 ${recColor[result.recommendation] ?? 'text-gray-700 bg-gray-50 border-gray-200'}`}>
             {recLabel[result.recommendation] ?? result.recommendation} · confidence {result.confidence}
-            {result.mode === 'placeholder' ? ' · AI draft (no external references gathered)' : ' · AI draft — verify'}
+            {result.mode === 'placeholder' ? ' · AI draft (no reference responses yet)' : ' · AI draft — verify'}
           </div>
           {result.summary && <div className="text-xs text-gray-700">{result.summary}</div>}
           {result.positives?.length > 0 && (
             <div>
               <div className="text-xs font-medium text-green-700 mb-0.5">Positive signals</div>
-              <ul className="list-disc list-inside">
-                {result.positives.map((x: string, i: number) => <li key={i} className="text-xs text-green-700">{x}</li>)}
-              </ul>
+              <ul className="list-disc list-inside">{result.positives.map((x: string, i: number) => <li key={i} className="text-xs text-green-700">{x}</li>)}</ul>
             </div>
           )}
           {result.concerns?.length > 0 && (
             <div>
               <div className="text-xs font-medium text-amber-700 mb-0.5">Concerns</div>
-              <ul className="list-disc list-inside">
-                {result.concerns.map((x: string, i: number) => <li key={i} className="text-xs text-amber-700">{x}</li>)}
-              </ul>
+              <ul className="list-disc list-inside">{result.concerns.map((x: string, i: number) => <li key={i} className="text-xs text-amber-700">{x}</li>)}</ul>
             </div>
           )}
         </div>
