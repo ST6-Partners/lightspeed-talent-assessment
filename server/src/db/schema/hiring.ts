@@ -184,3 +184,22 @@ export const emailLog = pgTable('email_log', {
   sentAt: timestamp('sent_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+
+// ── candidate_references (candidate-provided references + responses) ──
+export const candidateReferences = pgTable('candidate_references', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  candidateId: uuid('candidate_id')
+    .references(() => candidates.id, { onDelete: 'cascade' })
+    .notNull(),
+  name: varchar('name', { length: 200 }).notNull(),
+  email: varchar('email', { length: 300 }).notNull(),
+  relationship: varchar('relationship', { length: 200 }),
+  token: varchar('token', { length: 64 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending | requested | responded
+  requestedAt: timestamp('requested_at', { withTimezone: true }),
+  respondedAt: timestamp('responded_at', { withTimezone: true }),
+  response: text('response'),
+  wouldRehire: varchar('would_rehire', { length: 20 }), // yes | no | unsure
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

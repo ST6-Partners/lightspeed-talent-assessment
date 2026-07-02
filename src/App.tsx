@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import WorkSample from './pages/WorkSample';
+import Reference from './pages/Reference';
 import Approve from './pages/Approve';
 import Chat from './pages/Chat';
 import AdminSettings from './pages/AdminSettings';
@@ -25,6 +26,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/work-sample/:token" element={<WorkSample />} />
+      <Route path="/reference/:token" element={<Reference />} />
       <Route path="/approve/:token" element={<Approve />} />
       <Route element={<Layout />}>
         {/* Landing → hiring overview */}

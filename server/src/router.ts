@@ -34,6 +34,8 @@ import { titlesRouter } from './routers/titles.js';
 import { employeesRouter } from './routers/employees.js';
 import { valuesRouter } from './routers/values.js';
 
+import { referencesRouter } from './routers/references.js';
+
 export const appRouter = router({
   auth: authRouter,
   entity: sampleEntityRouter,
@@ -59,6 +61,7 @@ export const appRouter = router({
   candidates: candidatesRouter,
   insights: insightsRouter,
   workSample: workSampleRouter,
+  references: referencesRouter,
   departments: departmentsRouter,
   tasks: assessmentTasksRouter,
   packages: assessmentPackagesRouter,

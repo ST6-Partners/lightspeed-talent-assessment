@@ -162,6 +162,13 @@
       "when": 1900000001000,
       "tag": "0022_create_inbound_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1900000002000,
+      "tag": "0023_candidate_references",
+      "breakpoints": true
     }
   ]
 }

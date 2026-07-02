@@ -8,7 +8,7 @@ import { eq, desc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { randomUUID } from 'node:crypto';
 import { router, protectedProcedure } from '../trpc.js';
-import { candidates, candidateStageHistory, jobDescriptions, emailLog } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, jobDescriptions, emailLog, candidateReferences } from '../db/schema/hiring.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { analyzeEpp } from '../services/eppAnalyzer.js';
@@ -502,6 +502,19 @@ export const candidatesRouter = router({
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
 
       const jobTitle = await getJobTitle(ctx.db, candidate.jdId);
+
+      // Pull the candidate-provided references that have responded.
+      const refs = await ctx.db.query.candidateReferences.findMany({
+        where: eq(candidateReferences.candidateId, input.id),
+      });
+      const responded = refs.filter((r: any) => r.status === 'responded' && r.response);
+      const externalReferenceMaterial = responded.length
+        ? responded.map((r: any) =>
+            `Reference: ${r.name}${r.relationship ? ` (${r.relationship})` : ''}` +
+            `${r.wouldRehire ? ` — would rehire: ${r.wouldRehire}` : ''}\n${r.response}`,
+          ).join('\n\n')
+        : null;
+
       const result = await runReferenceCheck({
         firstName: candidate.firstName,
         lastName: candidate.lastName,
@@ -510,6 +523,7 @@ export const candidatesRouter = router({
         notes: candidate.notes,
         interviewFeedbackHr: (candidate as any).interviewFeedbackHr,
         interviewScore: (candidate as any).interviewScore,
+        externalReferenceMaterial,
       });
 
       const report = [
