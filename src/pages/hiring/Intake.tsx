@@ -89,6 +89,7 @@ export default function Intake() {
     onSuccess: () => { refetch(); close(); },
     onError: (e) => setErr(e.message),
   });
+  const deleteMutation = trpc.intake.delete.useMutation({ onSuccess: () => refetch() });
 
   const buildPayload = () => ({
     ...(editingId ? { id: editingId } : {}),
@@ -117,6 +118,12 @@ export default function Intake() {
     if (!form.department || !form.hiringManager) { setErr('Department and hiring manager are required.'); return; }
     const saved = await saveMutation.mutateAsync(buildPayload() as any);
     submitMutation.mutate({ id: saved.id });
+  };
+  const handleDelete = (r: any) => {
+    if (editingId === r.id) close();
+    if (window.confirm(`Delete the ${r.department} intake (${r.hiringManager})? This removes its interview plan, team, and approvals, and cannot be undone.`)) {
+      deleteMutation.mutate({ id: r.id });
+    }
   };
   const toggleBasis = (v: string) => setForm({ ...form, compBasis: form.compBasis.includes(v) ? form.compBasis.filter((x) => x !== v) : [...form.compBasis, v] });
   const saving = saveMutation.isLoading || submitMutation.isLoading;
@@ -363,7 +370,10 @@ export default function Intake() {
                   <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_COLORS[r.status] ?? ''}`}>{r.status}</span></td>
                   <td className="px-4 py-3 text-gray-400">{new Date(r.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
-                    <button onClick={() => startEdit(r)} className="p-1 text-gray-400 hover:text-ls-primary" title="Edit"><Pencil size={15} /></button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => startEdit(r)} className="p-1 text-gray-400 hover:text-ls-primary transition-colors" title="Edit"><Pencil size={15} /></button>
+                      <button onClick={() => handleDelete(r)} disabled={deleteMutation.isLoading} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Delete"><Trash2 size={15} /></button>
+                    </div>
                   </td>
                 </tr>
               ))}
