@@ -24,6 +24,7 @@ type Stage = typeof STAGES[number];
 export default function Candidates() {
   const [showForm, setShowForm] = useState(false);
   const [stageFilter, setStageFilter] = useState<Stage | ''>('');
+  const [internalFilter, setInternalFilter] = useState<'all' | 'internal' | 'external'>('all');
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -32,6 +33,8 @@ export default function Candidates() {
     jdId: '', firstName: '', lastName: '', email: '',
     phone: '', linkedinUrl: '', resumeUrl: '', source: '', notes: '',
     needsSponsorship: false,
+    isInternal: false,
+    internalEmployee: '',
   });
 
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(
@@ -62,6 +65,8 @@ export default function Candidates() {
     jdId: '', firstName: '', lastName: '', email: '',
     phone: '', linkedinUrl: '', resumeUrl: '', source: '', notes: '',
     needsSponsorship: false,
+    isInternal: false,
+    internalEmployee: '',
   });
 
   const getNextStage = (current: Stage): Stage | null => {
@@ -115,6 +120,16 @@ export default function Candidates() {
               className={`px-3 py-1 text-xs rounded-full border transition-colors ${stageFilter === s ? 'bg-ls-primary text-white border-gray-900' : 'border-gray-300 text-gray-600 hover:border-gray-500'}`}
             >
               {s}
+            </button>
+          ))}
+        </div>
+
+        {/* Internal / external filter */}
+        <div className="flex gap-2 mb-4 flex-wrap">
+          {(['all', 'external', 'internal'] as const).map((v) => (
+            <button key={v} onClick={() => setInternalFilter(v)}
+              className={`px-3 py-1 text-xs rounded-full border ${internalFilter === v ? 'bg-ls-primary text-white border-gray-900' : 'border-gray-300 text-gray-600 hover:border-gray-500'}`}>
+              {v === 'all' ? 'All applicants' : v === 'internal' ? 'Internal' : 'External'}
             </button>
           ))}
         </div>
@@ -204,6 +219,17 @@ export default function Candidates() {
                 </label>
               </div>
             </div>
+            <div className="mt-3">
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={form.isInternal} onChange={(e) => setForm({ ...form, isInternal: e.target.checked })} />
+                Internal candidate (current Lightspeed employee)
+              </label>
+              {form.isInternal && (
+                <input value={form.internalEmployee} onChange={(e) => setForm({ ...form, internalEmployee: e.target.value })}
+                  placeholder="Current role / manager (optional)"
+                  className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-md text-sm" />
+              )}
+            </div>
             <div className="flex gap-2 mt-4">
               <button
                 onClick={() => createMutation.mutate({ ...form, jdId: form.jdId || undefined })}
@@ -258,7 +284,7 @@ export default function Candidates() {
                 </tr>
               </thead>
               <tbody>
-                {candidates.map((c) => {
+                {candidates.filter((c: any) => internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal)).map((c) => {
                   const nextStage = getNextStage(c.currentStage as Stage);
                   return (
                     <tr
@@ -266,7 +292,7 @@ export default function Candidates() {
                       onClick={() => setSelectedId(selectedId === c.id ? null : c.id)}
                       className={`border-b border-gray-50 text-sm cursor-pointer transition-colors ${selectedId === c.id ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
                     >
-                      <td className="px-4 py-3 font-medium text-gray-900">{c.firstName} {c.lastName}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900">{c.firstName} {c.lastName}{(c as any).isInternal && <span className="ml-2 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-purple-100 text-purple-700 align-middle">Internal</span>}</td>
                       <td className="px-4 py-3 text-gray-500">{c.email}</td>
                       <td className="px-4 py-3 text-gray-500 text-xs">{getJdTitle(c.jdId ?? null)}</td>
                       <td className="px-4 py-3">
@@ -434,6 +460,9 @@ export default function Candidates() {
           </Section>
 
           {/* Resume screen — checks resume vs REQUIRED qualifications only */}
+          {/* Internal candidate handling */}
+          <InternalSection key={`int-${selected.id}`} candidate={selected} onChanged={refetch} />
+
           <ResumeScreenSection key={selected.id} candidateId={selected.id} existingNotes={(selected as any).resumeReviewNotes ?? null} onChanged={refetch} />
 
           {/* Reference check — agent report (after interview, before offer) */}
@@ -834,6 +863,58 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
       {html && (
         <div className="mt-2 border border-gray-200 rounded bg-white max-h-96 overflow-y-auto">
           <div dangerouslySetInnerHTML={{ __html: html }} />
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function InternalSection({ candidate, onChanged }: { candidate: any; onChanged?: () => void }) {
+  const [emp, setEmp] = useState(candidate.internalEmployee ?? '');
+  const [chain, setChain] = useState(candidate.leadershipAwareness ?? '');
+  const upd = trpc.candidates.update.useMutation({ onSuccess: () => onChanged?.() });
+  const notify = trpc.candidates.notifyLeadership.useMutation();
+  const isInternal = !!candidate.isInternal;
+
+  return (
+    <Section title="Internal Candidate">
+      <label className="flex items-center gap-2 text-xs text-gray-700">
+        <input type="checkbox" checked={isInternal}
+          onChange={(e) => upd.mutate({ id: candidate.id, isInternal: e.target.checked })} />
+        This is an internal candidate (current employee)
+      </label>
+
+      {isInternal && (
+        <div className="space-y-2 mt-1">
+          <div>
+            <div className="text-xs text-gray-500 mb-0.5">Current role / manager</div>
+            <div className="flex gap-1">
+              <input value={emp} onChange={(e) => setEmp(e.target.value)} className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs" />
+              <button onClick={() => upd.mutate({ id: candidate.id, internalEmployee: emp })} className="text-xs px-2 py-1 bg-ls-primary text-white rounded">Save</button>
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs text-gray-700">
+            <input type="checkbox" checked={!!candidate.managerAware}
+              onChange={(e) => upd.mutate({ id: candidate.id, managerAware: e.target.checked })} />
+            Their manager is aware they applied
+          </label>
+
+          <div>
+            <div className="text-xs text-gray-500 mb-0.5">Leadership awareness — emails up the chain to ELT (comma-separated)</div>
+            <textarea value={chain} onChange={(e) => setChain(e.target.value)} rows={2}
+              placeholder="manager@…, skip-level@…, elt@…"
+              className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+            <div className="flex gap-2 mt-1">
+              <button onClick={() => upd.mutate({ id: candidate.id, leadershipAwareness: chain })} className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-700">Save list</button>
+              <button onClick={() => notify.mutate({ id: candidate.id })} disabled={notify.isLoading}
+                className="text-xs px-2 py-1 bg-ls-primary text-white rounded disabled:opacity-50">
+                {notify.isLoading ? 'Notifying…' : 'Notify leadership'}
+              </button>
+            </div>
+            {notify.data && <div className="text-xs text-gray-500 mt-1">Notified {notify.data.sent} recipient(s).{(notify.data as any).reason ? ` ${(notify.data as any).reason}` : ''}</div>}
+            <div className="text-xs text-gray-400 mt-1">Manual list for now; automatic org-chart notification arrives with HRIS access.</div>
+          </div>
         </div>
       )}
     </Section>

@@ -183,6 +183,13 @@
       "when": 1900000003000,
       "tag": "0024_intake_base_jd",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1900000004000,
+      "tag": "0025_internal_candidate",
+      "breakpoints": true
     }
   ]
 }

@@ -53,6 +53,8 @@ const CandidateInput = z.object({
   resumeUrl: z.string().url().optional().or(z.literal('')),
   source: z.string().max(100).optional(),
   notes: z.string().optional(),
+  isInternal: z.boolean().optional(),
+  internalEmployee: z.string().max(200).optional(),
 });
 
 // Helper: fetch job title for email context
@@ -212,6 +214,8 @@ export const candidatesRouter = router({
       interviewerName: z.string().max(200).optional(),
       interviewerEmail: z.string().email().max(300).optional(),
       zoomMeetingId: z.string().max(100).optional(),
+      managerAware: z.boolean().optional(),
+      leadershipAwareness: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.db.query.candidates.findFirst({
@@ -705,6 +709,38 @@ export const candidatesRouter = router({
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'send_offer', 'candidates', { candidateId: input.id }).catch(() => {});
       return { ok: true, html: letterHtml };
+    }),
+
+  // Notify an internal candidate's leadership chain (manual list for now;
+  // auto org-chart via HRIS later). SendGrid + test-inbox copy, like the rest.
+  notifyLeadership: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const emails = ((candidate as any).leadershipAwareness ?? '')
+        .split(/[,;\n]/).map((e: string) => e.trim()).filter((e: string) => e.includes('@'));
+      if (emails.length === 0) return { sent: 0, reason: 'No leadership emails on file' };
+
+      const jobTitle = await getJobTitle(ctx.db, candidate.jdId);
+      const subject = `Internal applicant: ${candidate.firstName} ${candidate.lastName}${jobTitle ? ` \u2014 ${jobTitle}` : ''}`;
+      const body = `${candidate.firstName} ${candidate.lastName}${(candidate as any).internalEmployee ? ` (${(candidate as any).internalEmployee})` : ''} has applied internally for ${jobTitle ?? 'an open role'}. You are on their leadership awareness list so nobody is caught off guard. No action is required unless you have concerns about timing or transition.`;
+
+      let sent = 0;
+      for (const to of emails) {
+        await sendEmail({ to, subject, html: `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;">${body}</div>`, templateId: 'internal_awareness' }).catch(() => {});
+        try {
+          await ctx.db.insert(inboundEmails).values({
+            fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+            fromName: 'Lightspeed Hiring',
+            toEmail: to, subject, body, replyTag: 'internal_awareness', source: 'simulated',
+            raw: { kind: 'internal_awareness', candidateId: input.id },
+          });
+        } catch (err) { console.error('[internal] inbox record failed:', err); }
+        sent++;
+      }
+      trackActivity(ctx.db, ctx.user.id, 'notify_leadership', 'candidates', { candidateId: input.id, sent }).catch(() => {});
+      return { sent };
     }),
 
   // Store AI-generated interview questions

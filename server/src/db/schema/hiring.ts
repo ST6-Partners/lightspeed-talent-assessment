@@ -152,6 +152,11 @@ export const candidates = pgTable('candidates', {
   interviewFeedbackCandidate: text('interview_feedback_candidate'),
   interviewScore: integer('interview_score'),
   notes: text('notes'),
+  // Internal-candidate handling
+  isInternal: boolean('is_internal').notNull().default(false),
+  managerAware: boolean('manager_aware').notNull().default(false),
+  internalEmployee: varchar('internal_employee', { length: 200 }),
+  leadershipAwareness: text('leadership_awareness'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
