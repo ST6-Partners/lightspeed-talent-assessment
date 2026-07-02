@@ -19,6 +19,8 @@ const REASONS = [
   { v: 'termination_diff', l: 'Termination — different profile' },
 ];
 const COMP_BASIS = [{ v: 'budget', l: 'Budget' }, { v: 'market', l: 'Market data' }, { v: 'philosophy', l: 'Pay philosophy' }];
+const ROLE_LABEL: Record<string, string> = { hiring_manager: 'Hiring Manager', elt: 'ELT Leader', finance: 'Finance', hr: 'HR' };
+const APPROVAL_BADGE: Record<string, string> = { pending: 'bg-gray-100 text-gray-500', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' };
 
 interface Round { roundName: string; lengthMin?: number; format?: string; }
 interface Person { personRef: string; roleInProcess?: string; roundRef?: string; }
@@ -46,9 +48,10 @@ export default function Intake() {
   const [awareness, setAwareness] = useState<Aware[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [approvalNote, setApprovalNote] = useState('');
 
   const { data: intakes, refetch } = trpc.intake.list.useQuery();
-  const { data: full } = trpc.intake.get.useQuery({ id: editingId! }, { enabled: !!editingId });
+  const { data: full, refetch: refetchFull } = trpc.intake.get.useQuery({ id: editingId! }, { enabled: !!editingId });
 
   useEffect(() => {
     if (full && editingId) {
@@ -90,6 +93,14 @@ export default function Intake() {
     onError: (e) => setErr(e.message),
   });
   const deleteMutation = trpc.intake.delete.useMutation({ onSuccess: () => refetch() });
+  const approveMutation = trpc.intake.approve.useMutation({
+    onSuccess: () => { refetchFull(); refetch(); setApprovalNote(''); setErr(null); },
+    onError: (e) => setErr(e.message),
+  });
+  const rejectMutation = trpc.intake.reject.useMutation({
+    onSuccess: () => { refetchFull(); refetch(); setApprovalNote(''); setErr(null); },
+    onError: (e) => setErr(e.message),
+  });
 
   const buildPayload = () => ({
     ...(editingId ? { id: editingId } : {}),
@@ -146,6 +157,55 @@ export default function Intake() {
             <span className="text-sm font-semibold text-gray-700">{editingId ? 'Edit Intake' : 'New Intake'}</span>
             <button onClick={close} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
           </div>
+
+          {editingId && Array.isArray((full as any)?.approvals) && (full as any).approvals.length > 0 && (() => {
+            const rows = (full as any).approvals as any[];
+            const active = rows.find((r) => r.status === 'pending');
+            const rejected = rows.find((r) => r.status === 'rejected');
+            return (
+              <section className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-ls-primary">Approval chain</h3>
+                  <span className="text-xs text-gray-500">
+                    {rejected ? 'Rejected — back to Draft' : active ? `In approval · step ${active.step} of ${rows.length}` : 'Fully approved'}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {rows.map((a) => (
+                    <div key={a.id} className="flex items-center justify-between text-sm">
+                      <div className="text-gray-700">
+                        <span className="text-gray-400 mr-2">{a.step}.</span>{ROLE_LABEL[a.approverRole] ?? a.approverRole}
+                        {a.note && <span className="text-gray-500 italic"> — {a.note}</span>}
+                      </div>
+                      <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${APPROVAL_BADGE[a.status] ?? ''}`}>{a.status}</span>
+                    </div>
+                  ))}
+                </div>
+                {active && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <label className={lbl}>Note (required to reject, optional to approve)</label>
+                    <input value={approvalNote} onChange={(e) => setApprovalNote(e.target.value)} placeholder="Add a note..." className={inp} />
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => approveMutation.mutate({ reqId: editingId, step: active.step, note: approvalNote || undefined })}
+                        disabled={approveMutation.isLoading || rejectMutation.isLoading}
+                        className="px-3 py-1.5 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+                      >
+                        Approve — {ROLE_LABEL[active.approverRole] ?? active.approverRole}
+                      </button>
+                      <button
+                        onClick={() => { if (!approvalNote.trim()) { setErr('A reason is required to reject.'); return; } rejectMutation.mutate({ reqId: editingId, step: active.step, note: approvalNote }); }}
+                        disabled={approveMutation.isLoading || rejectMutation.isLoading}
+                        className="px-3 py-1.5 bg-white border border-red-300 text-red-600 rounded-md text-sm font-medium hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            );
+          })()}
 
           {/* 1 — Why */}
           <section>
