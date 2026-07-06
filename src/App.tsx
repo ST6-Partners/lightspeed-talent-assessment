@@ -12,6 +12,7 @@ import Requisitions from './pages/hiring/Requisitions';
 import Intake from './pages/hiring/Intake';
 import JobDescriptions from './pages/hiring/JobDescriptions';
 import Candidates from './pages/hiring/Candidates';
+import InternalReport from './pages/hiring/InternalReport';
 import Values from './pages/hiring/Values';
 import Insights from './pages/hiring/Insights';
 import Assessments from './pages/hiring/Assessments';
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/hiring/intake" element={<Intake />} />
         <Route path="/hiring/requisitions" element={<Requisitions />} />
         <Route path="/hiring/candidates" element={<Candidates />} />
+        <Route path="/hiring/internal" element={<InternalReport />} />
         <Route path="/hiring/assessments" element={<Assessments />} />
         <Route path="/hiring/scorecards" element={<Scorecards />} />
         {/* Core Data */}

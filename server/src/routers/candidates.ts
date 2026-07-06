@@ -1075,4 +1075,53 @@ export const candidatesRouter = router({
         .returning();
       return candidate;
     }),
+
+  // Internal candidates currently in the pipeline (not rejected/hired), with role + department.
+  internalPipeline: protectedProcedure
+    .query(async ({ ctx }) => {
+      const rows = await ctx.db.query.candidates.findMany({ where: eq(candidates.isInternal, true) });
+      const active = rows.filter((c: any) => c.currentStage !== 'Rejected' && c.currentStage !== 'Hired');
+      const out: any[] = [];
+      for (const c of active) {
+        const jd = c.jdId ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;
+        const req = (jd as any)?.reqId ? await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, (jd as any).reqId) }) : null;
+        out.push({
+          id: c.id, name: `${c.firstName} ${c.lastName}`, email: c.email,
+          stage: c.currentStage, jobTitle: jd?.jobTitle ?? null, department: (req as any)?.department ?? null,
+          managerAware: !!(c as any).managerAware,
+          leadershipListed: !!(((c as any).leadershipAwareness ?? '') as string).trim(),
+          internalEmployee: (c as any).internalEmployee ?? null,
+        });
+      }
+      return out;
+    }),
+
+  // Email the "internal candidates in flight" report to leadership (SendGrid + test inbox).
+  emailInternalReport: protectedProcedure
+    .input(z.object({ to: z.array(z.string().email()).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const rows = await ctx.db.query.candidates.findMany({ where: eq(candidates.isInternal, true) });
+      const active = rows.filter((c: any) => c.currentStage !== 'Rejected' && c.currentStage !== 'Hired');
+      const lines: string[] = [];
+      for (const c of active) {
+        const jd = c.jdId ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;
+        const req = (jd as any)?.reqId ? await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, (jd as any).reqId) }) : null;
+        lines.push(`<tr><td style="padding:6px 10px;border:1px solid #ddd;">${c.firstName} ${c.lastName}</td><td style="padding:6px 10px;border:1px solid #ddd;">${jd?.jobTitle ?? '-'}</td><td style="padding:6px 10px;border:1px solid #ddd;">${(req as any)?.department ?? '-'}</td><td style="padding:6px 10px;border:1px solid #ddd;">${c.currentStage}</td><td style="padding:6px 10px;border:1px solid #ddd;">${(c as any).managerAware ? 'yes' : 'no'}</td></tr>`);
+      }
+      const html = `<div style="font-family:sans-serif;font-size:14px;color:#1a1a1a;"><h2>Internal candidates in flight</h2>${active.length ? `<table style="border-collapse:collapse;"><tr><th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Name</th><th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Role</th><th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Department</th><th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Stage</th><th style="padding:6px 10px;border:1px solid #ddd;text-align:left;">Manager aware</th></tr>${lines.join('')}</table>` : '<p>No internal candidates currently in the pipeline.</p>'}<p style="color:#666;font-size:12px;">Sent so leadership stays aware of internal moves in progress.</p></div>`;
+      const subject = `Internal candidates in flight — ${active.length}`;
+      let sent = 0;
+      for (const to of input.to) {
+        await sendEmail({ to, subject, html, templateId: 'internal_report' }).catch(() => {});
+        try {
+          await ctx.db.insert(inboundEmails).values({
+            fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed HR',
+            toEmail: to, subject, body: html, replyTag: 'internal_report', source: 'simulated', raw: { kind: 'internal_report' },
+          });
+        } catch (e) { console.error('[internal report] inbox record failed', e); }
+        sent++;
+      }
+      trackActivity(ctx.db, ctx.user.id, 'email_internal_report', 'candidates', { count: active.length, recipients: input.to.length }).catch(() => {});
+      return { sent, count: active.length };
+    }),
 });
