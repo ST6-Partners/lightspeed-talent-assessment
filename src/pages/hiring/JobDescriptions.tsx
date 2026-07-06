@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, Send, Pencil, Trash2 } from 'lucide-react';
+import { Plus, X, Send, Pencil, Trash2 , Megaphone} from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const LIGHTSPEED_VALUES = [
@@ -46,6 +46,9 @@ export default function JobDescriptions() {
   });
   const publishMutation = trpc.jobDescriptions.publish.useMutation({
     onSuccess: () => refetch(),
+  });
+  const announceMutation = trpc.internalOpenings.announceInternally.useMutation({
+    onSuccess: (r) => window.alert(`Announced internally to ${r.sent} employee(s). They can express interest from the email.`),
   });
   const deleteMutation = trpc.jobDescriptions.delete.useMutation({
     onSuccess: () => refetch(),
@@ -312,6 +315,14 @@ export default function JobDescriptions() {
                           <Send size={15} />
                         </button>
                       )}
+                      <button
+                        onClick={() => { if (window.confirm(`Announce "${jd.jobTitle}" internally to all employees?`)) announceMutation.mutate({ jdId: jd.id }); }}
+                        disabled={announceMutation.isLoading}
+                        className="p-1 text-gray-400 hover:text-purple-600 transition-colors"
+                        title="Announce internally"
+                      >
+                        <Megaphone size={15} />
+                      </button>
                       <button
                         onClick={() => startEdit(jd)}
                         className="p-1 text-gray-400 hover:text-ls-primary transition-colors"
