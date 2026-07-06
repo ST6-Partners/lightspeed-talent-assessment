@@ -15,6 +15,7 @@ import { users } from './server/src/db/schema/index.js';
 import { readDoc } from './server/src/services/dropboxDocs.js';
 import { eq } from 'drizzle-orm';
 import { pool, db } from './server/src/db.js';
+import * as backupService from './server/src/services/backup.js';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { inspect } from 'node:util';
 import { env } from './server/src/env.js';
@@ -67,6 +68,24 @@ async function main() {
   // a few seconds to come up at container start, so the first migrate()
   // attempts may hit ECONNREFUSED. Fails loudly only after exhausting retries.
   await applyMigrationsWithRetry();
+
+  // ── Automatic daily database backups (best-effort) ──
+  // Snapshots all tables to a local backup file + prunes per retention policy.
+  // NOTE: Railway's container disk is ephemeral — these survive within a running
+  // deployment (restore/download via Settings → Backups) but NOT a redeploy/DB
+  // reset. Enable Railway's managed Postgres backups for cross-reset durability.
+  const runScheduledBackup = async () => {
+    try {
+      await backupService.createBackup(pool, 'scheduled');
+      const p = backupService.pruneBackups();
+      console.log(`[backup] scheduled backup created (pruned ${p.pruned}, kept ${p.kept}).`);
+    } catch (e) {
+      console.error('[backup] scheduled backup failed:', e);
+    }
+  };
+  setTimeout(runScheduledBackup, 60_000);                 // ~1 min after boot
+  setInterval(runScheduledBackup, 24 * 60 * 60 * 1000);   // then daily
+
 
   const app = express();
   // Create the HTTP server explicitly so Vite's HMR WebSocket can piggy-
