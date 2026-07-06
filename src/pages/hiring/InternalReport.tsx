@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { UserCheck } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
@@ -16,6 +16,16 @@ export default function InternalReport() {
   const { data: rows, isLoading } = trpc.candidates.internalPipeline.useQuery();
   const [to, setTo] = useState('');
   const emailReport = trpc.candidates.emailInternalReport.useMutation();
+
+  // Weekly schedule config
+  const cfg = trpc.candidates.getReportConfig.useQuery();
+  const saveCfg = trpc.candidates.setReportConfig.useMutation({ onSuccess: () => cfg.refetch() });
+  const [schedTo, setSchedTo] = useState('');
+  const [schedOn, setSchedOn] = useState(false);
+  useEffect(() => {
+    if (cfg.data) { setSchedTo((cfg.data.recipients ?? []).join(', ')); setSchedOn(!!cfg.data.enabled); }
+  }, [cfg.data]);
+  const schedRecipients = schedTo.split(/[,;\n]/).map((e) => e.trim()).filter((e) => e.includes('@'));
 
   const recipients = to.split(/[,;\n]/).map((e) => e.trim()).filter((e) => e.includes('@'));
 
@@ -48,6 +58,32 @@ export default function InternalReport() {
           {emailReport.data && <span className="text-xs text-green-700">Sent to {emailReport.data.sent} recipient(s) — {emailReport.data.count} internal candidate(s).</span>}
         </div>
         <div className="text-xs text-gray-400 mt-2">Sends via SendGrid and drops a copy in the Email Test inbox. Auto org-chart routing arrives with HRIS access.</div>
+      </div>
+
+      {/* Automatic weekly schedule */}
+      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-5">
+        <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+          <input type="checkbox" checked={schedOn} onChange={(e) => setSchedOn(e.target.checked)} />
+          Send this report automatically every Monday (9am)
+        </label>
+        <textarea
+          value={schedTo}
+          onChange={(e) => setSchedTo(e.target.value)}
+          rows={2}
+          placeholder="Recipients for the weekly report — leadership@…, elt@… (comma-separated)"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+        />
+        <div className="flex items-center gap-3 mt-2">
+          <button
+            onClick={() => saveCfg.mutate({ recipients: schedRecipients, enabled: schedOn })}
+            disabled={saveCfg.isLoading}
+            className="text-sm px-4 py-2 border border-ls-primary text-ls-primary rounded-md font-medium disabled:opacity-50"
+          >
+            {saveCfg.isLoading ? 'Saving…' : 'Save schedule'}
+          </button>
+          {saveCfg.isSuccess && <span className="text-xs text-green-700">Saved. {schedOn ? `Weekly to ${schedRecipients.length} recipient(s).` : 'Automatic sending is off.'}</span>}
+        </div>
+        <div className="text-xs text-gray-400 mt-2">Runs on the server on a weekly cron. Recipients are set manually for now; the leadership chain fills in automatically once HRIS access lands.</div>
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200">
