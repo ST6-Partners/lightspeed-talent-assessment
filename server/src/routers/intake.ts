@@ -177,7 +177,7 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
 
   const externalPostDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   try {
-    await db.update(jobRequisitions).set({ status: 'Open', updatedAt: new Date() }).where(eq(jobRequisitions.id, req.id));
+    await db.update(jobRequisitions).set({ status: 'Open', postedAt: new Date(), updatedAt: new Date() }).where(eq(jobRequisitions.id, req.id));
   } catch (err) { console.error('[intake] posting (status Open) failed:', err); }
 
   await sendKickoff(db, req, { jdTitle, questions, externalPostDate });

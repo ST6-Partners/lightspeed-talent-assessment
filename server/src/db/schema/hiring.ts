@@ -92,6 +92,9 @@ export const jobRequisitions = pgTable('job_requisitions', {
   knownConstraints: text('known_constraints'),
   constraintsAck: boolean('constraints_ack').notNull().default(false),
   status: requisitionStatusEnum('status').notNull().default('Draft'),
+  // Internal-first posting window anchor (set when the role goes Open) + external-open stamp.
+  postedAt: timestamp('posted_at', { withTimezone: true }),
+  externalOpenedAt: timestamp('external_opened_at', { withTimezone: true }),
   createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

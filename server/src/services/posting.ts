@@ -1,51 +1,56 @@
 // ============================================================
 // POSTING WINDOW — internal-first then external (flowchart node POST).
 //
-// A role posts internally when its intake is fully approved (the kickoff
-// record is written at that moment and never changes, so its timestamp is
-// the stable window start — no schema change needed). The role opens
-// EXTERNALLY when the 3-day window elapses, or when HR opens it early.
-// Either way a "posting_external_open" marker record is written so the
-// flip is a real, timestamped, deduplicated event, and the daily cron and
-// the UI read the same server-authoritative phase.
+// Durable anchor: job_requisitions.posted_at (stamped when the role goes
+// Open) and .external_opened_at (stamped by the manual early-open or the
+// auto-flip cron). No dependence on the clearable test inbox. For roles
+// posted before posted_at existed, we fall back to the kickoff record's
+// timestamp so their window still resolves.
 // ============================================================
 
+import { inArray } from 'drizzle-orm';
 import { inboundEmails } from '../db/schema/email.js';
+import { jobRequisitions } from '../db/schema/hiring.js';
 
-// Normalize a jsonb `raw` value that may arrive as an object or a JSON string.
+export const INTERNAL_WINDOW_DAYS = 3;
+
 function parseRaw(raw: any): any {
   if (raw == null) return {};
   if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return {}; } }
   return raw;
 }
 
-export const INTERNAL_WINDOW_DAYS = 3;
-
 export interface PostingWindow {
   reqId: string;
-  windowStart: string | null;      // ISO — when it posted internally
-  externalOpensAt: string | null;  // ISO — when the internal window closes
+  windowStart: string | null;
+  externalOpensAt: string | null;
   phase: 'internal' | 'external' | 'unknown';
   daysLeft: number | null;
-  externallyOpened: boolean;       // marker written (auto-flip or manual early open)
+  externallyOpened: boolean;
 }
 
-// Build posting windows for the given reqIds from the kickoff + external-open
-// marker records (both live in inbound_emails as event records).
 export async function getPostingWindows(db: any, reqIds: string[]): Promise<Record<string, PostingWindow>> {
   const out: Record<string, PostingWindow> = {};
   if (!reqIds.length) return out;
-  const rows = await db.select().from(inboundEmails);
-  const kickoffs = rows.filter((r: any) => r.replyTag === 'kickoff');
-  const opens = rows.filter((r: any) => r.replyTag === 'posting_external_open');
+
+  const reqs = await db.select().from(jobRequisitions).where(inArray(jobRequisitions.id, reqIds));
+  const reqById = new Map<string, any>(reqs.map((r: any) => [r.id, r]));
+
+  // Fallback anchor for roles posted before posted_at existed: kickoff record time.
+  const inbox = await db.select().from(inboundEmails);
+  const kickoffs = inbox.filter((r: any) => r.replyTag === 'kickoff');
   const now = Date.now();
 
   for (const reqId of reqIds) {
-    const ks = kickoffs
-      .filter((r: any) => (parseRaw(r.raw).reqId ?? null) === reqId)
-      .sort((a: any, b: any) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
-    const start = ks[0]?.receivedAt ? new Date(ks[0].receivedAt) : null;
-    const opened = opens.some((r: any) => (parseRaw(r.raw).reqId ?? null) === reqId);
+    const req = reqById.get(reqId);
+    let start: Date | null = req?.postedAt ? new Date(req.postedAt) : null;
+    if (!start) {
+      const ks = kickoffs
+        .filter((r: any) => (parseRaw(r.raw).reqId ?? null) === reqId)
+        .sort((a: any, b: any) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
+      start = ks[0]?.receivedAt ? new Date(ks[0].receivedAt) : null;
+    }
+    const opened = !!req?.externalOpenedAt;
 
     if (!start) {
       out[reqId] = { reqId, windowStart: null, externalOpensAt: null, phase: 'unknown', daysLeft: null, externallyOpened: opened };
@@ -66,13 +71,8 @@ export async function getPostingWindows(db: any, reqIds: string[]): Promise<Reco
   return out;
 }
 
-// Has the external-open marker already been written for this req?
-export async function isExternallyOpened(db: any, reqId: string): Promise<boolean> {
-  const rows = await db.select().from(inboundEmails);
-  return rows.some((r: any) => r.replyTag === 'posting_external_open' && (parseRaw(r.raw).reqId ?? null) === reqId);
-}
-
-// Write the external-open marker (idempotent-ish: callers check first).
+// Write a hiring-team inbox notice that a role opened externally (visibility only;
+// the authoritative state is job_requisitions.external_opened_at).
 export async function writeExternalOpenMarker(db: any, reqId: string, jobTitle: string, department: string, mode: 'auto' | 'manual'): Promise<void> {
   await db.insert(inboundEmails).values({
     fromEmail: process.env.EMAIL_FROM ?? 'careers@lightspeedsystems.com',

@@ -441,6 +441,7 @@ async function runPostingWindowFlip(): Promise<JobResult> {
     const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.reqId, r.id) });
     const jobTitle = jd?.jobTitle ?? `${r.department} role`;
     try {
+      await db.update(jobRequisitions).set({ externalOpenedAt: new Date(), updatedAt: new Date() }).where(eq(jobRequisitions.id, r.id));
       await writeExternalOpenMarker(db, r.id, jobTitle, r.department, 'auto');
       await emailPostingOpenedExternal(HIRING_TEAM_INBOX, { jobTitle, department: r.department, mode: 'auto' }).catch(() => {});
       flipped++;

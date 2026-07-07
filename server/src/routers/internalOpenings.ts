@@ -13,7 +13,7 @@ import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } f
 import { employees } from '../db/schema/employees.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { sendEmail, emailPostingOpenedExternal, HIRING_TEAM_INBOX } from '../services/email.js';
-import { getPostingWindows, isExternallyOpened, writeExternalOpenMarker } from '../services/posting.js';
+import { getPostingWindows, writeExternalOpenMarker } from '../services/posting.js';
 import { trackActivity } from '../services/telemetry.js';
 
 function appBaseUrl(): string {
@@ -38,9 +38,10 @@ export const internalOpeningsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const req = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.reqId) });
       if (!req) throw new TRPCError({ code: 'NOT_FOUND' });
-      if (await isExternallyOpened(ctx.db, input.reqId)) return { ok: true as const, already: true };
+      if ((req as any).externalOpenedAt) return { ok: true as const, already: true };
       const jd = await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.reqId, input.reqId) });
       const jobTitle = jd?.jobTitle ?? `${req.department} role`;
+      await ctx.db.update(jobRequisitions).set({ externalOpenedAt: new Date(), updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
       await writeExternalOpenMarker(ctx.db, input.reqId, jobTitle, req.department, 'manual');
       await emailPostingOpenedExternal(HIRING_TEAM_INBOX, { jobTitle, department: req.department, mode: 'manual' }).catch(() => {});
       trackActivity(ctx.db, ctx.user.id, 'open_role_external', 'job_requisitions', { reqId: input.reqId }).catch(() => {});
