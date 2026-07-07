@@ -35,7 +35,7 @@ import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, S
 import { createOfferEnvelope } from '../services/docusign.js';
 import { composeInternalReport, getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
-import { seedCandidateAssessmentData } from '../services/postAssessmentReview.js';
+import { seedCandidateResume, seedAssessmentResults } from '../services/postAssessmentReview.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
 
 const STAGES = [
@@ -331,9 +331,9 @@ export const candidatesRouter = router({
         return { ...candidate, currentStage: 'Rejected' as const };
       }
 
-      // Seed demo assessment data (CCAT + EPP + resume) so the new candidate
-      // has something to screen. Real data would come from Criteria + resume upload.
-      await seedCandidateAssessmentData(ctx.db, candidate.id, candidate).catch((err) => console.error('[create] seed assessment data failed:', err));
+      // Seed the resume at application time. CCAT + EPP come later, when the
+      // candidate reaches the Assessment stage.
+      await seedCandidateResume(ctx.db, candidate.id, candidate).catch((err) => console.error('[create] seed resume failed:', err));
 
       // Normal path — fire emails (non-blocking)
       emailApplicationReceived({ ...candidateData, jobTitle }).catch(() => {});
@@ -396,6 +396,12 @@ export const candidatesRouter = router({
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
       if (existing.currentStage === input.toStage) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Candidate is already in that stage' });
+      }
+
+      // Entering the Assessment stage -> the candidate's CCAT + EPP results land
+      // (simulates Criteria returning scores). Resume was seeded at application.
+      if (input.toStage === 'Assessment') {
+        await seedAssessmentResults(ctx.db, input.id, existing).catch((err) => console.error('[advance] seed assessment results failed:', err));
       }
 
       // Advancing a candidate OUT of Assessment runs the automatic review (EPP +

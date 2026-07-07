@@ -192,25 +192,29 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
   return { decision: 'passed', eppMatch, valuesMatch };
 }
 
-// Seed demo assessment data for a newly created candidate so they have CCAT,
-// EPP results, and resume text to work with (real data would arrive from Criteria
-// + the resume upload). Only fills what's missing; safe to call once at create.
+// Seed the candidate's resume text at application time (resume arrives with the
+// application). CCAT + EPP are NOT set here — those are assessment results and are
+// seeded only when the candidate reaches the Assessment stage (seedAssessmentResults).
 const EPP_TRAITS = ['Achievement','Assertiveness','Competitiveness','Conscientiousness','Cooperativeness','Extroversion','Managerial','Motivation','Openness','Patience','Self-Confidence','Stress Tolerance'];
 
-export async function seedCandidateAssessmentData(db: any, candidateId: string, candidate: any): Promise<void> {
-  const patch: any = {};
-  if (candidate.ccatScore == null) patch.ccatScore = 22 + Math.floor(Math.random() * 29); // 22-50
-  if (!candidate.resumeText) {
-    patch.resumeText =
-      'PROFESSIONAL SUMMARY\n' + candidate.firstName + ' ' + candidate.lastName +
-      ' is a results-driven professional with 6+ years of experience delivering high-quality work in fast-paced environments. Strong communicator and collaborator with a track record of ownership and measurable impact.\n\n' +
-      'EXPERIENCE\n- Led cross-functional projects from concept to delivery.\n- Improved process efficiency and quality through data-informed decisions.\n- Mentored teammates and contributed to a high-standards culture.\n\n' +
-      'SKILLS\n- Communication, problem-solving, collaboration, project management, data analysis, adaptability.\n\n' +
-      'EDUCATION\n- B.S. in a relevant field.';
-  }
-  if (Object.keys(patch).length) {
-    patch.updatedAt = new Date();
-    await db.update(candidates).set(patch).where(eq(candidates.id, candidateId));
+export async function seedCandidateResume(db: any, candidateId: string, candidate: any): Promise<void> {
+  if (candidate.resumeText) return;
+  const resumeText =
+    'PROFESSIONAL SUMMARY\n' + candidate.firstName + ' ' + candidate.lastName +
+    ' is a results-driven professional with 6+ years of experience delivering high-quality work in fast-paced environments. Strong communicator and collaborator with a track record of ownership and measurable impact.\n\n' +
+    'EXPERIENCE\n- Led cross-functional projects from concept to delivery.\n- Improved process efficiency and quality through data-informed decisions.\n- Mentored teammates and contributed to a high-standards culture.\n\n' +
+    'SKILLS\n- Communication, problem-solving, collaboration, project management, data analysis, adaptability.\n\n' +
+    'EDUCATION\n- B.S. in a relevant field.';
+  await db.update(candidates).set({ resumeText, updatedAt: new Date() }).where(eq(candidates.id, candidateId));
+}
+
+// Seed the CCAT score + 12 EPP traits when the candidate reaches Assessment
+// (simulating Criteria returning results). Only fills what's missing.
+export async function seedAssessmentResults(db: any, candidateId: string, candidate: any): Promise<void> {
+  if (candidate.ccatScore == null) {
+    await db.update(candidates)
+      .set({ ccatScore: 22 + Math.floor(Math.random() * 29), updatedAt: new Date() }) // 22-50
+      .where(eq(candidates.id, candidateId));
   }
   const existingEpp = await db.query.candidateEppScores.findMany({ where: eq(candidateEppScores.candidateId, candidateId) });
   if (!existingEpp.length) {
