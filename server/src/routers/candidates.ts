@@ -26,6 +26,7 @@ import {
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
 import { runReferenceCheck } from '../services/ai.js';
+import { draftTransitionPlan } from '../services/ai.js';
 import { renderOfferLetter, renderInternalOfferLetter, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
 import { createOfferEnvelope } from '../services/docusign.js';
 import { composeInternalReport, getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
@@ -809,6 +810,37 @@ export const candidatesRouter = router({
 
       trackActivity(ctx.db, ctx.user.id, 'send_offer_docusign', 'candidates', { candidateId: input.id, envelopeId: result.envelopeId }).catch(() => {});
       return { configured: true as const, envelopeId: result.envelopeId, status: result.status };
+    }),
+
+  // AI-DRAFT a transition plan for the internal-move offer addendum. The offer
+  // letter template stays deterministic — this only drafts the addendum body,
+  // which HR then edits. Falls back to a placeholder with no ANTHROPIC_API_KEY.
+  draftTransitionPlan: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      effectiveDate: z.string().optional(),
+      newTitle: z.string().optional(),
+      newManager: z.string().optional(),
+      newDepartment: z.string().optional(),
+      currentTitle: z.string().optional(),
+      currentManager: z.string().optional(),
+      currentDepartment: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const offer = await buildInternalOfferInput(ctx.db, input);
+      const c = offer.comp;
+      const result = await draftTransitionPlan({
+        firstName: offer.firstName,
+        lastName: offer.lastName,
+        currentTitle: c.currentTitle,
+        currentDepartment: c.currentDepartment,
+        currentManager: c.currentManager,
+        newTitle: c.newTitle,
+        newDepartment: c.newDepartment,
+        newManager: c.newManager,
+        effectiveDate: offer.effectiveDate,
+      });
+      return result;
     }),
 
   // ── INTERNAL-MOVE OFFER (before/now comparison + transition addendum) ──

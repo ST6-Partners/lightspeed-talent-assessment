@@ -636,3 +636,65 @@ export async function generateStandardQuestions(input: {
   try { return JSON.parse(await callClaude(system, user)) as InterviewQuestion[]; }
   catch (err) { console.error('[AI] generateStandardQuestions failed:', err); return standardQuestionSet(input.department); }
 }
+
+// ============================================================
+// TRANSITION PLAN (internal-move offer addendum) — AI DRAFT only.
+// The offer letter itself stays a deterministic template; only this
+// optional addendum body is AI-drafted for HR to edit. Never final.
+// ============================================================
+
+export interface TransitionPlanInput {
+  firstName: string;
+  lastName: string;
+  currentTitle?: string | null;
+  currentDepartment?: string | null;
+  currentManager?: string | null;
+  newTitle: string;
+  newDepartment?: string | null;
+  newManager?: string | null;
+  effectiveDate?: string | null;
+}
+
+function placeholderTransitionPlan(input: TransitionPlanInput): string {
+  const cur = input.currentTitle ?? 'the current role';
+  const nw = input.newTitle ?? 'the new role';
+  return [
+    `Transition from ${cur} to ${nw}${input.effectiveDate ? ` effective ${input.effectiveDate}` : ''}.`,
+    `Document and hand off current responsibilities and active projects to the current manager or a designated backfill.`,
+    `Hold knowledge-transfer sessions with the current team during a ~two-week overlap period.`,
+    `Introduce the employee to the new team and manager, and set new-role goals for the first 30 days.`,
+    `Confirm access, tools, and system permissions for the new role before the effective date.`,
+  ].join('\n');
+}
+
+export async function draftTransitionPlan(
+  input: TransitionPlanInput
+): Promise<{ text: string; mode: 'ai' | 'sandbox' }> {
+  if (SANDBOX) {
+    console.log('[AI SANDBOX] draftTransitionPlan | placeholder (no ANTHROPIC_API_KEY)');
+    return { text: placeholderTransitionPlan(input), mode: 'sandbox' };
+  }
+
+  const system = `You are helping an HR team draft a short, practical TRANSITION PLAN for an internal
+employee moving to a new role. Write a concise plan of 4-6 short plain-text lines (one item per line,
+no markdown headers or bullet characters) covering: handoff of current responsibilities, knowledge
+transfer, a reasonable overlap/transition period, introductions and first-30-days goals in the new role,
+and access/tooling for the new role. Keep it neutral and professional. Do NOT invent specific names,
+dates, salary figures, or facts not provided — use general phrasing like "the current manager" or
+"the effective date" where specifics are unknown. This is a DRAFT for HR to review and edit, not final.`;
+
+  const user = `Employee: ${input.firstName} ${input.lastName}
+Current role: ${input.currentTitle ?? 'unknown'}${input.currentDepartment ? ', ' + input.currentDepartment : ''}
+Current manager: ${input.currentManager ?? 'unknown'}
+New role: ${input.newTitle}${input.newDepartment ? ', ' + input.newDepartment : ''}
+New manager: ${input.newManager ?? 'unknown'}
+Effective date: ${input.effectiveDate ?? 'not set'}`;
+
+  try {
+    const raw = await callClaude(system, user);
+    return { text: raw.trim(), mode: 'ai' };
+  } catch (err) {
+    console.error('[AI] draftTransitionPlan failed — returning placeholder:', err);
+    return { text: placeholderTransitionPlan(input), mode: 'sandbox' };
+  }
+}

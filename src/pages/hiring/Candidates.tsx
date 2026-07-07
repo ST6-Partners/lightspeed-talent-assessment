@@ -928,6 +928,27 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
 
   const preview = trpc.candidates.internalOfferPreview.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(false); } });
   const send = trpc.candidates.sendInternalOffer.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(true); onChanged?.(); } });
+  const draftPlan = trpc.candidates.draftTransitionPlan.useMutation({
+    onSuccess: (r) => {
+      setAddendum((prev) => {
+        const idx = prev.findIndex((a) => /transition/i.test(a.title));
+        if (idx >= 0) {
+          return prev.map((a, j) => (j === idx ? { ...a, body: r.text } : a));
+        }
+        return [...prev, { title: 'Transition plan', body: r.text }];
+      });
+    },
+  });
+  const draftPayload = () => ({
+    id: candidateId,
+    effectiveDate: nw.effectiveDate || undefined,
+    newTitle: nw.newTitle || undefined,
+    newManager: nw.newManager || undefined,
+    newDepartment: nw.newDepartment || undefined,
+    currentTitle: cur.currentTitle || undefined,
+    currentManager: cur.currentManager || undefined,
+    currentDepartment: cur.currentDepartment || undefined,
+  });
 
   const band = d && (d.bandMin != null || d.bandMax != null)
     ? `$${(d.bandMin ?? d.bandMax)?.toLocaleString()} \u2013 $${(d.bandMax ?? d.bandMin)?.toLocaleString()}`
@@ -971,6 +992,17 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
 
       <div className="pt-1">
         <div className="text-xs text-gray-500 mb-1">Addendum items (transition plan, etc.)</div>
+        <div className="flex items-center gap-2 mb-2">
+          <button onClick={() => draftPlan.mutate(draftPayload())} disabled={draftPlan.isLoading}
+            className="text-xs px-2 py-1 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50">
+            {draftPlan.isLoading ? 'Drafting\u2026' : '\u2728 Draft transition plan with AI'}
+          </button>
+          {draftPlan.data && (
+            <span className="text-xs text-gray-400">
+              {draftPlan.data.mode === 'ai' ? 'AI draft \u2014 review & edit.' : 'Draft (no AI key) \u2014 review & edit.'}
+            </span>
+          )}
+        </div>
         {addendum.map((a, i) => (
           <div key={i} className="mb-1 space-y-1">
             <input value={a.title} placeholder="Addendum title (e.g. Transition plan)"
