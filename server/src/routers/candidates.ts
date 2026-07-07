@@ -32,7 +32,7 @@ import { computeEppScans, ingestEppResults } from '../services/eppScans.js';
 import { runReferenceCheck } from '../services/ai.js';
 import { draftTransitionPlan } from '../services/ai.js';
 import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, STANDARD_INTERNAL_OFFER_CLAUSES, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
-import { createOfferEnvelope } from '../services/docusign.js';
+import { createOfferAgreement } from '../services/adobeSign.js';
 import { composeInternalReport, getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 import { seedCandidateResume, seedAssessmentResults } from '../services/postAssessmentReview.js';
@@ -1191,10 +1191,10 @@ export const candidatesRouter = router({
       return { ok: true, status: 'sent_back' as const };
     }),
 
-  // Send the offer letter for e-signature via DocuSign. DocuSign emails the
-  // candidate the signable document (not SendGrid). Stub-safe: with no DocuSign
+  // Send the offer letter for e-signature via Adobe Sign. Adobe Sign emails the
+  // candidate the signable document (not SendGrid). Stub-safe: with no Adobe Sign
   // credentials it returns { configured:false } and changes nothing.
-  sendOfferViaDocuSign: protectedProcedure
+  sendOfferViaAdobeSign: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
       baseSalary: z.number().int().optional(),
@@ -1214,7 +1214,7 @@ export const candidatesRouter = router({
       const offer = await buildOfferInput(ctx.db, input);
       const letterHtml = renderOfferLetter(offer);
 
-      const result = await createOfferEnvelope({
+      const result = await createOfferAgreement({
         candidateName: `${candidate.firstName} ${candidate.lastName}`.trim(),
         candidateEmail: candidate.email,
         jobTitle: offer.jobTitle,
@@ -1222,7 +1222,7 @@ export const candidatesRouter = router({
       });
 
       if (!result.configured) {
-        return { configured: false as const, message: 'DocuSign is not connected yet — add DOCUSIGN_BASE_URL, DOCUSIGN_ACCOUNT_ID and DOCUSIGN_ACCESS_TOKEN (Railway) to enable sending.' };
+        return { configured: false as const, message: 'Adobe Sign is not connected yet — add ADOBE_SIGN_BASE_URL and ADOBE_SIGN_ACCESS_TOKEN (Railway) to enable sending.' };
       }
       if (result.error) {
         return { configured: true as const, error: result.error };
@@ -1233,21 +1233,21 @@ export const candidatesRouter = router({
         await ctx.db.update(candidates).set({ currentStage: 'Offered', updatedAt: new Date() }).where(eq(candidates.id, input.id));
         await ctx.db.insert(candidateStageHistory).values({
           candidateId: input.id, fromStage: candidate.currentStage, toStage: 'Offered',
-          changedBy: ctx.user.id, reason: `Offer sent for e-signature via DocuSign (envelope ${result.envelopeId})`,
+          changedBy: ctx.user.id, reason: `Offer sent for e-signature via Adobe Sign (agreement ${result.agreementId})`,
         });
       }
       try {
         await ctx.db.insert(inboundEmails).values({
           fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
-          fromName: 'DocuSign (offer)', toEmail: candidate.email,
-          subject: `Offer sent via DocuSign — ${offer.jobTitle}`,
-          body: `DocuSign envelope ${result.envelopeId} (status: ${result.status}) sent to ${candidate.email} for signature.`,
-          replyTag: 'docusign_offer', source: 'simulated', raw: { kind: 'docusign_offer', envelopeId: result.envelopeId, candidateId: input.id },
+          fromName: 'Adobe Sign (offer)', toEmail: candidate.email,
+          subject: `Offer sent via Adobe Sign — ${offer.jobTitle}`,
+          body: `Adobe Sign agreement ${result.agreementId} (status: ${result.status}) sent to ${candidate.email} for signature.`,
+          replyTag: 'adobe_sign_offer', source: 'simulated', raw: { kind: 'adobe_sign_offer', agreementId: result.agreementId, candidateId: input.id },
         });
-      } catch (err) { console.error('[docusign] inbox record failed:', err); }
+      } catch (err) { console.error('[adobesign] inbox record failed:', err); }
 
-      trackActivity(ctx.db, ctx.user.id, 'send_offer_docusign', 'candidates', { candidateId: input.id, envelopeId: result.envelopeId }).catch(() => {});
-      return { configured: true as const, envelopeId: result.envelopeId, status: result.status };
+      trackActivity(ctx.db, ctx.user.id, 'send_offer_adobesign', 'candidates', { candidateId: input.id, agreementId: result.agreementId }).catch(() => {});
+      return { configured: true as const, agreementId: result.agreementId, status: result.status };
     }),
 
   // AI-DRAFT a transition plan for the internal-move offer addendum. The offer
@@ -1398,10 +1398,10 @@ export const candidatesRouter = router({
       return { ok: true, html };
     }),
 
-  // Send the internal-move offer for e-signature via DocuSign. Same env-gated
-  // DocuSign service as the external letter (stub-safe with no credentials) —
+  // Send the internal-move offer for e-signature via Adobe Sign. Same env-gated
+  // Adobe Sign service as the external letter (stub-safe with no credentials) —
   // just renders the internal before/now letter instead.
-  sendInternalOfferViaDocuSign: protectedProcedure
+  sendInternalOfferViaAdobeSign: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
       effectiveDate: z.string().optional(),
@@ -1427,7 +1427,7 @@ export const candidatesRouter = router({
       const newTitle = offer.comp.newTitle;
       const letterHtml = renderInternalOfferLetter(offer);
 
-      const result = await createOfferEnvelope({
+      const result = await createOfferAgreement({
         candidateName: `${candidate.firstName} ${candidate.lastName}`.trim(),
         candidateEmail: candidate.email,
         jobTitle: newTitle,
@@ -1435,7 +1435,7 @@ export const candidatesRouter = router({
       });
 
       if (!result.configured) {
-        return { configured: false as const, message: 'DocuSign is not connected yet — add DOCUSIGN_BASE_URL, DOCUSIGN_ACCOUNT_ID and DOCUSIGN_ACCESS_TOKEN (Railway) to enable sending.' };
+        return { configured: false as const, message: 'Adobe Sign is not connected yet — add ADOBE_SIGN_BASE_URL and ADOBE_SIGN_ACCESS_TOKEN (Railway) to enable sending.' };
       }
       if (result.error) {
         return { configured: true as const, error: result.error };
@@ -1445,21 +1445,21 @@ export const candidatesRouter = router({
         await ctx.db.update(candidates).set({ currentStage: 'Offered', updatedAt: new Date() }).where(eq(candidates.id, input.id));
         await ctx.db.insert(candidateStageHistory).values({
           candidateId: input.id, fromStage: candidate.currentStage, toStage: 'Offered',
-          changedBy: ctx.user.id, reason: `Internal offer sent for e-signature via DocuSign (envelope ${result.envelopeId})`,
+          changedBy: ctx.user.id, reason: `Internal offer sent for e-signature via Adobe Sign (agreement ${result.agreementId})`,
         });
       }
       try {
         await ctx.db.insert(inboundEmails).values({
           fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
-          fromName: 'DocuSign (internal offer)', toEmail: candidate.email,
-          subject: `Internal offer sent via DocuSign — ${newTitle}`,
-          body: `DocuSign envelope ${result.envelopeId} (status: ${result.status}) sent to ${candidate.email} for signature.`,
-          replyTag: 'docusign_internal_offer', source: 'simulated', raw: { kind: 'docusign_internal_offer', envelopeId: result.envelopeId, candidateId: input.id },
+          fromName: 'Adobe Sign (internal offer)', toEmail: candidate.email,
+          subject: `Internal offer sent via Adobe Sign — ${newTitle}`,
+          body: `Adobe Sign agreement ${result.agreementId} (status: ${result.status}) sent to ${candidate.email} for signature.`,
+          replyTag: 'adobe_sign_internal_offer', source: 'simulated', raw: { kind: 'adobe_sign_internal_offer', agreementId: result.agreementId, candidateId: input.id },
         });
-      } catch (err) { console.error('[docusign-internal] inbox record failed:', err); }
+      } catch (err) { console.error('[adobesign-internal] inbox record failed:', err); }
 
-      trackActivity(ctx.db, ctx.user.id, 'send_internal_offer_docusign', 'candidates', { candidateId: input.id, envelopeId: result.envelopeId }).catch(() => {});
-      return { configured: true as const, envelopeId: result.envelopeId, status: result.status };
+      trackActivity(ctx.db, ctx.user.id, 'send_internal_offer_adobesign', 'candidates', { candidateId: input.id, agreementId: result.agreementId }).catch(() => {});
+      return { configured: true as const, agreementId: result.agreementId, status: result.status };
     }),
 
   // Notify an internal candidate's leadership chain (manual list for now;

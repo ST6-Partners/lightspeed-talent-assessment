@@ -927,7 +927,7 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
 
   const preview = trpc.candidates.offerPreview.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(false); } });
   const send = trpc.candidates.sendOffer.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(true); onChanged?.(); } });
-  const docusign = trpc.candidates.sendOfferViaDocuSign.useMutation({ onSuccess: () => onChanged?.() });
+  const esign = trpc.candidates.sendOfferViaAdobeSign.useMutation({ onSuccess: () => onChanged?.() });
   const approvalStatus = trpc.candidates.offerApprovalStatus.useQuery({ candidateId });
   const requestApproval = trpc.candidates.requestOfferApproval.useMutation({ onSuccess: () => { approvalStatus.refetch(); onChanged?.(); } });
 
@@ -1079,7 +1079,7 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
 
   const preview = trpc.candidates.internalOfferPreview.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(false); } });
   const send = trpc.candidates.sendInternalOffer.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(true); onChanged?.(); } });
-  const docusign = trpc.candidates.sendInternalOfferViaDocuSign.useMutation({ onSuccess: () => onChanged?.() });
+  const esign = trpc.candidates.sendInternalOfferViaAdobeSign.useMutation({ onSuccess: () => onChanged?.() });
   const approvalStatus = trpc.candidates.offerApprovalStatus.useQuery({ candidateId });
   const requestApproval = trpc.candidates.requestInternalOfferApproval.useMutation({ onSuccess: () => { approvalStatus.refetch(); onChanged?.(); } });
   const draftPlan = trpc.candidates.draftTransitionPlan.useMutation({
