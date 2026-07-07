@@ -421,7 +421,11 @@ export const candidatesRouter = router({
       // company-values + resume gate) — the same decision the CCAT-completion path
       // makes — instead of a plain stage move. Needs a CCAT score (seeded on create).
       if (existing.currentStage === 'Assessment' && existing.ccatScore != null) {
-        await applyAssessmentDecision(ctx.db, input.id);
+        try {
+          await applyAssessmentDecision(ctx.db, input.id);
+        } catch (err) {
+          console.error('[advance] assessment review failed:', err);
+        }
         const reviewed = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
         await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
         trackActivity(ctx.db, ctx.user.id, 'advance_stage_review', 'candidates', { candidateId: input.id }).catch(() => {});
