@@ -41,8 +41,8 @@ import { computeHiringAlerts } from '../services/hiring-alerts.js';
 const STAGES = [
   'Applied',
   'Assessment',
-  'Work Sample',
   'Values Review',
+  'Work Sample',
   'Interview Scheduled',
   'Interviewed',
   'Offered',

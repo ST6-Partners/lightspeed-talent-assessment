@@ -18,13 +18,11 @@
 // ============================================================
 
 import { eq, desc } from 'drizzle-orm';
-import { randomUUID } from 'node:crypto';
 import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { valueReviews, candidateValueScores, companyValues } from '../db/schema/values.js';
 import { computeEppScans } from './eppScans.js';
 import { generateInterviewQuestions, screenResumeRequirements } from './ai.js';
-import { resolveDeptWorkSample } from './workSampleResolver.js';
 import { dispatchStageEmail, emailInterviewerReport, emailAssessmentFailedHR } from './email.js';
 
 // Both EPP match and company-values match must be at or above this to advance.
@@ -35,13 +33,6 @@ export type ReviewResult =
   | { decision: 'rejected'; reason: string; eppMatch: number | null; valuesMatch: number | null }
   | { decision: 'skipped'; reason: string };
 
-function appBaseUrl(): string {
-  const explicit = process.env.APP_BASE_URL;
-  if (explicit) return explicit.replace(/\/$/, '');
-  const railway = process.env.RAILWAY_PUBLIC_DOMAIN;
-  if (railway) return `https://${railway}`;
-  return '';
-}
 
 export async function runPostAssessmentReview(db: any, candidateId: string): Promise<ReviewResult> {
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
@@ -135,34 +126,22 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
     return { decision: 'rejected', reason, eppMatch, valuesMatch };
   }
 
-  // 4) PASS — move to Work Sample immediately (fast); the tailored questions
-  // (a Claude call) + emails run in the background so the stage advance returns
-  // instantly instead of blocking the UI for several seconds.
-  let token: string | null = candidate.workSampleToken ?? null;
-  if (!token) {
-    token = randomUUID();
-    await db.update(candidates).set({ workSampleToken: token, updatedAt: new Date() }).where(eq(candidates.id, candidateId));
-  }
-  const wsToken = token;
+  // 4) PASS — move to Values Review immediately (fast). The candidate cleared the
+  // EPP + company-values + resume gate; the Work Sample comes AFTER Values Review
+  // (its link is sent when they're advanced into Work Sample). Tailored questions
+  // (a Claude call) + emails run in the background so the advance returns instantly.
   await db.update(candidates)
-    .set({ currentStage: 'Work Sample', updatedAt: new Date() })
+    .set({ currentStage: 'Values Review', updatedAt: new Date() })
     .where(eq(candidates.id, candidateId));
   await db.insert(candidateStageHistory).values({
-    candidateId, fromStage, toStage: 'Work Sample', changedBy: null,
-    reason: `Auto-review passed (EPP ${eppMatch}%, company-values ${valuesMatch}%) — sent to Work Sample`,
+    candidateId, fromStage, toStage: 'Values Review', changedBy: null,
+    reason: `Auto-review passed (EPP ${eppMatch}%, company-values ${valuesMatch}%) — sent to Values Review`,
   });
 
   void (async () => {
     try {
-      const workSampleUrl = `${appBaseUrl()}/work-sample/${wsToken}`;
-      let workSampleInstructions: string | undefined = jd?.workSampleInstructions ?? undefined;
-      const resolved = await resolveDeptWorkSample(db, candidate);
-      if (resolved) {
-        workSampleInstructions = `<strong>${resolved.title}</strong><br/><br/>` + resolved.instructions.replace(/\n/g, '<br/>');
-      }
-      await dispatchStageEmail('Work Sample', fromStage, {
-        firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email,
-        jobTitle, workSampleInstructions, workSampleUrl,
+      await dispatchStageEmail('Values Review', fromStage, {
+        firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
       });
 
       const eppTraits = await db

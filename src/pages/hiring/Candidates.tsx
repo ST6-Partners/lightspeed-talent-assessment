@@ -4,7 +4,7 @@ import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2 } from 'lu
 import { trpc } from '../../lib/trpc';
 
 const STAGES = [
-  'Applied', 'Assessment', 'Work Sample', 'Values Review',
+  'Applied', 'Assessment', 'Values Review', 'Work Sample',
   'Interview Scheduled', 'Interviewed', 'Offered', 'Hired', 'Rejected',
 ] as const;
 
