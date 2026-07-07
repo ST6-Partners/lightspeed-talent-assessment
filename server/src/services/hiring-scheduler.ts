@@ -9,14 +9,16 @@
 // entry for the Assessment stage transition.
 // ============================================================
 
-import { eq, and, lte, isNull, isNotNull } from 'drizzle-orm';
+import { eq, and, lte, gte, lt, isNull, isNotNull } from 'drizzle-orm';
 import { db } from '../db.js';
-import { candidates, candidateStageHistory, emailLog, jobDescriptions } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, emailLog, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
+import { approvals } from '../db/schema/intake.js';
 import { registerJob, type JobResult } from './job-runner.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { getInternalReportConfig, composeInternalReport } from './internalReport.js';
 import { sendEmail, emailBookingReminderCandidate, emailBookingStalledHR } from './email.js';
 import { computeHiringAlerts, renderAlertDigest } from './hiring-alerts.js';
+import { approverEmail, emailApprovalReminder, emailInterviewReminderCandidate, emailInterviewReminderInterviewer } from './email.js';
 
 function schedAppBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -330,6 +332,103 @@ async function runTimelineAlerts(): Promise<JobResult> {
   return { affected: total, details: `${alerts.stalledCandidates.length} stalled candidate(s), ${alerts.overdueReqs.length} overdue req(s) — digest emailed to ${to}.` };
 }
 
+// ── Job: stalled-approval reminder (approval chain SLA) ────
+// Nudges approvers in the ACTIVE group whose pending step is >= 3 days old;
+// escalates to HR at >= 5 days. Only the active group is actionable.
+const APPROVAL_REMINDER_DAYS = 3;
+const APPROVAL_ESCALATE_DAYS = 5;
+
+async function runApprovalReminder(): Promise<JobResult> {
+  const pending = await db.select().from(approvals).where(eq(approvals.status, 'pending'));
+  if (!pending.length) return { affected: 0, details: 'No pending approvals.' };
+
+  // Group pending approvals by req, and only act on each req's active (lowest) group.
+  const byReq = new Map<string, typeof pending>();
+  for (const a of pending) {
+    const arr = byReq.get(a.reqId) ?? [];
+    arr.push(a);
+    byReq.set(a.reqId, arr as any);
+  }
+
+  let nudged = 0, escalated = 0;
+  const now = Date.now();
+  for (const [reqId, rows] of byReq) {
+    const activeGroup = Math.min(...rows.map((r) => r.groupIdx));
+    const active = rows.filter((r) => r.groupIdx === activeGroup);
+    const req = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, reqId) });
+    if (!req) continue;
+
+    for (const a of active) {
+      const created = a.createdAt ? new Date(a.createdAt).getTime() : now;
+      const daysPending = Math.floor((now - created) / 86_400_000);
+      if (daysPending < APPROVAL_REMINDER_DAYS) continue;
+
+      const approvalUrl = `${schedAppBaseUrl()}/approve/${a.id}`;
+      try {
+        await emailApprovalReminder(approverEmail(a.approverRole), {
+          roleLabel: a.approverRole, department: req.department, hiringManager: req.hiringManager,
+          daysPending, approvalUrl,
+        });
+        nudged++;
+      } catch (err) { console.error('[approval-reminder] approver send failed:', err); }
+
+      if (daysPending >= APPROVAL_ESCALATE_DAYS) {
+        try {
+          await emailApprovalReminder(process.env.HR_EMAIL || approverEmail('hr'), {
+            roleLabel: `${a.approverRole} (escalation)`, department: req.department, hiringManager: req.hiringManager,
+            daysPending, approvalUrl,
+          });
+          escalated++;
+        } catch (err) { console.error('[approval-reminder] HR escalation failed:', err); }
+      }
+    }
+  }
+  return { affected: nudged + escalated, details: `Nudged ${nudged} approver(s); escalated ${escalated} to HR.` };
+}
+
+// ── Job: day-before interview reminder (candidate + interviewer) ──
+async function runInterviewDayBeforeReminder({ force = false }: { force?: boolean } = {}): Promise<JobResult> {
+  const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() + 1); // start of tomorrow
+  const end = new Date(start); end.setDate(end.getDate() + 1);                                // start of day after
+
+  const rows = await db.query.candidates.findMany({
+    where: and(
+      isNotNull(candidates.interviewScheduledAt),
+      gte(candidates.interviewScheduledAt, start),
+      lt(candidates.interviewScheduledAt, end),
+    ),
+  });
+
+  let candSent = 0, intSent = 0;
+  const skipped: string[] = [];
+  for (const c of rows) {
+    if (['Rejected', 'Hired'].includes(c.currentStage)) { skipped.push(`${c.email} (stage ${c.currentStage})`); continue; }
+    if (!force && await alreadySentTemplate(c.id, 'interview_reminder_candidate')) { skipped.push(`${c.email} (already reminded)`); continue; }
+
+    const jd = c.jdId ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;
+    const jobTitle = jd?.jobTitle ?? undefined;
+    const whenText = c.interviewScheduledAt
+      ? new Date(c.interviewScheduledAt).toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      : undefined;
+
+    try {
+      await emailInterviewReminderCandidate({ firstName: c.firstName, lastName: c.lastName, email: c.email, jobTitle, interviewerName: c.interviewerName ?? undefined, whenText });
+      await logEmail(c.id, c.email, 'interview_reminder_candidate', `Reminder: your interview tomorrow`, 'sent');
+      candSent++;
+    } catch (err: any) {
+      await logEmail(c.id, c.email, 'interview_reminder_candidate', 'Reminder: your interview tomorrow', 'failed', err?.message);
+    }
+
+    if (c.interviewerEmail) {
+      try {
+        await emailInterviewReminderInterviewer({ interviewerEmail: c.interviewerEmail, interviewerName: c.interviewerName, candidateName: `${c.firstName} ${c.lastName}`, jobTitle, whenText });
+        intSent++;
+      } catch (err) { console.error('[interview-reminder] interviewer send failed:', err); }
+    }
+  }
+  return { affected: candSent + intSent, details: `Reminded ${candSent} candidate(s) + ${intSent} interviewer(s).${skipped.length ? ` Skipped ${skipped.length}.` : ''}` };
+}
+
 export function registerHiringJobs(): void {
   registerJob({
     name:           'assessment-reminder',
@@ -376,5 +475,23 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '15 9 * * *',  // 9:15 AM daily (after reminder + auto-reject + booking reminder)
     handler:        runTimelineAlerts,
+  });
+  registerJob({
+    name:           'approval-reminder',
+    label:          'Approval Reminder',
+    description:    'Nudge approvers whose pending intake approval is 3+ days old; escalate to HR at 5+ days.',
+    color:          '#a855f7',
+    jobType:        'cron',
+    cronExpression: '20 9 * * *',  // 9:20 AM daily
+    handler:        runApprovalReminder,
+  });
+  registerJob({
+    name:           'interview-day-before-reminder',
+    label:          'Interview Day-Before Reminder',
+    description:    'Remind the candidate and the interviewer the day before a scheduled interview.',
+    color:          '#14b8a6',
+    jobType:        'cron',
+    cronExpression: '0 8 * * *',   // 8:00 AM daily (morning before)
+    handler:        runInterviewDayBeforeReminder,
   });
 }

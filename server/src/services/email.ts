@@ -821,3 +821,76 @@ export function buildKickoffEmail(d: KickoffData): { subject: string; html: stri
   const text = `Hiring kickoff — ${role} has been fully approved and is open. Hiring manager: ${d.hiringManager}. Team: ${d.team.map((t) => t.personRef).join(', ') || 'none set'}. Rounds: ${d.rounds.map((r) => r.roundName).join(', ') || 'none'}. Scheduling link pending the scheduling-tool integration.`;
   return { subject, html, text };
 }
+
+// ============================================================
+// EXPANDED-SCOPE AUTOMATED EMAILS (2026-07-07)
+//   - approval rejected -> submitter
+//   - stalled approval reminder -> approver (+ HR escalation)
+//   - requisition closed / on hold -> active candidates
+//   - day-before interview reminder -> candidate + interviewer
+// ============================================================
+
+export async function emailApprovalRejected(to: string, d: {
+  roleLabel: string; department: string; jobTitle?: string; hiringManager: string; note: string;
+}): Promise<void> {
+  const role = `${d.department}${d.jobTitle ? ' · ' + d.jobTitle : ''}`;
+  const subject = `Intake rejected (${d.roleLabel}): ${role}`;
+  const html = wrap(`
+    ${h1('An intake was rejected in approval')}
+    ${p(`The hiring intake for <strong>${role}</strong> (hiring manager ${d.hiringManager}) was <strong>rejected</strong> at the <strong>${d.roleLabel}</strong> approval step and has been sent back to Draft.`)}
+    ${p(`<strong>Reason given:</strong><br/>${d.note}`)}
+    ${p('Update the intake to address the feedback, then re-submit it to restart the approval chain.')}
+  `);
+  await sendEmail({ to, subject, html, templateId: 'intake_rejected' });
+}
+
+export async function emailApprovalReminder(to: string, d: {
+  roleLabel: string; department: string; jobTitle?: string; hiringManager: string; daysPending: number; approvalUrl?: string;
+}): Promise<void> {
+  const role = `${d.department}${d.jobTitle ? ' · ' + d.jobTitle : ''}`;
+  const subject = `Reminder: your ${d.roleLabel} approval is pending — ${role}`;
+  const html = wrap(`
+    ${h1('An approval is waiting on you')}
+    ${p(`The hiring intake for <strong>${role}</strong> (hiring manager ${d.hiringManager}) has been waiting <strong>${d.daysPending} day(s)</strong> for your <strong>${d.roleLabel}</strong> approval.`)}
+    ${d.approvalUrl ? button('Review & approve now', d.approvalUrl) : p('Open the Talent Assessment app → Intake to review and approve.')}
+  `);
+  await sendEmail({ to, subject, html, templateId: 'intake_approval_reminder' });
+}
+
+export async function emailReqStatusToCandidate(data: CandidateEmailData & { onHold?: boolean }): Promise<void> {
+  const onHold = !!data.onHold;
+  const subject = onHold
+    ? `Update on the ${data.jobTitle ?? 'role'} at Lightspeed Systems`
+    : `Update on your application — ${data.jobTitle ?? 'Lightspeed Systems'}`;
+  const body = onHold
+    ? p(`We wanted to let you know that the <strong>${data.jobTitle ?? 'role'}</strong> you're being considered for at Lightspeed Systems has been temporarily placed <strong>on hold</strong>. Your application remains active, and we'll be back in touch as soon as the process resumes. Thank you for your patience.`)
+    : p(`Thank you for your interest in the <strong>${data.jobTitle ?? 'role'}</strong> at Lightspeed Systems. This position has been <strong>closed</strong>, so we won't be moving forward with hiring for it at this time. We're grateful for the time you invested and encourage you to apply for future openings.`);
+  const html = wrap(`${h1(onHold ? 'Your application is on hold' : 'Update on the role')}${p(`Hi ${data.firstName},`)}${body}${p('Best,<br/>Lightspeed Systems Recruiting')}`);
+  await sendEmail({ to: data.email, subject, html, templateId: onHold ? 'req_on_hold' : 'req_closed' });
+}
+
+export async function emailInterviewReminderCandidate(data: CandidateEmailData & { whenText?: string }): Promise<void> {
+  const subject = `Reminder: your interview tomorrow — ${data.jobTitle ?? 'Lightspeed Systems'}`;
+  const html = wrap(`
+    ${h1('Your interview is tomorrow')}
+    ${p(`Hi ${data.firstName},`)}
+    ${p(`This is a friendly reminder about your upcoming interview for the <strong>${data.jobTitle ?? 'role'}</strong> at Lightspeed Systems${data.whenText ? `, scheduled for <strong>${data.whenText}</strong>` : ' tomorrow'}.`)}
+    ${data.interviewerName ? p(`You'll be meeting with <strong>${data.interviewerName}</strong>.`) : ''}
+    ${p('If anything has changed or you need to reschedule, just reply to this email. Good luck!')}
+    ${p('Best,<br/>Lightspeed Systems Recruiting')}
+  `);
+  await sendEmail({ to: data.email, subject, html, templateId: 'interview_reminder_candidate' });
+}
+
+export async function emailInterviewReminderInterviewer(data: {
+  interviewerEmail: string; interviewerName?: string | null; candidateName: string; jobTitle?: string; whenText?: string;
+}): Promise<void> {
+  const subject = `Reminder: interview tomorrow with ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`;
+  const html = wrap(`
+    ${h1('Interview reminder')}
+    ${p(`Hi${data.interviewerName ? ' ' + data.interviewerName : ''},`)}
+    ${p(`This is a reminder that you're interviewing <strong>${data.candidateName}</strong> for the <strong>${data.jobTitle ?? 'role'}</strong>${data.whenText ? ` <strong>${data.whenText}</strong>` : ' tomorrow'}.`)}
+    ${p('The candidate-specific question set and prep are in the Talent Assessment app. Thanks!')}
+  `);
+  await sendEmail({ to: data.interviewerEmail, subject, html, templateId: 'interview_reminder_interviewer' });
+}

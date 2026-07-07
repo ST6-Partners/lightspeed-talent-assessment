@@ -16,6 +16,8 @@ import { jobDescriptions } from '../db/schema/hiring.js';
 import { interviewQuestions } from '../db/schema/intake.js';
 import { generateRoleJD, generateStandardQuestions, standardQuestionSet } from '../services/ai.js';
 import { approverEmail, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
+import { emailApprovalRejected } from '../services/email.js';
+import { users } from '../db/schema/core.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 
@@ -45,6 +47,30 @@ function intakeSummaryRows(req: any): Array<{ label: string; value: string }> {
   if (req.mustHaves) rows.push({ label: 'Must-haves', value: String(req.mustHaves) });
   if (req.knownConstraints) rows.push({ label: 'Known constraints', value: String(req.knownConstraints) });
   return rows;
+}
+
+// Notify the intake submitter (+ test inbox) that their intake was rejected.
+async function notifyIntakeRejected(db: DrizzleClient, reqId: string, roleLabel: string, note: string): Promise<void> {
+  const req = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, reqId) });
+  if (!req) return;
+  let submitterEmail: string | null = null;
+  if ((req as any).createdBy) {
+    const u = await db.query.users.findFirst({ where: eq(users.id, (req as any).createdBy) });
+    submitterEmail = u?.email ?? null;
+  }
+  const to = submitterEmail || approverEmail('hr');
+  const roleTitle = `${req.department}${(req as any).jobTitle ? ' · ' + (req as any).jobTitle : ''}`;
+  try {
+    await emailApprovalRejected(to, { roleLabel, department: req.department, hiringManager: req.hiringManager, note });
+  } catch (err) { console.error('[intake] rejected-notify send failed:', err); }
+  try {
+    await db.insert(inboundEmails).values({
+      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
+      toEmail: to, subject: `Intake rejected (${roleLabel}): ${roleTitle}`,
+      body: `The intake for ${roleTitle} was rejected at the ${roleLabel} step. Reason: ${note}`,
+      replyTag: 'intake_rejected', source: 'simulated', raw: { kind: 'intake_rejected', reqId },
+    });
+  } catch (err) { console.error('[intake] rejected-notify inbox record failed:', err); }
 }
 
 // Email + test-inbox record for ONE approver (their step's tokenized review link).
@@ -460,6 +486,7 @@ export const intakeRouter = router({
       if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'This approval link is invalid.' });
       await ctx.db.update(approvals).set({ status: 'rejected', approverRef: 'via approval link', note: input.note, actedAt: new Date() }).where(eq(approvals.id, target.id));
       await ctx.db.update(jobRequisitions).set({ status: 'Draft', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
+      await notifyIntakeRejected(ctx.db, target.reqId, target.approverRole, input.note);
       return { ok: true as const, roleLabel: target.approverRole };
     }),
 
@@ -514,6 +541,7 @@ export const intakeRouter = router({
         .set({ status: 'rejected', approverRef: ctx.user.id, note: input.note, actedAt: new Date() })
         .where(eq(approvals.id, target.id));
       await ctx.db.update(jobRequisitions).set({ status: 'Draft', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
+      await notifyIntakeRejected(ctx.db, input.reqId, target.approverRole, input.note);
       await auditChange(ctx.db, ctx.user.id, input.reqId, 'job_requisitions', 'update');
       trackActivity(ctx.db, ctx.user.id, 'reject_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch(() => {});
       return { id: input.reqId };
