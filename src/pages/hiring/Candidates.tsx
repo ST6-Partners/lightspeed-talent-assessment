@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, X, ChevronRight, Ban, ChevronDown, Trash2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
@@ -28,6 +29,13 @@ export default function Candidates() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Deep-link support: /hiring/candidates?candidate=<id> preselects that candidate.
+  useEffect(() => {
+    const c = searchParams.get('candidate');
+    if (c) { setSelectedId(c); setSearchParams({}, { replace: true }); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [showRejected, setShowRejected] = useState(false);
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
