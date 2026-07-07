@@ -34,6 +34,10 @@ const EMPTY = {
   interviewRounds: 1, questionSource: 'standard',
   teamAvailabilityConfirmed: false,
   timelineTemplate: 'standard', targetPostDate: '', targetOfferDate: '',
+  mustHaves: '', niceToHaves: '', standoutSignals: '', dealbreakers: '',
+  thriveProfile: '', struggleProfile: '', teamContext: '',
+  targetCompanies: '', avoidCompanies: '', internalReferrals: '',
+  knownConstraints: '', constraintsAck: false,
   approvalPlan: [
     { role: 'Hiring Manager', concurrent: false },
     { role: 'ELT Leader', concurrent: false },
@@ -85,6 +89,12 @@ export default function Intake() {
         teamAvailabilityConfirmed: !!f.teamAvailabilityConfirmed,
         timelineTemplate: f.timelineTemplate ?? 'standard',
         targetPostDate: f.targetPostDate ?? '', targetOfferDate: f.targetOfferDate ?? '',
+        mustHaves: f.mustHaves ?? '', niceToHaves: f.niceToHaves ?? '',
+        standoutSignals: f.standoutSignals ?? '', dealbreakers: f.dealbreakers ?? '',
+        thriveProfile: f.thriveProfile ?? '', struggleProfile: f.struggleProfile ?? '',
+        teamContext: f.teamContext ?? '', targetCompanies: f.targetCompanies ?? '',
+        avoidCompanies: f.avoidCompanies ?? '', internalReferrals: f.internalReferrals ?? '',
+        knownConstraints: f.knownConstraints ?? '', constraintsAck: !!f.constraintsAck,
         approvalPlan: Array.isArray(f.approvalPlan) && f.approvalPlan.length ? f.approvalPlan : EMPTY.approvalPlan,
       });
       setRounds(f.rounds?.map((r: any) => ({ roundName: r.roundName, lengthMin: r.lengthMin ?? undefined, format: r.format ?? undefined })) ?? []);
@@ -146,6 +156,12 @@ export default function Intake() {
     timelineTemplate: form.timelineTemplate as any,
     targetPostDate: form.targetPostDate || undefined, targetOfferDate: form.targetOfferDate || undefined,
     approvalPlan: form.approvalPlan.filter((r) => r.role && r.role.trim()).map((r, i) => ({ role: r.role.trim(), concurrent: i > 0 && !!r.concurrent })),
+    mustHaves: form.mustHaves || undefined, niceToHaves: form.niceToHaves || undefined,
+    standoutSignals: form.standoutSignals || undefined, dealbreakers: form.dealbreakers || undefined,
+    thriveProfile: form.thriveProfile || undefined, struggleProfile: form.struggleProfile || undefined,
+    teamContext: form.teamContext || undefined, targetCompanies: form.targetCompanies || undefined,
+    avoidCompanies: form.avoidCompanies || undefined, internalReferrals: form.internalReferrals || undefined,
+    knownConstraints: form.knownConstraints || undefined, constraintsAck: form.constraintsAck,
     rounds: rounds.filter((r) => r.roundName),
     team: team.filter((p) => p.personRef),
     awareness: awareness.filter((a) => a.personRef),
@@ -296,6 +312,57 @@ export default function Intake() {
             </div>
           </section>
 
+          {/* 2A — Role profile & search criteria (Jody feedback) */}
+          <section>
+            <h3 className="text-sm font-semibold text-ls-primary mb-2">2A · Role profile &amp; search criteria</h3>
+            <p className="text-xs text-gray-400 mb-2">Filled by the hiring manager — the full picture of who we’re looking for. Applies to every role.</p>
+            {form.baseJdId && (
+              <button type="button" onClick={() => { const jd: any = ((allJds as any[]) || []).find((j) => j.id === form.baseJdId); if (jd) setForm({ ...form, mustHaves: form.mustHaves || jd.requiredQualifications || '', niceToHaves: form.niceToHaves || jd.preferredQualifications || '' }); }} className="mb-3 text-xs px-2 py-1 border border-gray-300 rounded-md text-ls-primary hover:bg-gray-50">Prefill must / nice-to-haves from selected JD</button>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={lbl}>Must-haves (non-negotiables) — one per line</label>
+                <textarea rows={4} value={form.mustHaves} onChange={(e) => setForm({ ...form, mustHaves: e.target.value })} placeholder="e.g. 5+ years front-end&#10;Strong React/Redux, CSS" className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Nice-to-haves — one per line</label>
+                <textarea rows={4} value={form.niceToHaves} onChange={(e) => setForm({ ...form, niceToHaves: e.target.value })} placeholder="e.g. Follows industry trends" className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>What makes a candidate stand out</label>
+                <textarea rows={2} value={form.standoutSignals} onChange={(e) => setForm({ ...form, standoutSignals: e.target.value })} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Dealbreakers</label>
+                <textarea rows={2} value={form.dealbreakers} onChange={(e) => setForm({ ...form, dealbreakers: e.target.value })} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Who thrives here</label>
+                <textarea rows={2} value={form.thriveProfile} onChange={(e) => setForm({ ...form, thriveProfile: e.target.value })} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Who tends to struggle</label>
+                <textarea rows={2} value={form.struggleProfile} onChange={(e) => setForm({ ...form, struggleProfile: e.target.value })} className={inp} />
+              </div>
+              <div className="col-span-2">
+                <label className={lbl}>Team context — current challenges / growth stage</label>
+                <textarea rows={2} value={form.teamContext} onChange={(e) => setForm({ ...form, teamContext: e.target.value })} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Companies to target — one per line</label>
+                <textarea rows={3} value={form.targetCompanies} onChange={(e) => setForm({ ...form, targetCompanies: e.target.value })} className={inp} />
+              </div>
+              <div>
+                <label className={lbl}>Companies to avoid — one per line</label>
+                <textarea rows={3} value={form.avoidCompanies} onChange={(e) => setForm({ ...form, avoidCompanies: e.target.value })} className={inp} />
+              </div>
+              <div className="col-span-2">
+                <label className={lbl}>Internal referrals to consider</label>
+                <textarea rows={2} value={form.internalReferrals} onChange={(e) => setForm({ ...form, internalReferrals: e.target.value })} placeholder="Names to look at first, with a note" className={inp} />
+              </div>
+            </div>
+          </section>
+
           {/* 3 — Employment & location */}
           <section>
             <h3 className="text-sm font-semibold text-ls-primary mb-2">3 · Employment &amp; location</h3>
@@ -351,6 +418,21 @@ export default function Intake() {
                 <label className={lbl}>Bonus / variable comp (optional)</label>
                 <input type="text" value={form.variableComp} onChange={(e) => setForm({ ...form, variableComp: e.target.value })} placeholder="e.g. 15% target bonus, or $20k OTE" className={inp} />
               </div>
+            </div>
+          </section>
+
+          {/* 4A — Known constraints (ELT/Finance/HR) */}
+          <section>
+            <h3 className="text-sm font-semibold text-ls-primary mb-2">4A · Known constraints</h3>
+            <p className="text-xs text-gray-400 mb-2">Owned by ELT / Finance / HR — flags like budget-freeze risk or a pending reorg, surfaced so the team knows up front. Typically completed at their approval step.</p>
+            <div className="space-y-3">
+              <div>
+                <label className={lbl}>Known constraints — one per line (note who flagged it)</label>
+                <textarea rows={3} value={form.knownConstraints} onChange={(e) => setForm({ ...form, knownConstraints: e.target.value })} placeholder="e.g. Budget freeze risk in Q3 (Finance)&#10;Reorg pending (ELT)" className={inp} />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" checked={form.constraintsAck} onChange={(e) => setForm({ ...form, constraintsAck: e.target.checked })} className="rounded" /> Constraints reviewed &amp; acknowledged
+              </label>
             </div>
           </section>
 

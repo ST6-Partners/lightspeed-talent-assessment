@@ -225,6 +225,13 @@
       "when": 1960000002000,
       "tag": "0029_recover_jds_again",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1960000003000,
+      "tag": "0030_intake_role_profile_constraints",
+      "breakpoints": true
     }
   ]
 }

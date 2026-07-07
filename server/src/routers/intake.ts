@@ -42,6 +42,8 @@ function intakeSummaryRows(req: any): Array<{ label: string; value: string }> {
     { label: 'Timeline', value: `${req.timelineTemplate ?? 'standard'}${req.targetOfferDate ? ' · offer by ' + req.targetOfferDate : ''}` },
   ];
   if (req.variableComp) rows.push({ label: 'Variable comp', value: req.variableComp });
+  if (req.mustHaves) rows.push({ label: 'Must-haves', value: String(req.mustHaves) });
+  if (req.knownConstraints) rows.push({ label: 'Known constraints', value: String(req.knownConstraints) });
   return rows;
 }
 
@@ -201,6 +203,20 @@ const IntakeInput = z.object({
   timelineTemplate: z.enum(['standard', 'senior', 'custom']).default('standard'),
   targetPostDate: z.string().optional(),
   targetOfferDate: z.string().optional(),
+  // Section 2A — role profile & search criteria (Jody feedback)
+  mustHaves: z.string().optional(),
+  niceToHaves: z.string().optional(),
+  standoutSignals: z.string().optional(),
+  dealbreakers: z.string().optional(),
+  thriveProfile: z.string().optional(),
+  struggleProfile: z.string().optional(),
+  teamContext: z.string().optional(),
+  targetCompanies: z.string().optional(),
+  avoidCompanies: z.string().optional(),
+  internalReferrals: z.string().optional(),
+  // Section 4A — known constraints (ELT/Finance/HR)
+  knownConstraints: z.string().optional(),
+  constraintsAck: z.boolean().default(false),
   // child collections
   rounds: z.array(RoundInput).default([]),
   team: z.array(PersonInput).default([]),
