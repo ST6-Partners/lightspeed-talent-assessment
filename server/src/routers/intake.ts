@@ -139,7 +139,7 @@ async function notifyJdReview(db: DrizzleClient, req: any, jdTitle: string | und
     await db.insert(inboundEmails).values({
       fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
       toEmail: to, subject, body, replyTag: 'jd_review', source: 'simulated',
-      raw: { kind: 'jd_review', reqId: req.id, jdId, reviewUrl },
+      raw: { kind: 'jd_review', reqId: req.id, jdId, reviewUrl, approvalUrl: reviewUrl },
     });
   } catch (err) { console.error('[intake] jd-review inbox record failed:', err); }
   const html = `<p>A new job description for <strong>${role}</strong> needs your review. <strong>The role is not opened and no hiring kickoff is sent until you approve.</strong></p><p><a href="${reviewUrl}" style="display:inline-block;padding:10px 18px;background:#15803d;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;">Review &amp; sign off</a></p><p style="font-size:12px;color:#888;">Or paste this link: ${reviewUrl}</p>`;
