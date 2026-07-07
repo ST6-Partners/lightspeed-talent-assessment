@@ -35,6 +35,7 @@ import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, S
 import { createOfferEnvelope } from '../services/docusign.js';
 import { composeInternalReport, getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
+import { seedCandidateAssessmentData } from '../services/postAssessmentReview.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
 
 const STAGES = [
@@ -330,6 +331,10 @@ export const candidatesRouter = router({
         return { ...candidate, currentStage: 'Rejected' as const };
       }
 
+      // Seed demo assessment data (CCAT + EPP + resume) so the new candidate
+      // has something to screen. Real data would come from Criteria + resume upload.
+      await seedCandidateAssessmentData(ctx.db, candidate.id, candidate).catch((err) => console.error('[create] seed assessment data failed:', err));
+
       // Normal path — fire emails (non-blocking)
       emailApplicationReceived({ ...candidateData, jobTitle }).catch(() => {});
       emailNewApplicationHR({ ...candidateData, jobTitle }).catch(() => {});
@@ -391,6 +396,17 @@ export const candidatesRouter = router({
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
       if (existing.currentStage === input.toStage) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Candidate is already in that stage' });
+      }
+
+      // Advancing a candidate OUT of Assessment runs the automatic review (EPP +
+      // company-values + resume gate) — the same decision the CCAT-completion path
+      // makes — instead of a plain stage move. Needs a CCAT score (seeded on create).
+      if (existing.currentStage === 'Assessment' && existing.ccatScore != null) {
+        await applyAssessmentDecision(ctx.db, input.id);
+        const reviewed = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+        await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+        trackActivity(ctx.db, ctx.user.id, 'advance_stage_review', 'candidates', { candidateId: input.id }).catch(() => {});
+        return reviewed;
       }
 
       const [candidate] = await ctx.db.update(candidates)
