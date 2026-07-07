@@ -199,11 +199,26 @@ const EPP_TRAITS = ['Achievement','Assertiveness','Competitiveness','Conscientio
 
 export async function seedCandidateResume(db: any, candidateId: string, candidate: any): Promise<void> {
   if (candidate.resumeText) return;
+
+  // If the candidate is tied to a role, weave that role's required (and preferred)
+  // qualifications into the seeded resume so the resume screen finds them met.
+  // Otherwise a generic resume fails every role's required-quals check and the
+  // candidate gets auto-rejected before CCAT/EPP/values ever matter.
+  let qualsBlock = '';
+  if (candidate.jdId) {
+    const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) });
+    const req = ((jd as any)?.requiredQualifications ?? '').toString().trim();
+    const pref = ((jd as any)?.preferredQualifications ?? '').toString().trim();
+    if (req) qualsBlock += '\n\nRELEVANT QUALIFICATIONS & EXPERIENCE\n' + req;
+    if (pref) qualsBlock += '\n' + pref;
+  }
+
   const resumeText =
     'PROFESSIONAL SUMMARY\n' + candidate.firstName + ' ' + candidate.lastName +
     ' is a results-driven professional with 6+ years of experience delivering high-quality work in fast-paced environments. Strong communicator and collaborator with a track record of ownership and measurable impact.\n\n' +
     'EXPERIENCE\n- Led cross-functional projects from concept to delivery.\n- Improved process efficiency and quality through data-informed decisions.\n- Mentored teammates and contributed to a high-standards culture.\n\n' +
-    'SKILLS\n- Communication, problem-solving, collaboration, project management, data analysis, adaptability.\n\n' +
+    'SKILLS\n- Communication, problem-solving, collaboration, project management, data analysis, adaptability.' +
+    qualsBlock + '\n\n' +
     'EDUCATION\n- B.S. in a relevant field.';
   await db.update(candidates).set({ resumeText, updatedAt: new Date() }).where(eq(candidates.id, candidateId));
 }
