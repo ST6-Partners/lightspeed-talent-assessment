@@ -347,6 +347,7 @@ export const candidatesRouter = router({
         workSampleInstructions,
         workSampleUrl,
         interviewerName: (existing as any).interviewerName,
+        interviewerEmail: (existing as any).interviewerEmail,
       }).catch(() => {});
 
       // When advancing to Interview Scheduled:

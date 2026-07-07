@@ -266,5 +266,25 @@ async function runAiFeedback(
     `,
   });
 
+  // Also send the debrief to the interviewer, if one is assigned (flowchart: feedback to interviewer)
+  const interviewerEmail = (candidate as any).interviewerEmail;
+  if (interviewerEmail) {
+    await sendEmail({
+      to: interviewerEmail,
+      subject: `Interview feedback: ${candidate.firstName} ${candidate.lastName}`,
+      templateId: 'interview_feedback_interviewer',
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px 24px;color:#1a1a1a;">
+          <h2>Interview Feedback — ${candidate.firstName} ${candidate.lastName}</h2>
+          <p>Hi ${(candidate as any).interviewerName ?? 'there'},</p>
+          <p><strong>Score:</strong> ${feedback.interviewScore}/100</p>
+          <p><em>Auto-generated from the interview transcript.</em></p>
+          <hr style="border:none;border-top:1px solid #e5e5e5;margin:20px 0;"/>
+          <pre style="white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.6;">${feedback.feedbackHr}</pre>
+        </div>
+      `,
+    }).catch((err) => console.error('[Zoom] interviewer feedback email failed:', err));
+  }
+
   console.log(`[Zoom] AI feedback complete — score: ${feedback.interviewScore}`);
 }

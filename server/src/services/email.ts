@@ -132,6 +132,7 @@ interface CandidateEmailData {
   workSampleUrl?: string;
   interviewDate?: string;
   interviewerName?: string;
+  interviewerEmail?: string;
   offerDetails?: string;
 }
 
@@ -378,9 +379,7 @@ export async function emailWorkSampleSubmittedHR(data: CandidateEmailData) {
 
 // 14. Interview scheduled → interviewer
 export async function emailInterviewScheduledHR(data: CandidateEmailData) {
-  const recipient = data.interviewerName
-    ? HR_EMAIL // Will expand to interviewer email when that field is added
-    : HR_EMAIL;
+  const recipient = data.interviewerEmail || HR_EMAIL;
   await sendEmail({
     to: recipient,
     templateId: 'interview_scheduled_hr',
@@ -493,6 +492,7 @@ export async function dispatchStageEmail(
     workSampleInstructions?: string;
     workSampleUrl?: string;
     interviewerName?: string | null;
+    interviewerEmail?: string | null;
   }
 ): Promise<void> {
   const data: CandidateEmailData = {
@@ -504,6 +504,7 @@ export async function dispatchStageEmail(
     workSampleInstructions: candidate.workSampleInstructions,
     workSampleUrl: candidate.workSampleUrl,
     interviewerName: candidate.interviewerName ?? undefined,
+    interviewerEmail: candidate.interviewerEmail ?? undefined,
   };
 
   // Candidate-facing
