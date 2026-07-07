@@ -31,7 +31,7 @@ import { scoreSkillsFit } from '../services/ai.js';
 import { computeEppScans, ingestEppResults } from '../services/eppScans.js';
 import { runReferenceCheck } from '../services/ai.js';
 import { draftTransitionPlan } from '../services/ai.js';
-import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
+import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, STANDARD_INTERNAL_OFFER_CLAUSES, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
 import { createOfferEnvelope } from '../services/docusign.js';
 import { composeInternalReport, getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
@@ -159,6 +159,7 @@ async function buildInternalOfferInput(db: any, input: any): Promise<InternalOff
       newDepartment: input.newDepartment ?? (req as any)?.department ?? null,
       newStipends: input.newStipends ?? null,
     },
+    legalClauses: input.legalClauses,
     addendum: input.addendum ?? [],
   };
 }
@@ -209,6 +210,37 @@ async function deliverOfferToCandidate(db: any, userId: string | null, candidate
     trackActivity(db, userId, 'send_offer', 'candidates', { candidateId: candidate.id }).catch(() => {});
   }
   return { html: letterHtml, jobTitle };
+}
+
+async function deliverInternalOfferToCandidate(db: any, userId: string | null, candidate: any, offer: InternalOfferLetterInput): Promise<{ html: string; newTitle: string }> {
+  const newTitle = offer.comp.newTitle;
+  const letterHtml = renderInternalOfferLetter(offer);
+  await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle: newTitle, letterHtml }).catch(() => {});
+  const offerSubject = `Your internal offer from Lightspeed Systems${newTitle ? ` — ${newTitle}` : ''}`;
+  try {
+    await db.insert(inboundEmails).values({
+      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+      fromName: 'Lightspeed Hiring',
+      toEmail: candidate.email,
+      subject: offerSubject,
+      body: letterHtml,
+      replyTag: 'internal_offer',
+      source: 'simulated',
+      raw: { kind: 'internal_offer_letter', candidateId: candidate.id },
+    });
+  } catch (err) { console.error('[internal-offer] inbox record failed:', err); }
+  if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
+    await db.update(candidates).set({ currentStage: 'Offered', updatedAt: new Date() }).where(eq(candidates.id, candidate.id));
+    await db.insert(candidateStageHistory).values({
+      candidateId: candidate.id, fromStage: candidate.currentStage, toStage: 'Offered',
+      changedBy: userId, reason: 'Internal offer letter sent',
+    });
+  }
+  if (userId) {
+    await auditChange(db, userId, candidate.id, 'candidates', 'update');
+    trackActivity(db, userId, 'send_internal_offer', 'candidates', { candidateId: candidate.id }).catch(() => {});
+  }
+  return { html: letterHtml, newTitle };
 }
 
 export const candidatesRouter = router({
@@ -911,6 +943,7 @@ export const candidatesRouter = router({
         financeConfirmed: !!(req as any)?.financeConfirmed,
         variableComp: (req as any)?.variableComp ?? null,
         standardClauses: STANDARD_OFFER_CLAUSES,
+        standardInternalClauses: STANDARD_INTERNAL_OFFER_CLAUSES,
       };
     }),
 
@@ -992,6 +1025,7 @@ export const candidatesRouter = router({
         candidateId: candidate.id,
         payload: offer as any,
         status: 'pending',
+        kind: 'external',
         createdBy: ctx.user.id,
       }).returning();
 
@@ -1040,14 +1074,18 @@ export const candidatesRouter = router({
       const [row] = await ctx.db.select().from(offerApprovals).where(eq(offerApprovals.id, input.token)).limit(1);
       if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, row.candidateId) });
-      const payload = row.payload as OfferLetterInput;
+      const kind = (row as any).kind ?? 'external';
+      const html = kind === 'internal'
+        ? renderInternalOfferLetter(row.payload as InternalOfferLetterInput)
+        : renderOfferLetter(row.payload as OfferLetterInput);
       return {
         status: row.status,
+        kind,
         candidateName: candidate ? `${candidate.firstName} ${candidate.lastName}`.trim() : '',
-        payload,
+        payload: row.payload,
         managerName: row.managerName,
         managerNote: row.managerNote,
-        html: renderOfferLetter(payload),
+        html,
       };
     }),
 
@@ -1055,27 +1093,18 @@ export const candidatesRouter = router({
   offerApprovalSaveEdits: publicProcedure
     .input(z.object({
       token: z.string().uuid(),
-      payload: z.object({
-        firstName: z.string(),
-        lastName: z.string(),
-        jobTitle: z.string(),
-        department: z.string().nullable().optional(),
-        reportsTo: z.string().nullable().optional(),
-        employmentType: z.string().nullable().optional(),
-        baseSalary: z.number().nullable().optional(),
-        variableComp: z.string().nullable().optional(),
-        startDate: z.string().nullable().optional(),
-        location: z.string().nullable().optional(),
-        legalClauses: z.array(z.string()).optional(),
-        addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
-      }),
+      payload: z.any(),
     }))
     .mutation(async ({ ctx, input }) => {
       const [row] = await ctx.db.select().from(offerApprovals).where(eq(offerApprovals.id, input.token)).limit(1);
       if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
       if (row.status !== 'pending') throw new TRPCError({ code: 'BAD_REQUEST', message: 'This offer has already been decided.' });
+      const kind = (row as any).kind ?? 'external';
       await ctx.db.update(offerApprovals).set({ payload: input.payload as any, updatedAt: new Date() }).where(eq(offerApprovals.id, input.token));
-      return { ok: true, html: renderOfferLetter(input.payload as OfferLetterInput) };
+      const html = kind === 'internal'
+        ? renderInternalOfferLetter(input.payload as InternalOfferLetterInput)
+        : renderOfferLetter(input.payload as OfferLetterInput);
+      return { ok: true, html };
     }),
 
   // Public (tokenized): the manager signs off (delivers to candidate) or sends back.
@@ -1092,10 +1121,13 @@ export const candidatesRouter = router({
       if (row.status !== 'pending') throw new TRPCError({ code: 'BAD_REQUEST', message: 'This offer has already been decided.' });
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, row.candidateId) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
-      const payload = row.payload as OfferLetterInput;
+      const kind = (row as any).kind ?? 'external';
+      const payload: any = row.payload;
+      const roleLabel = kind === 'internal' ? (payload?.comp?.newTitle ?? 'the role') : (payload?.jobTitle ?? 'the role');
 
       if (input.action === 'approve') {
-        await deliverOfferToCandidate(ctx.db, row.createdBy ?? null, candidate, payload);
+        if (kind === 'internal') await deliverInternalOfferToCandidate(ctx.db, row.createdBy ?? null, candidate, payload as InternalOfferLetterInput);
+        else await deliverOfferToCandidate(ctx.db, row.createdBy ?? null, candidate, payload as OfferLetterInput);
         await ctx.db.update(offerApprovals)
           .set({ status: 'approved', managerName: input.managerName ?? null, managerNote: input.note ?? null, decidedAt: new Date(), sentToCandidateAt: new Date(), updatedAt: new Date() })
           .where(eq(offerApprovals.id, input.token));
@@ -1112,7 +1144,7 @@ export const candidatesRouter = router({
           fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
           fromName: input.managerName ? `${input.managerName} (Hiring Manager)` : 'Hiring Manager',
           toEmail: process.env.HR_EMAIL ?? process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
-          subject: `Offer sent back: ${candidateName} — ${payload.jobTitle || 'the role'}`,
+          subject: `Offer sent back: ${candidateName} — ${roleLabel}`,
           body: `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">`
             + `<p>The draft offer for <strong>${escHtml(candidateName)}</strong> was sent back by the hiring manager and was <strong>not</strong> sent to the candidate.</p>`
             + `<p><strong>Reason:</strong> ${escHtml(input.note ?? '(none given)')}</p></div>`,
@@ -1216,6 +1248,69 @@ export const candidatesRouter = router({
 
   // ── INTERNAL-MOVE OFFER (before/now comparison + transition addendum) ──
   // Preview the internal-move offer letter (renders HTML; no send, no stage change).
+  // Recruiter: send a drafted INTERNAL-move offer to the hiring manager for approval.
+  requestInternalOfferApproval: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      effectiveDate: z.string().optional(),
+      newTitle: z.string().optional(),
+      newBaseSalary: z.number().int().optional(),
+      newBonus: z.string().optional(),
+      newManager: z.string().optional(),
+      newDepartment: z.string().optional(),
+      newStipends: z.string().optional(),
+      currentTitle: z.string().optional(),
+      currentBaseSalary: z.number().int().optional(),
+      currentBonus: z.string().optional(),
+      currentManager: z.string().optional(),
+      currentDepartment: z.string().optional(),
+      currentStipends: z.string().optional(),
+      legalClauses: z.array(z.string()).optional(),
+      addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const offer = await buildInternalOfferInput(ctx.db, input);
+
+      const managerName = offer.comp.newManager ?? 'Hiring Manager';
+      const managerEmail = process.env.HIRING_MANAGER_EMAIL ?? process.env.HR_EMAIL ?? 'hiring-manager@lightspeedsystems.com';
+
+      const [row] = await ctx.db.insert(offerApprovals).values({
+        candidateId: candidate.id,
+        payload: offer as any,
+        status: 'pending',
+        kind: 'internal',
+        createdBy: ctx.user.id,
+      }).returning();
+
+      const candidateName = `${candidate.firstName} ${candidate.lastName}`.trim();
+      const roleLabel = offer.comp.newTitle || 'the new role';
+      const approvalUrl = `/offer-approval/${row.id}`;
+      const letterHtml = renderInternalOfferLetter(offer);
+      const body = `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">`
+        + `<p><strong>${escHtml(candidateName)}</strong> is moving into <strong>${escHtml(roleLabel)}</strong> (internal move). `
+        + `Please review the draft internal offer below, edit anything that needs fixing, then sign off to send it to the employee — or send it back.</p>`
+        + `<p><a href="${approvalUrl}" style="display:inline-block;padding:8px 14px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Open, review &amp; sign off</a></p>`
+        + `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"/>`
+        + letterHtml + `</div>`;
+      try {
+        await ctx.db.insert(inboundEmails).values({
+          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+          fromName: 'Lightspeed Hiring',
+          toEmail: managerEmail,
+          subject: `Internal offer approval needed: ${candidateName} — ${roleLabel}`,
+          body,
+          replyTag: 'offer_approval',
+          source: 'simulated',
+          raw: { kind: 'offer_approval', approvalId: row.id, candidateId: candidate.id, approvalUrl },
+        });
+      } catch (err) { console.error('[internal-offer-approval] inbox record failed:', err); }
+
+      trackActivity(ctx.db, ctx.user.id, 'request_internal_offer_approval', 'candidates', { candidateId: candidate.id }).catch(() => {});
+      return { ok: true, approvalId: row.id, approvalUrl, managerName };
+    }),
+
   internalOfferPreview: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
@@ -1232,6 +1327,7 @@ export const candidatesRouter = router({
       currentManager: z.string().optional(),
       currentDepartment: z.string().optional(),
       currentStipends: z.string().optional(),
+      legalClauses: z.array(z.string()).optional(),
       addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -1256,51 +1352,15 @@ export const candidatesRouter = router({
       currentManager: z.string().optional(),
       currentDepartment: z.string().optional(),
       currentStipends: z.string().optional(),
+      legalClauses: z.array(z.string()).optional(),
       addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
       const offer = await buildInternalOfferInput(ctx.db, input);
-      const newTitle = offer.comp.newTitle;
-      const letterHtml = renderInternalOfferLetter(offer);
-
-      // Email the letter (SendGrid). Reuses the offer-letter sender (raw HTML body).
-      await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle: newTitle, letterHtml }).catch(() => {});
-
-      const offerSubject = `Your internal offer from Lightspeed Systems${newTitle ? ` \u2014 ${newTitle}` : ''}`;
-      try {
-        await ctx.db.insert(inboundEmails).values({
-          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
-          fromName: 'Lightspeed Hiring',
-          toEmail: candidate.email,
-          subject: offerSubject,
-          body: letterHtml,
-          replyTag: 'internal_offer',
-          source: 'simulated',
-          raw: { kind: 'internal_offer_letter', candidateId: input.id },
-        });
-      } catch (err) {
-        console.error('[internal-offer] inbox record failed:', err);
-      }
-
-      // Advance to Offered (skip if already there / terminal).
-      if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
-        await ctx.db.update(candidates)
-          .set({ currentStage: 'Offered', updatedAt: new Date() })
-          .where(eq(candidates.id, input.id));
-        await ctx.db.insert(candidateStageHistory).values({
-          candidateId: input.id,
-          fromStage: candidate.currentStage,
-          toStage: 'Offered',
-          changedBy: ctx.user.id,
-          reason: 'Internal offer letter sent',
-        });
-      }
-
-      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'send_internal_offer', 'candidates', { candidateId: input.id }).catch(() => {});
-      return { ok: true, html: letterHtml };
+      const { html } = await deliverInternalOfferToCandidate(ctx.db, ctx.user.id, candidate, offer);
+      return { ok: true, html };
     }),
 
   // Send the internal-move offer for e-signature via DocuSign. Same env-gated
@@ -1322,6 +1382,7 @@ export const candidatesRouter = router({
       currentManager: z.string().optional(),
       currentDepartment: z.string().optional(),
       currentStipends: z.string().optional(),
+      legalClauses: z.array(z.string()).optional(),
       addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {

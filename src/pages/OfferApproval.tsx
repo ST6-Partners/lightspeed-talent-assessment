@@ -1,58 +1,46 @@
 // ============================================================
 // OFFER APPROVAL — hiring-manager review page (public tokenized link)
-// Reached from the test inbox ("Open, review & sign off"). The manager
-// reviews the draft offer, edits any field or the legal language, then
-// signs off (which sends it to the candidate) or sends it back.
+// Reached from the test inbox ("Open, review & sign off"). Handles both
+// external offers and internal-move offers (kind). The manager reviews the
+// draft, edits any field or the standard legal language, then signs off
+// (which sends it to the candidate/employee) or sends it back.
 // ============================================================
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
-type Addendum = { title: string; body: string };
-type Payload = {
-  firstName: string; lastName: string; jobTitle: string;
-  department?: string | null; reportsTo?: string | null; employmentType?: string | null;
-  baseSalary?: number | null; variableComp?: string | null; startDate?: string | null;
-  location?: string | null; legalClauses?: string[]; addendum?: Addendum[];
-};
-
 export default function OfferApproval() {
   const { token = '' } = useParams();
   const view = trpc.candidates.offerApprovalView.useQuery({ token }, { enabled: !!token, retry: false });
 
-  const [p, setP] = useState<Payload | null>(null);
+  const [p, setP] = useState<any>(null);
   const [html, setHtml] = useState<string>('');
   const [managerName, setManagerName] = useState('');
   const [note, setNote] = useState('');
   const [done, setDone] = useState<null | { kind: 'approved' | 'sent_back'; msg: string }>(null);
   const [savedFlash, setSavedFlash] = useState(false);
 
-  useEffect(() => {
-    if (view.data) { setP(view.data.payload as Payload); setHtml(view.data.html); }
-  }, [view.data]);
+  useEffect(() => { if (view.data) { setP(view.data.payload); setHtml(view.data.html); } }, [view.data]);
 
   const save = trpc.candidates.offerApprovalSaveEdits.useMutation({
     onSuccess: (r) => { setHtml(r.html); setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); },
   });
   const decide = trpc.candidates.offerApprovalDecide.useMutation({
     onSuccess: (r) => setDone(r.status === 'approved'
-      ? { kind: 'approved', msg: 'Signed off — the offer letter has been sent to the candidate.' }
+      ? { kind: 'approved', msg: 'Signed off — the offer letter has been sent.' }
       : { kind: 'sent_back', msg: 'Sent back to the hiring team. The candidate was not contacted.' }),
   });
   const err = save.error?.message || decide.error?.message;
 
-  const set = (k: keyof Payload, v: any) => setP((prev) => prev ? { ...prev, [k]: v } : prev);
-  const cleanPayload = (pl: Payload) => ({
-    firstName: pl.firstName, lastName: pl.lastName, jobTitle: pl.jobTitle,
-    department: pl.department ?? undefined, reportsTo: pl.reportsTo ?? undefined,
-    employmentType: pl.employmentType ?? undefined,
-    baseSalary: pl.baseSalary ?? undefined, variableComp: pl.variableComp ?? undefined,
-    startDate: pl.startDate ?? undefined, location: pl.location ?? undefined,
-    legalClauses: pl.legalClauses, addendum: pl.addendum,
-  });
-  const doSave = () => { if (p) save.mutate({ token, payload: cleanPayload(p) }); };
-  const approve = () => { if (p) { save.mutate({ token, payload: cleanPayload(p) }); decide.mutate({ token, action: 'approve', managerName: managerName || undefined }); } };
+  const kind: string = view.data?.kind ?? 'external';
+  const setTop = (k: string, v: any) => setP((prev: any) => ({ ...prev, [k]: v }));
+  const setComp = (k: string, v: any) => setP((prev: any) => ({ ...prev, comp: { ...(prev?.comp ?? {}), [k]: v } }));
+  const setClause = (i: number, v: string) => setP((prev: any) => ({ ...prev, legalClauses: (prev?.legalClauses ?? []).map((x: string, j: number) => j === i ? v : x) }));
+  const num = (v: string) => { const n = v.replace(/[^0-9]/g, ''); return n ? parseInt(n) : null; };
+
+  const doSave = () => save.mutate({ token, payload: p });
+  const approve = () => { save.mutate({ token, payload: p }); decide.mutate({ token, action: 'approve', managerName: managerName || undefined }); };
   const sendBack = () => decide.mutate({ token, action: 'send_back', managerName: managerName || undefined, note: note || undefined });
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
@@ -71,6 +59,9 @@ export default function OfferApproval() {
   const inp: React.CSSProperties = { width: '100%', padding: '7px 9px', fontSize: 13, border: '1px solid #d1d5db', borderRadius: 6, boxSizing: 'border-box' };
   const btn = (bg: string): React.CSSProperties => ({ padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 7, border: 'none', background: bg, color: '#fff', cursor: 'pointer' });
   const btnGhost: React.CSSProperties = { padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 7, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer' };
+  const F = ({ label, val, on }: { label: string; val: any; on: (v: string) => void }) => (
+    <div><label style={lbl}>{label}</label><input style={inp} value={val ?? ''} onChange={(e) => on(e.target.value)} /></div>
+  );
 
   if (view.isLoading) return <Shell><div style={card}>Loading…</div></Shell>;
   if (view.error || !view.data || !p) return <Shell><div style={card}><div style={{ display: 'flex', gap: 8, color: '#b91c1c' }}><AlertCircle size={18} /> This approval link is invalid or has expired.</div></div></Shell>;
@@ -87,7 +78,6 @@ export default function OfferApproval() {
       </div></Shell>
     );
   }
-
   if (view.data.status !== 'pending') {
     return (
       <Shell><div style={card}>
@@ -97,31 +87,52 @@ export default function OfferApproval() {
     );
   }
 
-  const clauses = p.legalClauses ?? [];
+  const clauses: string[] = p.legalClauses ?? [];
+  const isInternal = kind === 'internal';
   return (
     <Shell>
       <div style={{ ...card, marginBottom: 16 }}>
-        <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>Approve offer for {view.data.candidateName}</h2>
-        <p style={{ color: '#5b6675', fontSize: 13, margin: 0 }}>Review and edit the draft below, then sign off to send it to the candidate — or send it back to the hiring team. Nothing is sent to the candidate until you sign off.</p>
+        <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>Approve {isInternal ? 'internal move' : 'offer'} for {view.data.candidateName}</h2>
+        <p style={{ color: '#5b6675', fontSize: 13, margin: 0 }}>Review and edit the draft below, then sign off to send it — or send it back to the hiring team. Nothing is sent to the {isInternal ? 'employee' : 'candidate'} until you sign off.</p>
       </div>
 
-      {/* Editable fields */}
       <div style={{ ...card, marginBottom: 16 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div><label style={lbl}>Position / title</label><input style={inp} value={p.jobTitle ?? ''} onChange={(e) => set('jobTitle', e.target.value)} /></div>
-          <div><label style={lbl}>Reports to</label><input style={inp} value={p.reportsTo ?? ''} onChange={(e) => set('reportsTo', e.target.value)} /></div>
-          <div><label style={lbl}>Department</label><input style={inp} value={p.department ?? ''} onChange={(e) => set('department', e.target.value)} /></div>
-          <div><label style={lbl}>Employment type</label><input style={inp} value={p.employmentType ?? ''} onChange={(e) => set('employmentType', e.target.value)} /></div>
-          <div><label style={lbl}>Base salary (annual, number)</label><input style={inp} value={p.baseSalary ?? ''} onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); set('baseSalary', n ? parseInt(n) : null); }} /></div>
-          <div><label style={lbl}>Variable compensation</label><input style={inp} value={p.variableComp ?? ''} onChange={(e) => set('variableComp', e.target.value)} /></div>
-          <div><label style={lbl}>Start date</label><input style={inp} value={p.startDate ?? ''} onChange={(e) => set('startDate', e.target.value)} /></div>
-          <div><label style={lbl}>Location</label><input style={inp} value={p.location ?? ''} onChange={(e) => set('location', e.target.value)} /></div>
-        </div>
+        {!isInternal ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <F label="Position / title" val={p.jobTitle} on={(v) => setTop('jobTitle', v)} />
+            <F label="Reports to" val={p.reportsTo} on={(v) => setTop('reportsTo', v)} />
+            <F label="Department" val={p.department} on={(v) => setTop('department', v)} />
+            <F label="Employment type" val={p.employmentType} on={(v) => setTop('employmentType', v)} />
+            <div><label style={lbl}>Base salary (annual, number)</label><input style={inp} value={p.baseSalary ?? ''} onChange={(e) => setTop('baseSalary', num(e.target.value))} /></div>
+            <F label="Variable compensation" val={p.variableComp} on={(v) => setTop('variableComp', v)} />
+            <F label="Start date" val={p.startDate} on={(v) => setTop('startDate', v)} />
+            <F label="Location" val={p.location} on={(v) => setTop('location', v)} />
+          </div>
+        ) : (
+          <>
+            <F label="Effective date" val={p.effectiveDate} on={(v) => setTop('effectiveDate', v)} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 6 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#888', textTransform: 'uppercase' }}>Current (before)</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#166534', textTransform: 'uppercase' }}>New role (now)</div>
+              <F label="Current title" val={p.comp?.currentTitle} on={(v) => setComp('currentTitle', v)} />
+              <F label="New title" val={p.comp?.newTitle} on={(v) => setComp('newTitle', v)} />
+              <div><label style={lbl}>Current base (number)</label><input style={inp} value={p.comp?.currentBaseSalary ?? ''} onChange={(e) => setComp('currentBaseSalary', num(e.target.value))} /></div>
+              <div><label style={lbl}>New base (number)</label><input style={inp} value={p.comp?.newBaseSalary ?? ''} onChange={(e) => setComp('newBaseSalary', num(e.target.value))} /></div>
+              <F label="Current bonus ($ or %)" val={p.comp?.currentBonus} on={(v) => setComp('currentBonus', v)} />
+              <F label="New bonus ($ or %)" val={p.comp?.newBonus} on={(v) => setComp('newBonus', v)} />
+              <F label="Current manager" val={p.comp?.currentManager} on={(v) => setComp('currentManager', v)} />
+              <F label="New manager" val={p.comp?.newManager} on={(v) => setComp('newManager', v)} />
+              <F label="Current department" val={p.comp?.currentDepartment} on={(v) => setComp('currentDepartment', v)} />
+              <F label="New department" val={p.comp?.newDepartment} on={(v) => setComp('newDepartment', v)} />
+              <F label="Current stipends" val={p.comp?.currentStipends} on={(v) => setComp('currentStipends', v)} />
+              <F label="New stipends" val={p.comp?.newStipends} on={(v) => setComp('newStipends', v)} />
+            </div>
+          </>
+        )}
 
         <label style={lbl}>Legal language (edit to fix mistakes)</label>
         {clauses.map((c, i) => (
-          <textarea key={i} value={c} rows={2} style={{ ...inp, marginBottom: 6, fontFamily: 'inherit' }}
-            onChange={(e) => set('legalClauses', clauses.map((x, j) => j === i ? e.target.value : x))} />
+          <textarea key={i} value={c} rows={2} style={{ ...inp, marginBottom: 6, fontFamily: 'inherit' }} onChange={(e) => setClause(i, e.target.value)} />
         ))}
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
@@ -130,13 +141,11 @@ export default function OfferApproval() {
         </div>
       </div>
 
-      {/* Live preview */}
       <div style={{ ...card, marginBottom: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>Preview</div>
         <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, maxHeight: 480, overflow: 'auto' }} dangerouslySetInnerHTML={{ __html: html }} />
       </div>
 
-      {/* Decision */}
       <div style={card}>
         <label style={lbl}>Your name (optional)</label>
         <input style={inp} value={managerName} onChange={(e) => setManagerName(e.target.value)} placeholder="e.g. Jordan Rivera" />
@@ -144,7 +153,7 @@ export default function OfferApproval() {
         <textarea style={{ ...inp, fontFamily: 'inherit' }} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What needs to change?" />
         {err && <div style={{ color: '#b91c1c', fontSize: 13, marginTop: 10 }}>{err}</div>}
         <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-          <button style={{ ...btn('#15803d'), opacity: decide.isLoading ? 0.6 : 1 }} disabled={decide.isLoading} onClick={approve}>Approve &amp; send to candidate</button>
+          <button style={{ ...btn('#15803d'), opacity: decide.isLoading ? 0.6 : 1 }} disabled={decide.isLoading} onClick={approve}>Approve &amp; send</button>
           <button style={{ ...btn('#b45309'), opacity: decide.isLoading || !note.trim() ? 0.6 : 1 }} disabled={decide.isLoading || !note.trim()} onClick={sendBack}>Send back</button>
         </div>
       </div>

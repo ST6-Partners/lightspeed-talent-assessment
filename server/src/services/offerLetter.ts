@@ -186,8 +186,21 @@ export interface InternalOfferLetterInput {
   lastName: string;
   effectiveDate?: string | null;
   comp: CompComparison;
+  // Editable body paragraphs (standard legal language). If omitted, the
+  // STANDARD_INTERNAL_OFFER_CLAUSES defaults are used. Editable to fix mistakes;
+  // still render in red for counsel.
+  legalClauses?: string[];
   addendum?: OfferAddendumItem[];
 }
+
+// Standard "usual" legal language for an INTERNAL-move offer. Deterministic
+// stock text (NOT AI). Placeholder to be reviewed by counsel; editable in-app.
+export const STANDARD_INTERNAL_OFFER_CLAUSES: string[] = [
+  'This internal transfer does not change the at-will nature of your employment. Either you or the company may end the employment relationship at any time, with or without cause or notice. This letter is not a contract of employment for any specific duration.',
+  'Your participation in company benefit programs continues in accordance with the applicable plan terms, adjusted for any changes to eligibility associated with your new role. Any equity or incentive plans referenced above are governed by their applicable plan terms.',
+  'Except as changed here or in any addendum, all other terms of your employment and your existing company agreements (including any confidentiality and invention-assignment agreement) remain in effect.',
+  'To accept this internal offer, please sign and return this letter. This offer will remain open for five (5) business days from the date above.',
+]
 
 // Grey em-dash placeholder for an unknown comparison cell (distinct from
 // the red legal placeholders).
@@ -228,6 +241,12 @@ export function renderInternalOfferLetter(input: InternalOfferLetterInput): stri
     compRow('Effective date', `<span style="color:#9ca3af;">&mdash;</span>`, effVal),
   ].join('');
 
+  // Editable standard legal paragraphs (red = sample / counsel review).
+  const internalClauses = (input.legalClauses && input.legalClauses.length) ? input.legalClauses : STANDARD_INTERNAL_OFFER_CLAUSES;
+  const internalLegalHtml = internalClauses
+    .map((c) => `<p style="font-size:14px;line-height:1.6;">${sample(c)}</p>`)
+    .join('\n\n    ');
+
   const addendumHtml = (input.addendum && input.addendum.length)
     ? input.addendum.map((a, i) => `
       <div style="margin-top:28px;padding-top:16px;border-top:1px solid #e5e7eb;">
@@ -263,11 +282,7 @@ export function renderInternalOfferLetter(input: InternalOfferLetterInput): stri
       <tbody>${rows}</tbody>
     </table>
 
-    <p style="font-size:14px;line-height:1.6;">${sample('This internal transfer does not change the at-will nature of your employment. Either you or the company may end the employment relationship at any time, with or without cause or notice. This letter is not a contract of employment for any specific duration.')}</p>
-
-    <p style="font-size:14px;line-height:1.6;">${sample('Your participation in company benefit programs continues in accordance with the applicable plan terms, adjusted for any changes to eligibility associated with your new role.')}</p>
-
-    <p style="font-size:14px;line-height:1.6;">${sample('To accept this internal offer, please sign and return this letter. This offer will remain open for five (5) business days from the date above.')}</p>
+    ${internalLegalHtml}
 
     <p style="font-size:15px;line-height:1.6;margin-top:20px;">We are excited to see you take on this new role.</p>
 

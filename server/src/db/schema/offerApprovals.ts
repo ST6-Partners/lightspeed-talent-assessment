@@ -19,6 +19,8 @@ export const offerApprovals = pgTable('offer_approvals', {
   // location, legalClauses, addendum, ...). Editable by the manager.
   payload: jsonb('payload').notNull(),
   // pending | approved | sent_back
+  // external | internal (which letter renderer + delivery path applies)
+  kind: varchar('kind', { length: 20 }).notNull().default('external'),
   status: varchar('status', { length: 20 }).notNull().default('pending'),
   managerName: varchar('manager_name', { length: 200 }),
   managerNote: text('manager_note'),

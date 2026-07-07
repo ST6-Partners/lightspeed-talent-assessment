@@ -987,6 +987,7 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
   const [addendum, setAddendum] = useState<{ title: string; body: string }[]>([{ title: 'Transition plan', body: '' }]);
   const [html, setHtml] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [clauses, setClauses] = useState<string[]>([]);
 
   useEffect(() => {
     const d = defaults.data;
@@ -998,6 +999,7 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
       newManager: prev.newManager || (d.reportsTo ?? ''),
       newDepartment: prev.newDepartment || (d.department ?? ''),
     }));
+    setClauses((prev) => prev.length ? prev : ((d as any).standardInternalClauses ?? []));
   }, [defaults.data]);
 
   const d = defaults.data;
@@ -1017,12 +1019,15 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
     currentManager: cur.currentManager || undefined,
     currentDepartment: cur.currentDepartment || undefined,
     currentStipends: cur.currentStipends || undefined,
+    legalClauses: clauses.length ? clauses : undefined,
     addendum: addendum.filter((a) => a.title.trim() || a.body.trim()),
   });
 
   const preview = trpc.candidates.internalOfferPreview.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(false); } });
   const send = trpc.candidates.sendInternalOffer.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(true); onChanged?.(); } });
   const docusign = trpc.candidates.sendInternalOfferViaDocuSign.useMutation({ onSuccess: () => onChanged?.() });
+  const approvalStatus = trpc.candidates.offerApprovalStatus.useQuery({ candidateId });
+  const requestApproval = trpc.candidates.requestInternalOfferApproval.useMutation({ onSuccess: () => { approvalStatus.refetch(); onChanged?.(); } });
   const draftPlan = trpc.candidates.draftTransitionPlan.useMutation({
     onSuccess: (r) => {
       setAddendum((prev) => {
@@ -1062,7 +1067,7 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
   return (
     <Section title="Offer Letter (internal move)">
       <div className="text-xs text-gray-500">
-        Internal move. The letter shows a <strong>before / now</strong> comparison so the employee sees exactly what changes. The <strong>new role</strong> column is prefilled from the approved intake; the <strong>current</strong> column is entered by HR (HRIS integration pending). Put the transition plan on the addendum. Generated from a fixed template — not AI.
+        Internal move. The letter shows a <strong>before / now</strong> comparison so the employee sees exactly what changes. The <strong>new role</strong> column is prefilled from the approved intake; the <strong>current</strong> column is entered by HR (HRIS integration pending). Every field and the legal language are editable. Put the transition plan on the addendum. It is sent to the hiring manager for sign-off before the employee is contacted. Generated from a fixed template — not AI.
       </div>
 
       <div className="grid grid-cols-[110px_1fr_1fr] gap-2 pt-1">
@@ -1113,31 +1118,37 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
           className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">+ Add addendum</button>
       </div>
 
+      <div className="pt-1">
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-xs font-medium text-gray-500">Legal language (standard - edit to fix mistakes)</div>
+          <button type="button" onClick={() => setClauses((d as any)?.standardInternalClauses ?? [])}
+            className="text-xs text-gray-400 hover:text-ls-primary">Reset to standard</button>
+        </div>
+        {clauses.map((c, i) => (
+          <textarea key={i} value={c} rows={2}
+            onChange={(e) => setClauses(clauses.map((x, j) => j === i ? e.target.value : x))}
+            className="w-full mb-1 px-2 py-1 border border-gray-300 rounded text-xs" />
+        ))}
+      </div>
+
       <div className="flex gap-2 pt-1">
         <button onClick={() => preview.mutate(payload())} disabled={preview.isLoading}
           className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50">
-          {preview.isLoading ? 'Rendering\u2026' : 'Preview letter'}
+          {preview.isLoading ? 'Rendering...' : 'Preview letter'}
         </button>
-        <button onClick={() => send.mutate(payload())} disabled={send.isLoading}
+        <button onClick={() => requestApproval.mutate(payload())} disabled={requestApproval.isLoading}
           className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
-          {send.isLoading ? 'Sending\u2026' : 'Send internal offer (email)'}
-        </button>
-        <button onClick={() => docusign.mutate(payload())} disabled={docusign.isLoading}
-          className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50">
-          {docusign.isLoading ? 'Sending\u2026' : 'Send via DocuSign'}
+          {requestApproval.isLoading ? 'Sending...' : 'Send to hiring manager for approval'}
         </button>
       </div>
-      {docusign.data && (
-        <div className={`text-xs ${docusign.data.configured && !(docusign.data as any).error ? 'text-green-700' : 'text-amber-700'}`}>
-          {!docusign.data.configured
-            ? (docusign.data as any).message
-            : (docusign.data as any).error
-              ? `DocuSign error: ${(docusign.data as any).error}`
-              : `Sent for e-signature via DocuSign (envelope ${(docusign.data as any).envelopeId}). Candidate moved to Offered.`}
+      {approvalStatus.data && (
+        <div className={`text-xs mt-1 rounded p-2 border ${approvalStatus.data.status === 'approved' ? 'bg-green-50 border-green-200 text-green-800' : approvalStatus.data.status === 'sent_back' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
+          {approvalStatus.data.status === 'pending' && <>Sent to the hiring manager for approval{approvalStatus.data.managerName ? ` (${approvalStatus.data.managerName})` : ''}. The employee has not been contacted yet - it is waiting in the test inbox for review and sign-off.</>}
+          {approvalStatus.data.status === 'approved' && <>Approved{approvalStatus.data.managerName ? ` by ${approvalStatus.data.managerName}` : ''} - the internal offer has been sent.</>}
+          {approvalStatus.data.status === 'sent_back' && <>Sent back by the hiring manager{approvalStatus.data.managerNote ? `: "${approvalStatus.data.managerNote}"` : ''}. Fix the offer above and send for approval again.</>}
         </div>
       )}
 
-      {sent && <div className="text-xs text-green-700">Internal offer sent \u2014 candidate moved to Offered.</div>}
       {html && (
         <div className="mt-2 border border-gray-200 rounded bg-white max-h-96 overflow-y-auto">
           <div dangerouslySetInnerHTML={{ __html: html }} />

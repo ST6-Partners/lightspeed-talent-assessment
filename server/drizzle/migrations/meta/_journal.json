@@ -260,6 +260,13 @@
       "when": 1960000007000,
       "tag": "0034_offer_approvals",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1960000008000,
+      "tag": "0035_offer_approval_kind",
+      "breakpoints": true
     }
   ]
 }
