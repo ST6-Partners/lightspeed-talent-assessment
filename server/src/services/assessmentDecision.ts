@@ -25,6 +25,7 @@ import { randomUUID } from 'node:crypto';
 import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { resolveDeptWorkSample } from './workSampleResolver.js';
 import { dispatchStageEmail, emailAssessmentFailedHR } from './email.js';
+import { runPostAssessmentReview } from './postAssessmentReview.js';
 
 // Candidates need a CCAT score of at least this to advance.
 // Below it, they are automatically rejected. (Flowchart: "Score 30+".)
@@ -72,6 +73,15 @@ export async function applyAssessmentDecision(
 
   // ── PASS: advance to Work Sample ─────────────────────────
   if (score >= ASSESSMENT_PASS_THRESHOLD) {
+    // Deeper auto-review: EPP + company-values (+ prior resume screen) gate.
+    // Reject if it fails; on pass it moves to Interview Scheduled and emails
+    // the interviewer a summary report + tailored questions. If the candidate
+    // has no EPP results, it returns 'skipped' and we fall back to the legacy
+    // Work Sample advance below.
+    const review = await runPostAssessmentReview(db, candidate.id);
+    if (review.decision === 'passed') return { decision: 'advanced', score };
+    if (review.decision === 'rejected') return { decision: 'rejected', score };
+    // review.decision === 'skipped' -> legacy path below
     // Ensure a work-sample token/link exists so the advancement
     // email carries the candidate's work sample link.
     let token: string | null = candidate.workSampleToken ?? null;

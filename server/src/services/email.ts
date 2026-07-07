@@ -905,3 +905,65 @@ export async function emailPostingOpenedExternal(to: string, d: { jobTitle: stri
   `);
   await sendEmail({ to, subject, html, templateId: 'posting_external_open' });
 }
+
+// ── Interviewer report (auto post-assessment review) ───────
+// One email to the interviewer: a summary of the candidate's screen results
+// (CCAT, EPP match, company-values match, resume, work sample), their top EPP
+// traits, and the 30% tailored interview questions.
+export async function emailInterviewerReport(data: {
+  interviewerEmail: string;
+  interviewerName: string;
+  candidateFirstName: string;
+  candidateLastName: string;
+  jobTitle: string;
+  ccatScore?: number | null;
+  eppMatch?: number | null;
+  valuesMatch?: number | null;
+  resumeReviewScore?: number | null;
+  workSampleScore?: number | null;
+  eppTraits?: Array<{ trait: string; percentile: number }>;
+  valueScores?: Array<{ value: string; score: number }>;
+  questions: Array<{ category?: string; question: string; rationale?: string }>;
+}) {
+  const cell = 'padding:8px 12px;border-bottom:1px solid #f0f0f0;font-size:14px;';
+  const scoreRows = [
+    ['CCAT (cognitive)', data.ccatScore != null ? `${data.ccatScore} / 50` : '—'],
+    ['EPP match', data.eppMatch != null ? `${data.eppMatch}%` : '—'],
+    ['Company-values match', data.valuesMatch != null ? `${data.valuesMatch}%` : '—'],
+    ['Resume review', data.resumeReviewScore != null ? `${data.resumeReviewScore}/100` : '—'],
+    ['Work sample', data.workSampleScore != null ? `${data.workSampleScore}/100` : '—'],
+  ].map(([k, v]) => `<tr><td style="${cell}color:#555;white-space:nowrap;">${k}</td><td style="${cell}font-weight:600;">${v}</td></tr>`).join('');
+
+  const traits = (data.eppTraits ?? []).slice().sort((a, b) => b.percentile - a.percentile);
+  const traitRows = traits.map((t) => `<tr><td style="${cell}color:#555;">${t.trait}</td><td style="${cell}">${t.percentile}</td></tr>`).join('');
+
+  const questionRows = data.questions.map((q, i) => `
+    <tr>
+      <td style="${cell}color:#555;white-space:nowrap;vertical-align:top;">${q.category ?? ''}</td>
+      <td style="${cell}">
+        <strong>${i + 1}. ${q.question}</strong>
+        ${q.rationale ? `<br/><span style="font-size:12px;color:#888;">${q.rationale}</span>` : ''}
+      </td>
+    </tr>`).join('');
+
+  await sendEmail({
+    to: data.interviewerEmail,
+    templateId: 'interviewer_report',
+    subject: `Interview brief: ${data.candidateFirstName} ${data.candidateLastName} — ${data.jobTitle}`,
+    html: wrap(`
+      ${h1('Candidate Interview Brief')}
+      ${p(`Hi ${data.interviewerName},`)}
+      ${p(`<strong>${data.candidateFirstName} ${data.candidateLastName}</strong> passed the automated screen for <strong>${data.jobTitle}</strong> (EPP match and company-values match both at or above 70%). Here's the summary and the tailored questions to guide your interview.`)}
+      <h3 style="font-size:14px;margin:20px 0 6px;">Screen results</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">${scoreRows}</table>
+      <h3 style="font-size:14px;margin:20px 0 6px;">EPP profile (percentile vs norm, high to low)</h3>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">${traitRows}</table>
+      <h3 style="font-size:14px;margin:20px 0 6px;">Tailored interview questions (the 30%)</h3>
+      <table style="width:100%;border-collapse:collapse;margin:8px 0 20px;">
+        <thead><tr style="background:#f5f5f5;"><th style="padding:8px 12px;text-align:left;font-size:12px;text-transform:uppercase;color:#888;width:130px;">Category</th><th style="padding:8px 12px;text-align:left;font-size:12px;text-transform:uppercase;color:#888;">Question</th></tr></thead>
+        <tbody>${questionRows}</tbody>
+      </table>
+      ${p('Use these alongside the standard question set. Focus on areas flagged as gaps or clarifications.')}
+    `),
+  });
+}
