@@ -23,6 +23,7 @@ const c = {
   banner: (ok: boolean) => ({ padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 16, background: ok ? '#ecfdf5' : '#fffbeb', border: `1px solid ${ok ? '#a7f3d0' : '#fde68a'}`, color: ok ? '#065f46' : '#92400e' } as React.CSSProperties),
   th: { textAlign: 'left' as const, padding: '7px 10px', borderBottom: '2px solid #e5e7eb', color: '#6b7280', fontWeight: 600, fontSize: 11, textTransform: 'uppercase' as const },
   td: { padding: '7px 10px', borderBottom: '1px solid #f3f4f6', fontSize: 12.5, verticalAlign: 'top' as const },
+  tdEllipsis: { padding: '7px 10px', borderBottom: '1px solid #f3f4f6', fontSize: 12.5, verticalAlign: 'top' as const, whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis' as const } as React.CSSProperties,
   code: { background: '#f3f4f6', padding: '1px 6px', borderRadius: 4, fontSize: 12, fontFamily: 'monospace' },
 };
 
@@ -135,7 +136,16 @@ export default function EmailTestPanel() {
           </div>
         )}
         {inbox.data && inbox.data.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <colgroup>
+              <col style={{ width: 88 }} />
+              <col style={{ width: 140 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 140 }} />
+              <col />
+              <col style={{ width: 80 }} />
+              <col style={{ width: 170 }} />
+            </colgroup>
             <thead>
               <tr>
                 <th style={c.th}>When</th>
@@ -155,13 +165,13 @@ export default function EmailTestPanel() {
                 <Fragment key={m.id}>
                 <tr onClick={() => setOpenId(isOpen ? null : m.id)} style={{ cursor: 'pointer', background: isOpen ? '#f3f4f6' : undefined }}>
                   <td style={c.td}>{fmt(m.receivedAt)}</td>
-                  <td style={c.td}>{m.fromName ? `${m.fromName} ` : ''}&lt;{m.fromEmail}&gt;</td>
-                  <td style={c.td}>{m.toEmail || '—'}</td>
-                  <td style={{ ...c.td, color: '#1d4ed8', fontWeight: 600 }}>{m.subject}</td>
-                  <td style={{ ...c.td, maxWidth: 280, color: '#4b5563' }}>{(m.body || '').replace(/<[^>]+>/g, ' ').slice(0, 160)}</td>
+                  <td style={c.tdEllipsis} title={`${m.fromName ? m.fromName + ' ' : ''}<${m.fromEmail}>`}>{m.fromName ? `${m.fromName} ` : ''}&lt;{m.fromEmail}&gt;</td>
+                  <td style={c.tdEllipsis} title={m.toEmail || ''}>{m.toEmail || '—'}</td>
+                  <td style={{ ...c.tdEllipsis, color: '#1d4ed8', fontWeight: 600 }} title={m.subject || ''}>{m.subject}</td>
+                  <td style={{ ...c.tdEllipsis, color: '#4b5563' }} title={(m.body || '').replace(/<[^>]+>/g, ' ').slice(0, 300)}>{(m.body || '').replace(/<[^>]+>/g, ' ').slice(0, 160)}</td>
                   <td style={c.td}><span style={{ ...c.code, color: m.source === 'webhook' ? '#1d4ed8' : '#92400e' }}>{m.source}</span></td>
                   <td style={c.td} onClick={(e) => e.stopPropagation()}>
-                    <div style={{ display: 'flex', gap: 6 }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       <button style={c.btnGhost} onClick={() => setOpenId(isOpen ? null : m.id)}>{isOpen ? 'Hide' : 'View'}</button>
                       {m.raw?.approvalUrl && (
                         <a href={m.raw.approvalUrl} target="_blank" rel="noreferrer" style={{ ...c.btnGhost, textDecoration: 'none', color: '#1d4ed8', borderColor: '#bfd4ff' }}>Open &amp; review</a>
