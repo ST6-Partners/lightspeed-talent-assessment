@@ -43,8 +43,8 @@ export async function getPostingWindows(db: any, reqIds: string[]): Promise<Reco
   for (const reqId of reqIds) {
     const ks = kickoffs
       .filter((r: any) => (parseRaw(r.raw).reqId ?? null) === reqId)
-      .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    const start = ks[0]?.createdAt ? new Date(ks[0].createdAt) : null;
+      .sort((a: any, b: any) => new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime());
+    const start = ks[0]?.receivedAt ? new Date(ks[0].receivedAt) : null;
     const opened = opens.some((r: any) => (parseRaw(r.raw).reqId ?? null) === reqId);
 
     if (!start) {
