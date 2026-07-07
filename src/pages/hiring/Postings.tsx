@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Megaphone } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
@@ -8,17 +9,16 @@ const JD_BADGE: Record<string, string> = {
   Closed: 'bg-red-100 text-red-700',
 };
 
-function phase(updatedAt: string) {
-  const posted = new Date(updatedAt).getTime();
-  const days = (Date.now() - posted) / 86400000;
-  const external = new Date(posted + 3 * 86400000).toISOString().slice(0, 10);
-  if (days < 3) return { label: `Internal · ${Math.max(1, Math.ceil(3 - days))}d left`, cls: 'bg-blue-100 text-blue-700', external };
-  return { label: 'External', cls: 'bg-green-100 text-green-700', external };
-}
-
 export default function Postings() {
   const { data: reqs } = trpc.requisitions.list.useQuery();
   const { data: jds } = trpc.jobDescriptions.list.useQuery(undefined);
+  const utils = trpc.useContext();
+  const windows = trpc.internalOpenings.postingWindows.useQuery();
+  const openExternal = trpc.internalOpenings.openExternallyNow.useMutation({
+    onSuccess: () => utils.internalOpenings.postingWindows.invalidate(),
+  });
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const fmtDate = (iso: string | null) => iso ? new Date(iso).toISOString().slice(0, 10) : '—';
 
   const open = (reqs ?? []).filter((r: any) => r.status === 'Open');
   const jdByReq: Record<string, any> = {};
@@ -51,7 +51,6 @@ export default function Postings() {
             <tbody>
               {open.map((r: any) => {
                 const jd = jdByReq[r.id];
-                const ph = phase(r.updatedAt);
                 return (
                   <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50 text-sm">
                     <td className="px-4 py-3 font-medium text-gray-900">{jd?.jobTitle ?? `${r.department} role`}</td>
@@ -59,8 +58,30 @@ export default function Postings() {
                     <td className="px-4 py-3 text-gray-600">{r.hiringManager}</td>
                     <td className="px-4 py-3 text-gray-600">{r.numOpenings}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${ph.cls}`}>{ph.label}</span>
-                      <div className="text-xs text-gray-400 mt-0.5">external {ph.external}</div>
+                      {(() => {
+                        const w = windows.data?.[r.id];
+                        const phase = w?.phase ?? 'unknown';
+                        const cls = phase === 'external' ? 'bg-green-100 text-green-700' : phase === 'internal' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500';
+                        const label = phase === 'external'
+                          ? (w?.externallyOpened ? 'External (opened)' : 'External')
+                          : phase === 'internal'
+                            ? `Internal · ${w?.daysLeft ?? ''}d left`
+                            : 'Internal';
+                        return (
+                          <>
+                            <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${cls}`}>{label}</span>
+                            <div className="text-xs text-gray-400 mt-0.5">external {fmtDate(w?.externalOpensAt ?? null)}</div>
+                            {phase === 'internal' && (
+                              <button
+                                disabled={openExternal.isLoading && busyId === r.id}
+                                onClick={() => { setBusyId(r.id); openExternal.mutate({ reqId: r.id }); }}
+                                className="mt-1 text-xs px-2 py-0.5 border border-ls-primary text-ls-primary rounded hover:bg-blue-50 disabled:opacity-50">
+                                {openExternal.isLoading && busyId === r.id ? 'Opening…' : 'Open externally now'}
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3">
                       {jd ? (

@@ -894,3 +894,14 @@ export async function emailInterviewReminderInterviewer(data: {
   `);
   await sendEmail({ to: data.interviewerEmail, subject, html, templateId: 'interview_reminder_interviewer' });
 }
+
+export async function emailPostingOpenedExternal(to: string, d: { jobTitle: string; department?: string; mode: 'auto' | 'manual' }): Promise<void> {
+  const role = `${d.jobTitle}${d.department ? ' · ' + d.department : ''}`;
+  const subject = `Now open externally: ${role}`;
+  const html = wrap(`
+    ${h1('Role now open to external candidates')}
+    ${p(`The internal-first window for <strong>${role}</strong> has ${d.mode === 'auto' ? 'closed' : 'been opened early by HR'}.`)}
+    ${p('You can now proceed with external sourcing and posting for this role.')}
+  `);
+  await sendEmail({ to, subject, html, templateId: 'posting_external_open' });
+}

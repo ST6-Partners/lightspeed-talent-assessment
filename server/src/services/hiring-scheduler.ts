@@ -18,7 +18,8 @@ import { inboundEmails } from '../db/schema/email.js';
 import { getInternalReportConfig, composeInternalReport } from './internalReport.js';
 import { sendEmail, emailBookingReminderCandidate, emailBookingStalledHR } from './email.js';
 import { computeHiringAlerts, renderAlertDigest } from './hiring-alerts.js';
-import { approverEmail, emailApprovalReminder, emailInterviewReminderCandidate, emailInterviewReminderInterviewer } from './email.js';
+import { approverEmail, emailApprovalReminder, emailInterviewReminderCandidate, emailInterviewReminderInterviewer, emailPostingOpenedExternal, HIRING_TEAM_INBOX } from './email.js';
+import { getPostingWindows, writeExternalOpenMarker } from './posting.js';
 
 function schedAppBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -429,6 +430,25 @@ async function runInterviewDayBeforeReminder({ force = false }: { force?: boolea
   return { affected: candSent + intSent, details: `Reminded ${candSent} candidate(s) + ${intSent} interviewer(s).${skipped.length ? ` Skipped ${skipped.length}.` : ''}` };
 }
 
+// ── Job: posting window flip (internal-first -> external) ──
+async function runPostingWindowFlip(): Promise<JobResult> {
+  const openReqs = await db.query.jobRequisitions.findMany({ where: eq(jobRequisitions.status, 'Open') });
+  const windows = await getPostingWindows(db, openReqs.map((r) => r.id));
+  let flipped = 0;
+  for (const r of openReqs) {
+    const w = windows[r.id];
+    if (!w || w.externallyOpened || w.phase !== 'external' || !w.windowStart) continue; // window not elapsed / already opened
+    const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.reqId, r.id) });
+    const jobTitle = jd?.jobTitle ?? `${r.department} role`;
+    try {
+      await writeExternalOpenMarker(db, r.id, jobTitle, r.department, 'auto');
+      await emailPostingOpenedExternal(HIRING_TEAM_INBOX, { jobTitle, department: r.department, mode: 'auto' }).catch(() => {});
+      flipped++;
+    } catch (err) { console.error('[posting-flip] failed:', err); }
+  }
+  return { affected: flipped, details: flipped ? `Flipped ${flipped} role(s) to external.` : 'No roles due to open externally.' };
+}
+
 export function registerHiringJobs(): void {
   registerJob({
     name:           'assessment-reminder',
@@ -493,5 +513,14 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '0 8 * * *',   // 8:00 AM daily (morning before)
     handler:        runInterviewDayBeforeReminder,
+  });
+  registerJob({
+    name:           'posting-window-flip',
+    label:          'Posting Window Flip',
+    description:    'Open roles to external candidates once their 3-day internal-first window closes; notifies the hiring team.',
+    color:          '#f97316',
+    jobType:        'cron',
+    cronExpression: '30 9 * * *',  // 9:30 AM daily
+    handler:        runPostingWindowFlip,
   });
 }

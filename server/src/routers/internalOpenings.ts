@@ -12,7 +12,8 @@ import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { employees } from '../db/schema/employees.js';
 import { inboundEmails } from '../db/schema/email.js';
-import { sendEmail } from '../services/email.js';
+import { sendEmail, emailPostingOpenedExternal, HIRING_TEAM_INBOX } from '../services/email.js';
+import { getPostingWindows, isExternallyOpened, writeExternalOpenMarker } from '../services/posting.js';
 import { trackActivity } from '../services/telemetry.js';
 
 function appBaseUrl(): string {
@@ -24,6 +25,28 @@ function appBaseUrl(): string {
 }
 
 export const internalOpeningsRouter = router({
+  // Server-authoritative internal-first posting windows for all Open roles.
+  postingWindows: protectedProcedure
+    .query(async ({ ctx }) => {
+      const reqs = await ctx.db.query.jobRequisitions.findMany({ where: eq(jobRequisitions.status, 'Open') });
+      return getPostingWindows(ctx.db, reqs.map((r: any) => r.id));
+    }),
+
+  // HR opens a role to external candidates early (before the 3-day window closes).
+  openExternallyNow: protectedProcedure
+    .input(z.object({ reqId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const req = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.reqId) });
+      if (!req) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (await isExternallyOpened(ctx.db, input.reqId)) return { ok: true as const, already: true };
+      const jd = await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.reqId, input.reqId) });
+      const jobTitle = jd?.jobTitle ?? `${req.department} role`;
+      await writeExternalOpenMarker(ctx.db, input.reqId, jobTitle, req.department, 'manual');
+      await emailPostingOpenedExternal(HIRING_TEAM_INBOX, { jobTitle, department: req.department, mode: 'manual' }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'open_role_external', 'job_requisitions', { reqId: input.reqId }).catch(() => {});
+      return { ok: true as const };
+    }),
+
   // HR announces a role internally to the employee roster.
   announceInternally: protectedProcedure
     .input(z.object({ jdId: z.string().uuid() }))
