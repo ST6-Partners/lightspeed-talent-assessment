@@ -10,6 +10,8 @@ import { randomUUID } from 'node:crypto';
 import { router, protectedProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions, emailLog, candidateReferences } from '../db/schema/hiring.js';
 import { inboundEmails } from '../db/schema/email.js';
+import { candidateEppScores } from '../db/schema/epp.js';
+import { valueReviews, candidateValueScores, companyValues } from '../db/schema/values.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { analyzeEpp } from '../services/eppAnalyzer.js';
@@ -365,12 +367,36 @@ export const candidatesRouter = router({
       if (input.toStage === 'Interview Scheduled') {
         (async () => {
           try {
+            // Pull assessment data to tailor questions: EPP per-trait percentiles,
+            // company-values per-value scores, CCAT, and resume review.
+            const eppTraits = await ctx.db
+              .select({ trait: candidateEppScores.trait, percentile: candidateEppScores.percentile })
+              .from(candidateEppScores)
+              .where(eq(candidateEppScores.candidateId, input.id));
+            let valueScores: Array<{ value: string; score: number }> = [];
+            const latestReview = (await ctx.db
+              .select({ id: valueReviews.id })
+              .from(valueReviews)
+              .where(eq(valueReviews.candidateId, input.id))
+              .orderBy(desc(valueReviews.reviewedAt))
+              .limit(1))[0];
+            if (latestReview) {
+              valueScores = await ctx.db
+                .select({ value: companyValues.name, score: candidateValueScores.score })
+                .from(candidateValueScores)
+                .innerJoin(companyValues, eq(candidateValueScores.valueId, companyValues.id))
+                .where(eq(candidateValueScores.reviewId, latestReview.id));
+            }
             const questions = await generateInterviewQuestions({
               firstName: existing.firstName,
               lastName: existing.lastName,
               jobTitle: jobTitle ?? undefined,
               eppProfile: (existing as any).eppProfile,
               eppValuesMatchScore: (existing as any).eppValuesMatchScore,
+              eppTraits,
+              companyValuesMatchScore: (existing as any).companyValuesMatchScore,
+              companyValuesNotes: (existing as any).companyValuesNotes,
+              valueScores,
               resumeReviewNotes: (existing as any).resumeReviewNotes,
               resumeReviewScore: (existing as any).resumeReviewScore,
               referenceCheckNotes: (existing as any).referenceCheckNotes,
@@ -384,18 +410,15 @@ export const candidatesRouter = router({
               .set({ interviewQuestions: questions, updatedAt: new Date() } as any)
               .where(eq(candidates.id, input.id));
 
-            // Email questions to interviewer if email is set
-            const interviewerEmail = (existing as any).interviewerEmail;
-            if (interviewerEmail) {
-              await emailInterviewerQuestions({
-                interviewerEmail,
-                interviewerName: (existing as any).interviewerName ?? 'Interviewer',
-                candidateFirstName: existing.firstName,
-                candidateLastName: existing.lastName,
-                jobTitle: jobTitle ?? 'the role',
-                questions,
-              });
-            }
+            // Email questions to the interviewer (fallback to HR so they never get lost).
+            await emailInterviewerQuestions({
+              interviewerEmail: (existing as any).interviewerEmail || process.env.HR_EMAIL || 'jade.friedman@lsscorp.net',
+              interviewerName: (existing as any).interviewerName ?? 'Interviewer',
+              candidateFirstName: existing.firstName,
+              candidateLastName: existing.lastName,
+              jobTitle: jobTitle ?? 'the role',
+              questions,
+            });
           } catch (err) {
             console.error('[AI] Interview question generation failed:', err);
           }

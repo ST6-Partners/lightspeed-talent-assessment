@@ -65,6 +65,10 @@ interface QuestionGenInput {
   jobTitle?: string;
   eppProfile?: any;           // raw EPP result from Criteria Corp
   eppValuesMatchScore?: number | null;
+  eppTraits?: Array<{ trait: string; percentile: number }>;
+  companyValuesMatchScore?: number | null;
+  companyValuesNotes?: string | null;
+  valueScores?: Array<{ value: string; score: number }>;
   resumeReviewNotes?: string | null;
   resumeReviewScore?: number | null;
   referenceCheckNotes?: string | null;
@@ -83,36 +87,47 @@ export async function generateInterviewQuestions(
     return getMockQuestions(input);
   }
 
-  const system = `You are an expert HR interviewer at Lightspeed Systems, a K-12 edtech company.
-Your job is to generate a set of targeted interview questions for a specific candidate based on their
-assessment results, resume review, and reference checks.
+  const system = `You are an expert interviewer at Lightspeed Systems, a K-12 edtech company.
+Generate the TAILORED portion of an interview — the ~30% specific to THIS candidate (a fixed ~70% standard set is handled elsewhere).
 
-Lightspeed's core values: ${LIGHTSPEED_VALUES.join(', ')}.
+Base every question on the candidate data below: their EPP personality profile (12 Criteria Corp traits as percentiles), their company-values screening result, their CCAT cognitive score, and anything noteworthy in their resume review. Lightspeed's core values: ${LIGHTSPEED_VALUES.join(', ')}.
 
-Return a JSON array of questions. Each question must have:
-- "category": one of "EPP/Values", "Resume", "References", "Role-Specific", "Behavioral"
-- "question": the interview question text
-- "rationale": 1–2 sentences explaining why this question is relevant for this candidate
+Every question must do ONE of three jobs, and say which in the rationale:
+1. CONFIRM a conclusion the data suggests (e.g. a very high/low trait percentile, a strong/weak value fit, a notable CCAT) — probe whether that read holds up.
+2. FILL a gap the data does NOT show (something important for the role none of the data speaks to).
+3. CLARIFY an ambiguity, tension, or anomaly (conflicting signals, a resume gap, an EPP-vs-values mismatch).
 
-Aim for 10–14 questions total. Prioritize areas that showed weaknesses or needed probing.
+Prioritize extreme percentiles (very high or very low), weak value scores, and resume flags. Return a JSON array of 8-12 questions. Each item:
+- "category": one of "EPP", "Company Values", "Cognitive (CCAT)", "Resume", "Clarification"
+- "question": the question text
+- "rationale": 1-2 sentences — which data point drove it, and whether it is confirming / filling a gap / clarifying.
 Return ONLY the JSON array, no other text.`;
 
   const user = `Generate tailored interview questions for:
 
 Candidate: ${input.firstName} ${input.lastName}
 Role: ${input.jobTitle ?? 'Unknown'}
-CCAT Score: ${input.ccatScore ?? 'N/A'}
-Work Sample Score: ${input.workSampleScore ?? 'N/A'}
-EPP Values Match Score: ${input.eppValuesMatchScore ?? 'N/A'}%
-EPP Profile: ${input.eppProfile ? JSON.stringify(input.eppProfile) : 'Not available'}
 
-Resume Review Notes (HR):
-${input.resumeReviewNotes || 'None provided'}
-Resume Review Score: ${input.resumeReviewScore ?? 'N/A'}
+CCAT (cognitive) score: ${input.ccatScore ?? 'N/A'}
 
-Reference Check Notes (HR):
-${input.referenceCheckNotes || 'None provided'}
-Reference Check Score: ${input.referenceCheckScore ?? 'N/A'}`;
+EPP personality profile (percentiles 0-100 vs norm):
+${(input.eppTraits && input.eppTraits.length)
+    ? input.eppTraits.map((t) => `- ${t.trait}: ${t.percentile}`).join('\n')
+    : (input.eppProfile ? JSON.stringify(input.eppProfile) : 'Not available')}
+
+Company-values screening:
+Match score: ${input.companyValuesMatchScore ?? input.eppValuesMatchScore ?? 'N/A'}
+Notes: ${input.companyValuesNotes || 'None'}
+Per-value scores (1-5):
+${(input.valueScores && input.valueScores.length)
+    ? input.valueScores.map((v) => `- ${v.value}: ${v.score}`).join('\n')
+    : 'None recorded'}
+
+Resume review:
+Score: ${input.resumeReviewScore ?? 'N/A'}
+Notes: ${input.resumeReviewNotes || 'None provided'}
+
+Work sample score: ${input.workSampleScore ?? 'N/A'}`;
 
   try {
     const raw = await callClaude(system, user);
