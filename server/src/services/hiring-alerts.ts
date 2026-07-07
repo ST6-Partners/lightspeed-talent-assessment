@@ -18,16 +18,18 @@
 import { eq, inArray } from 'drizzle-orm';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 
-// Max days a candidate should sit in each stage before it's "stalled".
-// Terminal stages (Hired, Rejected) are never flagged.
+// Max days a candidate should sit in ANY stage before it's "stalled" (14).
+// Terminal stages (Hired, Rejected) are never flagged. Assessment also has a
+// 14-day auto-reject that owns the terminal action.
+const STAGE_SLA_DEFAULT_DAYS = 14;
 export const STAGE_SLA_DAYS: Record<string, number> = {
-  'Applied': 3,
-  'Assessment': 12,          // auto-reject still owns the terminal action at 14
-  'Work Sample': 7,
-  'Values Review': 4,
-  'Interview Scheduled': 5,
-  'Interviewed': 5,
-  'Offered': 7,
+  'Applied': STAGE_SLA_DEFAULT_DAYS,
+  'Assessment': STAGE_SLA_DEFAULT_DAYS,
+  'Work Sample': STAGE_SLA_DEFAULT_DAYS,
+  'Values Review': STAGE_SLA_DEFAULT_DAYS,
+  'Interview Scheduled': STAGE_SLA_DEFAULT_DAYS,
+  'Interviewed': STAGE_SLA_DEFAULT_DAYS,
+  'Offered': STAGE_SLA_DEFAULT_DAYS,
 };
 
 // Days a requisition may stay open before it's past its overall timeline.
