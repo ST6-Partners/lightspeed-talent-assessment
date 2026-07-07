@@ -64,10 +64,8 @@ export default function Candidates() {
   const deleteMutation = trpc.candidates.delete.useMutation({
     onSuccess: () => { refetch(); setSelectedId(null); },
   });
-  const doDelete = (id: string, name: string) => {
-    if (window.confirm(`Delete ${name}? This permanently removes the candidate and their data. (Build tool)`)) {
-      deleteMutation.mutate({ id });
-    }
+  const doDelete = (id: string) => {
+    deleteMutation.mutate({ id });
   };
 
   const resetForm = () => setForm({
@@ -342,7 +340,7 @@ export default function Candidates() {
                             </button>
                           )}
                           <button
-                            onClick={() => doDelete(c.id, `${c.firstName} ${c.lastName}`)}
+                            onClick={() => doDelete(c.id)}
                             disabled={deleteMutation.isLoading}
                             className="p-1 text-gray-400 hover:text-red-600 transition-colors"
                             title="Delete (build tool)"
@@ -381,7 +379,7 @@ export default function Candidates() {
                         <td className="px-4 py-2 text-gray-400 text-xs">{c.rejectionReason ?? ''}</td>
                         <td className="px-4 py-2 text-right">
                           <button
-                            onClick={() => doDelete(c.id, `${c.firstName} ${c.lastName}`)}
+                            onClick={() => doDelete(c.id)}
                             disabled={deleteMutation.isLoading}
                             className="p-1 text-gray-400 hover:text-red-600 transition-colors"
                             title="Delete (build tool)"

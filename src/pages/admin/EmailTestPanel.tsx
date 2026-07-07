@@ -177,7 +177,7 @@ export default function EmailTestPanel() {
                         <a href={m.raw.approvalUrl} target="_blank" rel="noreferrer" style={{ ...c.btnGhost, textDecoration: 'none', color: '#1d4ed8', borderColor: '#bfd4ff' }}>Open &amp; review</a>
                       )}
                       <button style={c.btnGhost} onClick={() => { setTo(m.fromEmail); setName(m.fromName || ''); setSubject(`Re: ${m.subject || ''}`); setMessage(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Reply</button>
-                      <button style={{ ...c.btnGhost, color: '#b91c1c', borderColor: '#f3c9c9' }} disabled={deleteMsg.isLoading} onClick={() => { if (window.confirm('Delete this message?')) deleteMsg.mutate({ id: m.id }); }}>Delete</button>
+                      <button style={{ ...c.btnGhost, color: '#b91c1c', borderColor: '#f3c9c9' }} disabled={deleteMsg.isLoading} onClick={() => deleteMsg.mutate({ id: m.id })}>Delete</button>
                     </div>
                   </td>
                 </tr>
