@@ -12,6 +12,13 @@
 
 import { inboundEmails } from '../db/schema/email.js';
 
+// Normalize a jsonb `raw` value that may arrive as an object or a JSON string.
+function parseRaw(raw: any): any {
+  if (raw == null) return {};
+  if (typeof raw === 'string') { try { return JSON.parse(raw); } catch { return {}; } }
+  return raw;
+}
+
 export const INTERNAL_WINDOW_DAYS = 3;
 
 export interface PostingWindow {
@@ -28,17 +35,17 @@ export interface PostingWindow {
 export async function getPostingWindows(db: any, reqIds: string[]): Promise<Record<string, PostingWindow>> {
   const out: Record<string, PostingWindow> = {};
   if (!reqIds.length) return out;
-  const rows = await db.query.inboundEmails.findMany({});
+  const rows = await db.select().from(inboundEmails);
   const kickoffs = rows.filter((r: any) => r.replyTag === 'kickoff');
   const opens = rows.filter((r: any) => r.replyTag === 'posting_external_open');
   const now = Date.now();
 
   for (const reqId of reqIds) {
     const ks = kickoffs
-      .filter((r: any) => (r.raw?.reqId ?? null) === reqId)
+      .filter((r: any) => (parseRaw(r.raw).reqId ?? null) === reqId)
       .sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     const start = ks[0]?.createdAt ? new Date(ks[0].createdAt) : null;
-    const opened = opens.some((r: any) => (r.raw?.reqId ?? null) === reqId);
+    const opened = opens.some((r: any) => (parseRaw(r.raw).reqId ?? null) === reqId);
 
     if (!start) {
       out[reqId] = { reqId, windowStart: null, externalOpensAt: null, phase: 'unknown', daysLeft: null, externallyOpened: opened };
@@ -61,8 +68,8 @@ export async function getPostingWindows(db: any, reqIds: string[]): Promise<Reco
 
 // Has the external-open marker already been written for this req?
 export async function isExternallyOpened(db: any, reqId: string): Promise<boolean> {
-  const rows = await db.query.inboundEmails.findMany({});
-  return rows.some((r: any) => r.replyTag === 'posting_external_open' && (r.raw?.reqId ?? null) === reqId);
+  const rows = await db.select().from(inboundEmails);
+  return rows.some((r: any) => r.replyTag === 'posting_external_open' && (parseRaw(r.raw).reqId ?? null) === reqId);
 }
 
 // Write the external-open marker (idempotent-ish: callers check first).
