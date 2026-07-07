@@ -72,7 +72,8 @@ export default function Intake() {
   const { data: allJds } = trpc.jobDescriptions.list.useQuery(undefined);
   const deptByReq: Record<string, string> = {};
   for (const r of (allReqs ?? []) as any[]) deptByReq[r.id] = r.department;
-  const jdOptions = ((allJds ?? []) as any[]).filter((jd) => form.department && deptByReq[jd.reqId] === form.department);
+  // Show every existing JD (labeled with its department) so a new role can be based on any of them.
+  const jdOptions = ((allJds ?? []) as any[]).slice().sort((a, b) => (a.jobTitle || '').localeCompare(b.jobTitle || ''));
 
   useEffect(() => {
     if (full && editingId) {
@@ -324,9 +325,9 @@ export default function Intake() {
               {form.reasonType !== 'new_headcount' && (
                 <div className="col-span-2">
                   <label className={lbl}>Existing job description{form.reasonType === 'backfill' ? '' : ' (base the new JD on this)'}</label>
-                  <select value={form.baseJdId} onChange={(e) => { const id = e.target.value; const jd: any = ((allJds as any[]) || []).find((j) => j.id === id); setForm({ ...form, baseJdId: id, mustHaves: jd ? (jd.requiredQualifications || '') : '', niceToHaves: jd ? (jd.preferredQualifications || '') : '' }); }} className={inp} disabled={!form.department}>
-                    <option value="">{form.department ? '— select the existing JD —' : 'Select a department first'}</option>
-                    {jdOptions.map((jd) => <option key={jd.id} value={jd.id}>{jd.jobTitle}</option>)}
+                  <select value={form.baseJdId} onChange={(e) => { const id = e.target.value; const jd: any = ((allJds as any[]) || []).find((j) => j.id === id); setForm({ ...form, baseJdId: id, mustHaves: jd ? (jd.requiredQualifications || '') : '', niceToHaves: jd ? (jd.preferredQualifications || '') : '' }); }} className={inp}>
+                    <option value="">{jdOptions.length ? '\u2014 select an existing JD (optional) \u2014' : '\u2014 no existing JDs yet \u2014'}</option>
+                    {jdOptions.map((jd) => <option key={jd.id} value={jd.id}>{jd.jobTitle}{deptByReq[jd.reqId] ? ` \u2014 ${deptByReq[jd.reqId]}` : ''}</option>)}
                   </select>
                   <p className="text-xs text-gray-400 mt-1">
                     {form.reasonType === 'backfill'
