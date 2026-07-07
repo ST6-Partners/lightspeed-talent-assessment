@@ -579,6 +579,25 @@ const EPP_VALUE_OPTIONS = [
   'Accountable', 'Courageous', 'Creative', 'Driven', 'Focused', 'High Standards', 'Self-Aware',
 ];
 
+const DEFAULT_EPP_VALUES = ['Coachable', 'Driven', 'Collaborative', 'Accountable', 'High Standards'];
+
+// Normalize whatever the model returns (array or comma/newline string, any case,
+// with or without leading bullets) to canonical Lightspeed value names. Falls back
+// to a sensible default so a generated JD always carries an EPP values match.
+function normalizeEppValues(raw: any): string[] {
+  let items: string[] = [];
+  if (Array.isArray(raw)) items = raw.map((x) => String(x));
+  else if (typeof raw === 'string') items = raw.split(/[,\n;]/);
+  const canon = new Map(EPP_VALUE_OPTIONS.map((v) => [v.toLowerCase().replace(/[^a-z]/g, ''), v] as const));
+  const out: string[] = [];
+  for (const it of items) {
+    const key = it.trim().replace(/^[-*\s]+/, '').toLowerCase().replace(/[^a-z]/g, '');
+    const hit = canon.get(key);
+    if (hit && !out.includes(hit)) out.push(hit);
+  }
+  return out.length ? out.slice(0, 6) : [...DEFAULT_EPP_VALUES];
+}
+
 function templateJD(title: string, department: string, description?: string | null): RoleJD {
   const note = description ? ` Focus per intake: ${description}.` : '';
   return {
@@ -588,7 +607,7 @@ function templateJD(title: string, department: string, description?: string | nu
     requiredQualifications: `- Relevant experience in ${department}\n- Strong communication and follow-through\n- Alignment with Lightspeed's values`,
     preferredQualifications: '- Prior K-12 or edtech experience\n- Comfort using AI tools in daily work',
     workSampleInstructions: `A short, realistic task that mirrors day-to-day ${department} work${description ? ' (' + description + ')' : ''} (about 1-2 hours). [Draft auto-generated from the intake - review and refine before sending.]`,
-    eppValues: [],
+    eppValues: [...DEFAULT_EPP_VALUES],
   };
 }
 
@@ -609,7 +628,7 @@ export async function generateRoleJD(input: {
         requiredQualifications: input.baseJd.requiredQualifications ?? '',
         preferredQualifications: input.baseJd.preferredQualifications ?? '',
         workSampleInstructions: `${input.baseJd.workSampleInstructions ?? ''}${input.changeNote ? `\n\n[Adapted per intake — reflect: ${input.changeNote}]` : ''}`.trim(),
-        eppValues: input.baseJd.eppValues ?? [],
+        eppValues: normalizeEppValues(input.baseJd.eppValues),
       };
     }
     return templateJD(title, input.department, input.changeNote);
@@ -629,8 +648,50 @@ Produce the UPDATED job description AND an updated work sample task, reflecting 
     : `Draft a brand-new job description for a role in ${input.department}. Work arrangement: ${input.workArrangement ?? 'On-site'}${input.location ? ', ' + input.location : ''}.${input.salaryMin && input.salaryMax ? ` Salary band $${input.salaryMin}–$${input.salaryMax}.` : ''}${input.changeNote ? `\n\nRole description provided by the hiring team (build the ENTIRE JD, work sample, and interview focus from this): ${input.changeNote}` : ''}\n\nProduce the full job description AND a fitting work sample task. Keep it realistic and concise.`;
   try {
     const jd = JSON.parse(await callClaude(system, user));
-    return { jobTitle: jd.jobTitle || title, summary: jd.summary || '', responsibilities: jd.responsibilities || '', requiredQualifications: jd.requiredQualifications || '', preferredQualifications: jd.preferredQualifications || '', workSampleInstructions: jd.workSampleInstructions || '', eppValues: Array.isArray(jd.eppValues) ? jd.eppValues.filter((v: string) => EPP_VALUE_OPTIONS.includes(v)) : [] };
-  } catch (err) { console.error('[AI] generateRoleJD failed:', err); return input.baseJd ? { jobTitle: input.baseJd.jobTitle, summary: input.baseJd.summary ?? '', responsibilities: input.baseJd.responsibilities ?? '', requiredQualifications: input.baseJd.requiredQualifications ?? '', preferredQualifications: input.baseJd.preferredQualifications ?? '', workSampleInstructions: input.baseJd.workSampleInstructions ?? '', eppValues: input.baseJd.eppValues ?? [] } : templateJD(title, input.department, input.changeNote); }
+    return { jobTitle: jd.jobTitle || title, summary: jd.summary || '', responsibilities: jd.responsibilities || '', requiredQualifications: jd.requiredQualifications || '', preferredQualifications: jd.preferredQualifications || '', workSampleInstructions: jd.workSampleInstructions || '', eppValues: normalizeEppValues(jd.eppValues) };
+  } catch (err) { console.error('[AI] generateRoleJD failed:', err); return input.baseJd ? { jobTitle: input.baseJd.jobTitle, summary: input.baseJd.summary ?? '', responsibilities: input.baseJd.responsibilities ?? '', requiredQualifications: input.baseJd.requiredQualifications ?? '', preferredQualifications: input.baseJd.preferredQualifications ?? '', workSampleInstructions: input.baseJd.workSampleInstructions ?? '', eppValues: normalizeEppValues(input.baseJd.eppValues) } : templateJD(title, input.department, input.changeNote); }
+}
+
+export interface WorkSampleTask {
+  brief: string;
+  showYourWorkInstructions: string;
+  scoringGuideWork: string;
+  scoringGuideAi: string;
+  difficulty: 'Entry' | 'Mid' | 'Senior';
+  timeLimitMin: number;
+}
+
+// Generate a curated-style work sample for a brand-new role (new headcount) where
+// there is no existing task to reuse. One task measures BOTH work quality and AI
+// skill (the candidate shows the prompts/iterations they used).
+export async function generateWorkSampleTask(input: {
+  department: string; jobTitle: string; workSampleInstructions?: string | null; jdSummary?: string | null;
+}): Promise<WorkSampleTask> {
+  const fallbackBrief = (input.workSampleInstructions && input.workSampleInstructions.trim())
+    || `A short, realistic task that mirrors day-to-day work for a ${input.jobTitle} in ${input.department} (about 1-2 hours).`;
+  const template: WorkSampleTask = {
+    brief: fallbackBrief,
+    showYourWorkInstructions: 'Submit your final work AND the prompts / AI iterations you used to get there, so we can see both the quality of the output and how you worked with AI.',
+    scoringGuideWork: `- Correctness and completeness for a ${input.jobTitle}\n- Clarity and structure\n- Judgment and prioritization\n- Practicality of the result`,
+    scoringGuideAi: '- Effective, specific prompting\n- Iteration and verification of AI output\n- Judgment about when to trust vs. correct the AI',
+    difficulty: 'Mid',
+    timeLimitMin: 90,
+  };
+  if (SANDBOX) { console.log(`[AI SANDBOX] generateWorkSampleTask | ${input.jobTitle}`); return template; }
+  const system = `You design realistic, fair work-sample tasks for hiring at Lightspeed Systems (K-12 edtech). A single task measures BOTH work quality AND AI skill: the candidate does real role work and shows the prompts/iterations they used. Return ONLY JSON with keys: brief (the task the candidate sees, ~1-2 hours, concrete and role-specific), showYourWorkInstructions, scoringGuideWork (newline "- " bullets grading work quality), scoringGuideAi (newline "- " bullets grading AI skill), difficulty ("Entry"|"Mid"|"Senior"), timeLimitMin (integer minutes).`;
+  const user = `Role: ${input.jobTitle} in ${input.department}.${input.jdSummary ? `\nSummary: ${input.jdSummary}` : ''}${input.workSampleInstructions ? `\nDraft work sample idea from the JD: ${input.workSampleInstructions}` : ''}\n\nAuthor a net-new work sample task specific to THIS role.`;
+  try {
+    const t = JSON.parse(await callClaude(system, user));
+    const difficulty = (['Entry', 'Mid', 'Senior'].includes(t.difficulty) ? t.difficulty : 'Mid') as 'Entry' | 'Mid' | 'Senior';
+    return {
+      brief: t.brief || template.brief,
+      showYourWorkInstructions: t.showYourWorkInstructions || template.showYourWorkInstructions,
+      scoringGuideWork: t.scoringGuideWork || template.scoringGuideWork,
+      scoringGuideAi: t.scoringGuideAi || template.scoringGuideAi,
+      difficulty,
+      timeLimitMin: Number.isFinite(t.timeLimitMin) ? t.timeLimitMin : 90,
+    };
+  } catch (err) { console.error('[AI] generateWorkSampleTask failed:', err); return template; }
 }
 
 // The FIXED standard question set — asked of EVERY candidate for a role (the "70%").

@@ -14,7 +14,9 @@ import { inboundEmails } from '../db/schema/email.js';
 import type { DrizzleClient } from '../db.js';
 import { jobDescriptions } from '../db/schema/hiring.js';
 import { interviewQuestions } from '../db/schema/intake.js';
-import { generateRoleJD, generateStandardQuestions, standardQuestionSet } from '../services/ai.js';
+import { assessmentTasks } from '../db/schema/assessmentTasks.js';
+import { departments } from '../db/schema/departments.js';
+import { generateRoleJD, generateStandardQuestions, standardQuestionSet, generateWorkSampleTask } from '../services/ai.js';
 import { approverEmail, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
 import { emailApprovalRejected } from '../services/email.js';
 import { users } from '../db/schema/core.js';
@@ -224,11 +226,37 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
       changeNote: changeNote || null,
     });
     jdTitle = jd.jobTitle;
+
+    // Work sample link: new headcount gets a freshly generated, department-scoped
+    // task (Draft, pending curation) linked to the JD; replacement/termination
+    // inherit the base JD's linked work sample when it has one.
+    let workSampleTaskId: string | null = null;
+    if (reason === 'new_headcount') {
+      try {
+        const ws = await generateWorkSampleTask({ department: req.department, jobTitle: jd.jobTitle, workSampleInstructions: jd.workSampleInstructions, jdSummary: jd.summary });
+        const dept = await db.query.departments.findFirst({ where: eq(departments.name, req.department) });
+        const [task] = await db.insert(assessmentTasks).values({
+          title: `${jd.jobTitle} Work Sample`,
+          departmentId: dept?.id ?? null,
+          difficulty: ws.difficulty,
+          timeLimitMin: ws.timeLimitMin,
+          brief: ws.brief,
+          showYourWorkInstructions: ws.showYourWorkInstructions,
+          scoringGuideWork: ws.scoringGuideWork,
+          scoringGuideAi: ws.scoringGuideAi,
+          status: 'Draft',
+        }).returning();
+        workSampleTaskId = task?.id ?? null;
+      } catch (err) { console.error('[intake] work-sample task generation failed:', err); }
+    } else if (baseJd && (baseJd as any).workSampleTaskId) {
+      workSampleTaskId = (baseJd as any).workSampleTaskId;
+    }
+
     const [newJd] = await db.insert(jobDescriptions).values({
       reqId: req.id, jobTitle: jd.jobTitle, summary: jd.summary,
       responsibilities: jd.responsibilities, requiredQualifications: jd.requiredQualifications,
       preferredQualifications: jd.preferredQualifications, eppValues: jd.eppValues,
-      workSampleInstructions: jd.workSampleInstructions, status: 'Draft', pendingReview: true,
+      workSampleInstructions: jd.workSampleInstructions, workSampleTaskId, status: 'Draft', pendingReview: true,
     }).returning();
     try {
       questions = await generateStandardQuestions({
