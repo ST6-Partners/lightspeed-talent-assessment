@@ -212,14 +212,20 @@ export async function seedCandidateResume(db: any, candidateId: string, candidat
 // (simulating Criteria returning results). Only fills what's missing.
 export async function seedAssessmentResults(db: any, candidateId: string, candidate: any): Promise<void> {
   if (candidate.ccatScore == null) {
+    // 15-50 out of 50, so it lands above OR below the pass threshold (30) at random.
     await db.update(candidates)
-      .set({ ccatScore: 22 + Math.floor(Math.random() * 29), updatedAt: new Date() }) // 22-50
+      .set({ ccatScore: 15 + Math.floor(Math.random() * 36), updatedAt: new Date() })
       .where(eq(candidates.id, candidateId));
   }
   const existingEpp = await db.query.candidateEppScores.findMany({ where: eq(candidateEppScores.candidateId, candidateId) });
   if (!existingEpp.length) {
+    // Give each candidate a random baseline (45-88) so the 12-trait AVERAGE lands
+    // above OR below the 70% match threshold at random (averaging 12 traits around a
+    // fixed midpoint would otherwise cluster near ~65 and almost always fail).
+    const base = 45 + Math.floor(Math.random() * 44); // 45-88
+    const clamp = (n: number) => Math.max(5, Math.min(99, n));
     await db.insert(candidateEppScores).values(
-      EPP_TRAITS.map((t) => ({ candidateId, trait: t, percentile: 35 + Math.floor(Math.random() * 61) })),
+      EPP_TRAITS.map((t) => ({ candidateId, trait: t, percentile: clamp(base + (Math.floor(Math.random() * 31) - 15)) })), // base +/- 15
     );
   }
 }
