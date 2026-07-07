@@ -26,7 +26,7 @@ import {
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
 import { runReferenceCheck } from '../services/ai.js';
-import { renderOfferLetter, type OfferLetterInput } from '../services/offerLetter.js';
+import { renderOfferLetter, renderInternalOfferLetter, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
 import { createOfferEnvelope } from '../services/docusign.js';
 import { composeInternalReport, getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
@@ -110,6 +110,47 @@ async function buildOfferInput(db: any, input: any): Promise<OfferLetterInput> {
     baseSalary: input.baseSalary ?? suggested ?? null,
     startDate: input.startDate ?? targetStart ?? null,
     location: input.location ?? location ?? null,
+    addendum: input.addendum ?? [],
+  };
+}
+
+// Build the INTERNAL-move offer input. New-role defaults come from the
+// requisition/intake (same source as the external letter); current-role
+// comp is HR-entered (HRIS integration deferred). Deterministic, no AI.
+async function buildInternalOfferInput(db: any, input: any): Promise<InternalOfferLetterInput> {
+  const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+  if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+  const jd = candidate.jdId
+    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+    : null;
+  const req = jd?.reqId
+    ? await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) })
+    : null;
+
+  const min = (req as any)?.salaryMin ?? null;
+  const max = (req as any)?.salaryMax ?? null;
+  const suggested = (min != null && max != null) ? Math.round((min + max) / 2) : (max ?? min ?? null);
+
+  return {
+    firstName: candidate.firstName,
+    lastName: candidate.lastName,
+    effectiveDate: input.effectiveDate ?? null,
+    comp: {
+      // Current role (HR-entered; no intake source)
+      currentTitle: input.currentTitle ?? null,
+      currentBaseSalary: input.currentBaseSalary ?? null,
+      currentBonus: input.currentBonus ?? null,
+      currentManager: input.currentManager ?? null,
+      currentDepartment: input.currentDepartment ?? null,
+      currentStipends: input.currentStipends ?? null,
+      // New role (prefilled from intake, HR can override)
+      newTitle: input.newTitle ?? jd?.jobTitle ?? 'the role',
+      newBaseSalary: input.newBaseSalary ?? suggested ?? null,
+      newBonus: input.newBonus ?? null,
+      newManager: input.newManager ?? (req as any)?.hiringManager ?? null,
+      newDepartment: input.newDepartment ?? (req as any)?.department ?? null,
+      newStipends: input.newStipends ?? null,
+    },
     addendum: input.addendum ?? [],
   };
 }
@@ -768,6 +809,95 @@ export const candidatesRouter = router({
 
       trackActivity(ctx.db, ctx.user.id, 'send_offer_docusign', 'candidates', { candidateId: input.id, envelopeId: result.envelopeId }).catch(() => {});
       return { configured: true as const, envelopeId: result.envelopeId, status: result.status };
+    }),
+
+  // ── INTERNAL-MOVE OFFER (before/now comparison + transition addendum) ──
+  // Preview the internal-move offer letter (renders HTML; no send, no stage change).
+  internalOfferPreview: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      effectiveDate: z.string().optional(),
+      newTitle: z.string().optional(),
+      newBaseSalary: z.number().int().optional(),
+      newBonus: z.string().optional(),
+      newManager: z.string().optional(),
+      newDepartment: z.string().optional(),
+      newStipends: z.string().optional(),
+      currentTitle: z.string().optional(),
+      currentBaseSalary: z.number().int().optional(),
+      currentBonus: z.string().optional(),
+      currentManager: z.string().optional(),
+      currentDepartment: z.string().optional(),
+      currentStipends: z.string().optional(),
+      addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const offer = await buildInternalOfferInput(ctx.db, input);
+      return { html: renderInternalOfferLetter(offer), newTitle: offer.comp.newTitle };
+    }),
+
+  // Send the internal-move offer letter via SendGrid + inbox copy, and move to Offered.
+  sendInternalOffer: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      effectiveDate: z.string().optional(),
+      newTitle: z.string().optional(),
+      newBaseSalary: z.number().int().optional(),
+      newBonus: z.string().optional(),
+      newManager: z.string().optional(),
+      newDepartment: z.string().optional(),
+      newStipends: z.string().optional(),
+      currentTitle: z.string().optional(),
+      currentBaseSalary: z.number().int().optional(),
+      currentBonus: z.string().optional(),
+      currentManager: z.string().optional(),
+      currentDepartment: z.string().optional(),
+      currentStipends: z.string().optional(),
+      addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const offer = await buildInternalOfferInput(ctx.db, input);
+      const newTitle = offer.comp.newTitle;
+      const letterHtml = renderInternalOfferLetter(offer);
+
+      // Email the letter (SendGrid). Reuses the offer-letter sender (raw HTML body).
+      await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle: newTitle, letterHtml }).catch(() => {});
+
+      const offerSubject = `Your internal offer from Lightspeed Systems${newTitle ? ` \u2014 ${newTitle}` : ''}`;
+      try {
+        await ctx.db.insert(inboundEmails).values({
+          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+          fromName: 'Lightspeed Hiring',
+          toEmail: candidate.email,
+          subject: offerSubject,
+          body: letterHtml,
+          replyTag: 'internal_offer',
+          source: 'simulated',
+          raw: { kind: 'internal_offer_letter', candidateId: input.id },
+        });
+      } catch (err) {
+        console.error('[internal-offer] inbox record failed:', err);
+      }
+
+      // Advance to Offered (skip if already there / terminal).
+      if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
+        await ctx.db.update(candidates)
+          .set({ currentStage: 'Offered', updatedAt: new Date() })
+          .where(eq(candidates.id, input.id));
+        await ctx.db.insert(candidateStageHistory).values({
+          candidateId: input.id,
+          fromStage: candidate.currentStage,
+          toStage: 'Offered',
+          changedBy: ctx.user.id,
+          reason: 'Internal offer letter sent',
+        });
+      }
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'send_internal_offer', 'candidates', { candidateId: input.id }).catch(() => {});
+      return { ok: true, html: letterHtml };
     }),
 
   // Notify an internal candidate's leadership chain (manual list for now;

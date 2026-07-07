@@ -468,8 +468,10 @@ export default function Candidates() {
           {/* Reference check — agent report (after interview, before offer) */}
           <ReferenceCheckSection key={`ref-${selected.id}`} candidateId={selected.id} existingNotes={(selected as any).referenceCheckNotes ?? null} onChanged={refetch} />
 
-          {/* Offer letter (external) */}
-          <OfferSection key={`offer-${selected.id}`} candidateId={selected.id} onChanged={refetch} />
+          {/* Offer letter — internal moves get a before/now comparison; external gets the standard letter */}
+          {(selected as any).isInternal
+            ? <InternalOfferSection key={`ioffer-${selected.id}`} candidateId={selected.id} onChanged={refetch} />
+            : <OfferSection key={`offer-${selected.id}`} candidateId={selected.id} onChanged={refetch} />}
 
           {/* HR notes */}
           <Section title="HR Notes">
@@ -874,6 +876,128 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
       )}
 
       {sent && <div className="text-xs text-green-700">Offer sent — candidate moved to Offered.</div>}
+      {html && (
+        <div className="mt-2 border border-gray-200 rounded bg-white max-h-96 overflow-y-auto">
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        </div>
+      )}
+    </Section>
+  );
+}
+
+function InternalOfferSection({ candidateId, onChanged }: { candidateId: string; onChanged?: () => void }) {
+  const defaults = trpc.candidates.offerDefaults.useQuery({ id: candidateId });
+  // New role (prefilled from intake; editable). Current role (HR-entered).
+  const [nw, setNw] = useState({ newTitle: '', newBaseSalary: '', newBonus: '', newManager: '', newDepartment: '', newStipends: '', effectiveDate: '' });
+  const [cur, setCur] = useState({ currentTitle: '', currentBaseSalary: '', currentBonus: '', currentManager: '', currentDepartment: '', currentStipends: '' });
+  const [addendum, setAddendum] = useState<{ title: string; body: string }[]>([{ title: 'Transition plan', body: '' }]);
+  const [html, setHtml] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    const d = defaults.data;
+    if (!d) return;
+    setNw((prev) => ({
+      ...prev,
+      newTitle: prev.newTitle || (d.jobTitle ?? ''),
+      newBaseSalary: prev.newBaseSalary || (d.suggestedSalary != null ? String(d.suggestedSalary) : ''),
+      newManager: prev.newManager || (d.reportsTo ?? ''),
+      newDepartment: prev.newDepartment || (d.department ?? ''),
+    }));
+  }, [defaults.data]);
+
+  const d = defaults.data;
+  const num = (v: string) => (v.trim() ? parseInt(v.replace(/[^0-9]/g, '')) : undefined);
+  const payload = () => ({
+    id: candidateId,
+    effectiveDate: nw.effectiveDate || undefined,
+    newTitle: nw.newTitle || undefined,
+    newBaseSalary: num(nw.newBaseSalary),
+    newBonus: nw.newBonus || undefined,
+    newManager: nw.newManager || undefined,
+    newDepartment: nw.newDepartment || undefined,
+    newStipends: nw.newStipends || undefined,
+    currentTitle: cur.currentTitle || undefined,
+    currentBaseSalary: num(cur.currentBaseSalary),
+    currentBonus: cur.currentBonus || undefined,
+    currentManager: cur.currentManager || undefined,
+    currentDepartment: cur.currentDepartment || undefined,
+    currentStipends: cur.currentStipends || undefined,
+    addendum: addendum.filter((a) => a.title.trim() || a.body.trim()),
+  });
+
+  const preview = trpc.candidates.internalOfferPreview.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(false); } });
+  const send = trpc.candidates.sendInternalOffer.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(true); onChanged?.(); } });
+
+  const band = d && (d.bandMin != null || d.bandMax != null)
+    ? `$${(d.bandMin ?? d.bandMax)?.toLocaleString()} \u2013 $${(d.bandMax ?? d.bandMin)?.toLocaleString()}`
+    : null;
+
+  const twoCol = (label: string, curKey: keyof typeof cur, nwKey: keyof typeof nw, ph = '') => (
+    <div className="grid grid-cols-[110px_1fr_1fr] gap-2 items-center">
+      <div className="text-xs text-gray-500">{label}</div>
+      <input value={cur[curKey]} onChange={(e) => setCur({ ...cur, [curKey]: e.target.value })} placeholder="current"
+        className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+      <input value={nw[nwKey]} onChange={(e) => setNw({ ...nw, [nwKey]: e.target.value })} placeholder={ph || 'new'}
+        className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+    </div>
+  );
+
+  return (
+    <Section title="Offer Letter (internal move)">
+      <div className="text-xs text-gray-500">
+        Internal move. The letter shows a <strong>before / now</strong> comparison so the employee sees exactly what changes. The <strong>new role</strong> column is prefilled from the approved intake; the <strong>current</strong> column is entered by HR (HRIS integration pending). Put the transition plan on the addendum. Generated from a fixed template — not AI.
+      </div>
+
+      <div className="grid grid-cols-[110px_1fr_1fr] gap-2 pt-1">
+        <div></div>
+        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Current (before)</div>
+        <div className="text-xs font-semibold text-green-700 uppercase tracking-wide">New role (now)</div>
+      </div>
+      <div className="space-y-1.5">
+        {twoCol('Title', 'currentTitle', 'newTitle')}
+        {twoCol('Base salary', 'currentBaseSalary', 'newBaseSalary', band ? `band ${band}` : '120000')}
+        {twoCol('Bonus ($ or %)', 'currentBonus', 'newBonus', 'e.g. 10% or $15,000')}
+        {twoCol('Manager', 'currentManager', 'newManager')}
+        {twoCol('Department', 'currentDepartment', 'newDepartment')}
+        {twoCol('Stipends', 'currentStipends', 'newStipends')}
+      </div>
+
+      <div className="pt-2">
+        <div className="text-xs text-gray-500 mb-0.5">Effective date</div>
+        <input value={nw.effectiveDate} onChange={(e) => setNw({ ...nw, effectiveDate: e.target.value })} placeholder="August 4, 2025"
+          className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+      </div>
+
+      <div className="pt-1">
+        <div className="text-xs text-gray-500 mb-1">Addendum items (transition plan, etc.)</div>
+        {addendum.map((a, i) => (
+          <div key={i} className="mb-1 space-y-1">
+            <input value={a.title} placeholder="Addendum title (e.g. Transition plan)"
+              onChange={(e) => setAddendum(addendum.map((x, j) => j === i ? { ...x, title: e.target.value } : x))}
+              className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+            <textarea value={a.body} placeholder="Addendum details" rows={2}
+              onChange={(e) => setAddendum(addendum.map((x, j) => j === i ? { ...x, body: e.target.value } : x))}
+              className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
+            <button onClick={() => setAddendum(addendum.filter((_, j) => j !== i))} className="text-xs text-gray-400 hover:text-red-600">Remove addendum</button>
+          </div>
+        ))}
+        <button onClick={() => setAddendum([...addendum, { title: '', body: '' }])}
+          className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">+ Add addendum</button>
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <button onClick={() => preview.mutate(payload())} disabled={preview.isLoading}
+          className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50">
+          {preview.isLoading ? 'Rendering\u2026' : 'Preview letter'}
+        </button>
+        <button onClick={() => send.mutate(payload())} disabled={send.isLoading}
+          className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
+          {send.isLoading ? 'Sending\u2026' : 'Send internal offer (email)'}
+        </button>
+      </div>
+
+      {sent && <div className="text-xs text-green-700">Internal offer sent \u2014 candidate moved to Offered.</div>}
       {html && (
         <div className="mt-2 border border-gray-200 rounded bg-white max-h-96 overflow-y-auto">
           <div dangerouslySetInnerHTML={{ __html: html }} />
