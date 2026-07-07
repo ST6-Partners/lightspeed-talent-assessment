@@ -30,7 +30,7 @@ import { scoreSkillsFit } from '../services/ai.js';
 import { computeEppScans, ingestEppResults } from '../services/eppScans.js';
 import { runReferenceCheck } from '../services/ai.js';
 import { draftTransitionPlan } from '../services/ai.js';
-import { renderOfferLetter, renderInternalOfferLetter, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
+import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
 import { createOfferEnvelope } from '../services/docusign.js';
 import { composeInternalReport, getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
@@ -113,8 +113,10 @@ async function buildOfferInput(db: any, input: any): Promise<OfferLetterInput> {
     reportsTo: input.reportsTo ?? req?.hiringManager ?? null,
     employmentType: input.employmentType ?? req?.employmentType ?? 'Full-Time',
     baseSalary: input.baseSalary ?? suggested ?? null,
+    variableComp: input.variableComp ?? (req as any)?.variableComp ?? null,
     startDate: input.startDate ?? targetStart ?? null,
     location: input.location ?? location ?? null,
+    legalClauses: input.legalClauses,
     addendum: input.addendum ?? [],
   };
 }
@@ -858,6 +860,8 @@ export const candidatesRouter = router({
         suggestedSalary,
         targetStartDate: targetStart,
         financeConfirmed: !!(req as any)?.financeConfirmed,
+        variableComp: (req as any)?.variableComp ?? null,
+        standardClauses: STANDARD_OFFER_CLAUSES,
       };
     }),
 
@@ -866,12 +870,14 @@ export const candidatesRouter = router({
     .input(z.object({
       id: z.string().uuid(),
       baseSalary: z.number().int().optional(),
+      variableComp: z.string().optional(),
       startDate: z.string().optional(),
       reportsTo: z.string().optional(),
       department: z.string().optional(),
       employmentType: z.string().optional(),
       location: z.string().optional(),
       jobTitle: z.string().optional(),
+      legalClauses: z.array(z.string()).optional(),
       addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -884,12 +890,14 @@ export const candidatesRouter = router({
     .input(z.object({
       id: z.string().uuid(),
       baseSalary: z.number().int().optional(),
+      variableComp: z.string().optional(),
       startDate: z.string().optional(),
       reportsTo: z.string().optional(),
       department: z.string().optional(),
       employmentType: z.string().optional(),
       location: z.string().optional(),
       jobTitle: z.string().optional(),
+      legalClauses: z.array(z.string()).optional(),
       addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -946,12 +954,14 @@ export const candidatesRouter = router({
     .input(z.object({
       id: z.string().uuid(),
       baseSalary: z.number().int().optional(),
+      variableComp: z.string().optional(),
       startDate: z.string().optional(),
       reportsTo: z.string().optional(),
       department: z.string().optional(),
       employmentType: z.string().optional(),
       location: z.string().optional(),
       jobTitle: z.string().optional(),
+      legalClauses: z.array(z.string()).optional(),
       addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {

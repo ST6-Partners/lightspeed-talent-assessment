@@ -833,7 +833,8 @@ function TimelineAlerts() {
 
 function OfferSection({ candidateId, onChanged }: { candidateId: string; onChanged?: () => void }) {
   const defaults = trpc.candidates.offerDefaults.useQuery({ id: candidateId });
-  const [f, setF] = useState({ baseSalary: '', startDate: '', reportsTo: '', department: '', employmentType: 'Full-Time', location: '' });
+  const [f, setF] = useState({ jobTitle: '', baseSalary: '', variableComp: '', startDate: '', reportsTo: '', department: '', employmentType: 'Full-Time', location: '' });
+  const [clauses, setClauses] = useState<string[]>([]);
   const [addendum, setAddendum] = useState<{ title: string; body: string }[]>([]);
   const [html, setHtml] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -843,24 +844,30 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
     const d = defaults.data;
     if (!d) return;
     setF({
+      jobTitle: d.jobTitle ?? '',
       baseSalary: d.suggestedSalary != null ? String(d.suggestedSalary) : '',
+      variableComp: (d as any).variableComp ?? '',
       startDate: d.targetStartDate ?? '',
       reportsTo: d.reportsTo ?? '',
       department: d.department ?? '',
       employmentType: d.employmentType ?? 'Full-Time',
       location: d.location ?? '',
     });
+    setClauses((d as any).standardClauses ?? []);
   }, [defaults.data]);
 
   const d = defaults.data;
   const payload = () => ({
     id: candidateId,
+    jobTitle: f.jobTitle || undefined,
     baseSalary: f.baseSalary.trim() ? parseInt(f.baseSalary.replace(/[^0-9]/g, '')) : undefined,
+    variableComp: f.variableComp || undefined,
     startDate: f.startDate || undefined,
     reportsTo: f.reportsTo || undefined,
     department: f.department || undefined,
     employmentType: f.employmentType || undefined,
     location: f.location || undefined,
+    legalClauses: clauses.length ? clauses : undefined,
     addendum: addendum.filter((a) => a.title.trim() || a.body.trim()),
   });
 
@@ -883,7 +890,7 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
   return (
     <Section title="Offer Letter (external)">
       <div className="text-xs text-gray-500">
-        Prefilled from the approved intake. Confirm the <strong>salary</strong> (within the approved band) and the <strong>start date</strong>; everything else comes from the requisition. Custom items go on an addendum. Generated from a fixed template — not AI.
+        Prefilled from the approved intake. Prefilled from the approved intake (title, comp, manager, department, location, dates). Every field and the standard legal language below are editable, so you can fix any mistake before sending. Custom items go on an addendum. Generated from a fixed template — not AI.
       </div>
 
       {/* Confirm fields (candidate-specific) */}
@@ -897,21 +904,33 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
             className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
         </div>
         {field('Start date', 'startDate', 'August 4, 2025')}
+        {field('Variable compensation (bonus / commission / equity)', 'variableComp', 'e.g. 15% target bonus')}
       </div>
 
       {/* From intake (prefilled, editable to override) */}
       <div className="pt-1">
         <div className="text-xs font-medium text-gray-500 mb-1">From intake (edit only to override)</div>
         <div className="grid grid-cols-2 gap-2">
-          <div>
-            <div className="text-xs text-gray-500 mb-0.5">Position</div>
-            <input value={d?.jobTitle ?? ''} disabled className="w-full px-2 py-1 border border-gray-200 bg-gray-50 rounded text-xs text-gray-600" />
-          </div>
+          {field('Position', 'jobTitle')}
           {field('Reports to', 'reportsTo')}
           {field('Department', 'department')}
           {field('Employment type', 'employmentType')}
           {field('Location', 'location')}
         </div>
+      </div>
+
+      {/* Editable standard legal language (shows red in the preview = needs counsel review). */}
+      <div className="pt-1">
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-xs font-medium text-gray-500">Legal language (standard — edit to fix mistakes)</div>
+          <button type="button" onClick={() => setClauses((d as any)?.standardClauses ?? [])}
+            className="text-xs text-gray-400 hover:text-ls-primary">Reset to standard</button>
+        </div>
+        {clauses.map((c, i) => (
+          <textarea key={i} value={c} rows={2}
+            onChange={(e) => setClauses(clauses.map((x, j) => j === i ? e.target.value : x))}
+            className="w-full mb-1 px-2 py-1 border border-gray-300 rounded text-xs" />
+        ))}
       </div>
 
       <div className="pt-1">

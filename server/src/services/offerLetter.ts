@@ -28,10 +28,29 @@ export interface OfferLetterInput {
   reportsTo?: string | null;
   employmentType?: string | null;
   baseSalary?: number | null;
+  variableComp?: string | null;   // bonus / commission / equity - free text from intake
   startDate?: string | null;
   location?: string | null;
+  // Editable body paragraphs (the standard legal language). If omitted, the
+  // STANDARD_OFFER_CLAUSES defaults below are used. HR can edit any paragraph
+  // to fix a mistake before sending; all clauses still render in red for counsel.
+  legalClauses?: string[];
   addendum?: OfferAddendumItem[];
 }
+
+// The standard "usual" legal language for an external offer. Deterministic
+// stock text - NOT AI-generated - so wording can't drift or hallucinate. This
+// is placeholder language that MUST be reviewed by counsel before use. HR can
+// edit any of these in the app (Offer Letter section) to fix a mistake, and
+// reset back to this standard set.
+export const STANDARD_OFFER_CLAUSES: string[] = [
+  'This offer of employment is contingent upon your ability to provide documentation establishing your identity and authorization to work, and upon the successful completion of any pre-employment checks required for the role, which may include reference checks and a background check to the extent permitted by applicable law.',
+  'Your employment with Lightspeed Systems is <strong>at will</strong>, meaning that either you or the company may end the employment relationship at any time, with or without cause or notice. This letter is not a contract of employment for any specific duration.',
+  'As a condition of employment, you will be asked to sign the company\u2019s standard confidentiality, proprietary information, and invention-assignment agreement, and to comply with all company policies as they may be adopted or amended from time to time.',
+  'You will be eligible to participate in the company\u2019s standard benefit programs, and in any equity or incentive plans referenced above, in accordance with the applicable plan terms and eligibility requirements, which may be amended from time to time. Paid time off accrues in accordance with company policy.',
+  'This letter, together with any addendum and the agreements referenced above, constitutes the entire agreement regarding your employment and supersedes any prior discussions or representations. It is governed by the laws of the state in which you are employed.',
+  'To accept this offer, please sign and return this letter. This offer will remain open for five (5) business days from the date above.',
+]
 
 const RED = 'color:#dc2626;';
 
@@ -74,9 +93,17 @@ export function renderOfferLetter(input: OfferLetterInput): string {
     input.reportsTo ? row('Reports to', esc(input.reportsTo)) : '',
     row('Employment type', esc(input.employmentType || 'Full-Time')),
     row('Base salary', money(input.baseSalary) + ' per year'),
+    input.variableComp ? row('Variable compensation', esc(input.variableComp)) : '',
     row('Start date', startVal),
     input.location ? row('Location', esc(input.location)) : '',
   ].filter(Boolean).join('');
+
+  // Editable standard legal paragraphs (red = sample / counsel review). HR can
+  // override any paragraph; falls back to the standard set.
+  const clauses = (input.legalClauses && input.legalClauses.length) ? input.legalClauses : STANDARD_OFFER_CLAUSES;
+  const legalHtml = clauses
+    .map((c) => `<p style="font-size:14px;line-height:1.6;">${sample(c)}</p>`)
+    .join('\n\n    ');
 
   const addendumHtml = (input.addendum && input.addendum.length)
     ? input.addendum.map((a, i) => `
@@ -103,13 +130,7 @@ export function renderOfferLetter(input: OfferLetterInput): string {
 
     <table style="border-collapse:collapse;margin:8px 0 20px;">${details}</table>
 
-    <p style="font-size:14px;line-height:1.6;">${sample('This offer of employment is contingent upon your ability to provide documentation establishing your identity and authorization to work, and upon the successful completion of any pre-employment checks required for the role.')}</p>
-
-    <p style="font-size:14px;line-height:1.6;">${sample('Your employment with Lightspeed Systems is <strong>at will</strong>, meaning that either you or the company may end the employment relationship at any time, with or without cause or notice. This letter is not a contract of employment for any specific duration.')}</p>
-
-    <p style="font-size:14px;line-height:1.6;">${sample("You will be eligible to participate in the company's standard benefit programs in accordance with the applicable plan terms, which may be amended from time to time.")}</p>
-
-    <p style="font-size:14px;line-height:1.6;">${sample('To accept this offer, please sign and return this letter. This offer will remain open for five (5) business days from the date above.')}</p>
+    ${legalHtml}
 
     <p style="font-size:15px;line-height:1.6;margin-top:20px;">We look forward to welcoming you to the team.</p>
 
