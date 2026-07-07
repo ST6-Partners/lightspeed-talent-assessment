@@ -108,7 +108,7 @@ Return ONLY the JSON array, no other text.`;
 Candidate: ${input.firstName} ${input.lastName}
 Role: ${input.jobTitle ?? 'Unknown'}
 
-CCAT (cognitive) score: ${input.ccatScore ?? 'N/A'}
+CCAT (cognitive) score: ${input.ccatScore != null ? `${input.ccatScore} out of 50` : 'N/A'} (raw number of correct answers out of 50 questions — higher is stronger; e.g. 46/50 is high, ~25/50 is middling, under ~18/50 is weak)
 
 EPP personality profile (percentiles 0-100 vs norm):
 ${(input.eppTraits && input.eppTraits.length)
@@ -177,7 +177,7 @@ Lightspeed's core values: ${LIGHTSPEED_VALUES.join(', ')}.`;
   const user = `Analyze this interview for ${input.firstName} ${input.lastName}, applying for ${input.jobTitle ?? 'Unknown'}.
 
 Prior scores:
-- CCAT: ${input.ccatScore ?? 'N/A'}
+- CCAT: ${input.ccatScore != null ? `${input.ccatScore}/50` : 'N/A'} (raw correct out of 50 questions; higher is stronger)
 - EPP Values Match: ${input.eppValuesMatchScore ?? 'N/A'}%
 - Work Sample: ${input.workSampleScore ?? 'N/A'}
 - Resume Review: ${input.resumeReviewScore ?? 'N/A'}
