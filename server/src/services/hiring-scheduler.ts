@@ -16,6 +16,7 @@ import { registerJob, type JobResult } from './job-runner.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { getInternalReportConfig, composeInternalReport } from './internalReport.js';
 import { sendEmail, emailBookingReminderCandidate, emailBookingStalledHR } from './email.js';
+import { computeHiringAlerts, renderAlertDigest } from './hiring-alerts.js';
 
 function schedAppBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -306,6 +307,29 @@ async function runInterviewBookingReminder({ force = false }: { force?: boolean 
   return { affected: nudged + flagged, details: `Nudged ${nudged} candidate(s); flagged ${flagged} to HR.${skipped.length ? ` Skipped ${skipped.length}.` : ''}` };
 }
 
+// ── Job: daily hiring timeline alerts (flowchart node X) ──
+async function runTimelineAlerts(): Promise<JobResult> {
+  const alerts = await computeHiringAlerts(db);
+  const total = alerts.stalledCandidates.length + alerts.overdueReqs.length;
+  if (total === 0) {
+    return { affected: 0, details: 'No timeline alerts — all candidates within stage SLA and all reqs within timeline.' };
+  }
+
+  const to = process.env.HR_EMAIL || process.env.EMAIL_FROM || 'hr@lightspeedsystems.com';
+  const subject = `Hiring timeline alerts — ${alerts.stalledCandidates.length} stalled candidate(s), ${alerts.overdueReqs.length} overdue req(s)`;
+  const html = renderAlertDigest(alerts);
+
+  try {
+    await sendEmail({ to, subject, html, templateId: 'timeline_alerts' });
+    await db.insert(inboundEmails).values({
+      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
+      toEmail: to, subject, body: html, replyTag: 'timeline_alerts', source: 'simulated', raw: { kind: 'timeline_alerts' },
+    });
+  } catch (err) { console.error('[timeline-alerts] send failed:', err); }
+
+  return { affected: total, details: `${alerts.stalledCandidates.length} stalled candidate(s), ${alerts.overdueReqs.length} overdue req(s) — digest emailed to ${to}.` };
+}
+
 export function registerHiringJobs(): void {
   registerJob({
     name:           'assessment-reminder',
@@ -343,5 +367,14 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '10 9 * * *',  // 9:10 AM daily
     handler:        runInterviewBookingReminder,
+  });
+  registerJob({
+    name:           'hiring-timeline-alerts',
+    label:          'Hiring Timeline Alerts',
+    description:    'Daily scan for candidates sitting too long in a stage and requisitions past their timeline; emails HR a digest when anything is flagged.',
+    color:          '#38bdf8',
+    jobType:        'cron',
+    cronExpression: '15 9 * * *',  // 9:15 AM daily (after reminder + auto-reject + booking reminder)
+    handler:        runTimelineAlerts,
   });
 }

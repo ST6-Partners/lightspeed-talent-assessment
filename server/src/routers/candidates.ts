@@ -32,6 +32,7 @@ import { renderOfferLetter, renderInternalOfferLetter, type OfferLetterInput, ty
 import { createOfferEnvelope } from '../services/docusign.js';
 import { composeInternalReport, getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
+import { computeHiringAlerts } from '../services/hiring-alerts.js';
 
 const STAGES = [
   'Applied',
@@ -158,6 +159,13 @@ async function buildInternalOfferInput(db: any, input: any): Promise<InternalOff
 }
 
 export const candidatesRouter = router({
+  // Timeline / SLA alerts (flowchart node X): stalled candidates + overdue reqs.
+  // Computed on the fly — no stored state.
+  timelineAlerts: protectedProcedure
+    .query(async ({ ctx }) => {
+      return computeHiringAlerts(ctx.db);
+    }),
+
   list: protectedProcedure
     .input(z.object({
       jdId: z.string().uuid().optional(),

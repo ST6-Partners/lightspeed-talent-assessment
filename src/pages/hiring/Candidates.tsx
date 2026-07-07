@@ -105,6 +105,8 @@ export default function Candidates() {
           </button>
         </div>
 
+        <TimelineAlerts />
+
         {/* Stage filter */}
         <div className="flex gap-2 mb-4 flex-wrap">
           <button
@@ -780,6 +782,46 @@ function ReferenceCheckSection({ candidateId, existingNotes, onChanged }: { cand
         <div className="text-xs text-gray-600 whitespace-pre-wrap mt-1">{existingNotes}</div>
       )}
     </Section>
+  );
+}
+
+function TimelineAlerts() {
+  const q = trpc.candidates.timelineAlerts.useQuery(undefined, { refetchInterval: 60000 });
+  const a = q.data;
+  if (!a) return null;
+  const total = a.stalledCandidates.length + a.overdueReqs.length;
+  if (total === 0) return null;
+  return (
+    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-sm font-semibold text-amber-800">Timeline alerts</span>
+        <span className="text-xs text-amber-700">{a.stalledCandidates.length} stalled candidate{a.stalledCandidates.length === 1 ? '' : 's'} · {a.overdueReqs.length} overdue req{a.overdueReqs.length === 1 ? '' : 's'}</span>
+      </div>
+      {a.stalledCandidates.length > 0 && (
+        <div className="mb-2">
+          <div className="text-xs font-medium text-amber-800 mb-1">Sitting too long in stage</div>
+          <ul className="space-y-0.5">
+            {a.stalledCandidates.map((s: any) => (
+              <li key={s.candidateId} className="text-xs text-gray-700">
+                <span className="font-medium">{s.name}</span>{s.jobTitle ? ` · ${s.jobTitle}` : ''} · {s.stage} · <span className="text-amber-700 font-semibold">{s.daysInStage}d</span> <span className="text-gray-400">(SLA {s.slaDays}d)</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {a.overdueReqs.length > 0 && (
+        <div>
+          <div className="text-xs font-medium text-amber-800 mb-1">Requisitions past timeline — reassess JD / sourcing / comp</div>
+          <ul className="space-y-0.5">
+            {a.overdueReqs.map((r: any) => (
+              <li key={r.reqId} className="text-xs text-gray-700">
+                <span className="font-medium">{r.department}</span> · {r.hiringManager} · <span className="text-amber-700 font-semibold">{r.daysOpen}d open</span> · {r.reasons.join('; ')}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
