@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, X, ChevronRight, Ban, ChevronDown } from 'lucide-react';
+import { Plus, X, ChevronRight, Ban, ChevronDown, Trash2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const STAGES = [
@@ -28,6 +28,7 @@ export default function Candidates() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showRejected, setShowRejected] = useState(false);
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     jdId: '', firstName: '', lastName: '', email: '',
@@ -60,6 +61,14 @@ export default function Candidates() {
   const workSampleReviewMutation = trpc.workSample.setReview.useMutation({
     onSuccess: () => refetch(),
   });
+  const deleteMutation = trpc.candidates.delete.useMutation({
+    onSuccess: () => { refetch(); setSelectedId(null); },
+  });
+  const doDelete = (id: string, name: string) => {
+    if (window.confirm(`Delete ${name}? This permanently removes the candidate and their data. (Build tool)`)) {
+      deleteMutation.mutate({ id });
+    }
+  };
 
   const resetForm = () => setForm({
     jdId: '', firstName: '', lastName: '', email: '',
@@ -287,7 +296,7 @@ export default function Candidates() {
                 </tr>
               </thead>
               <tbody>
-                {candidates.filter((c: any) => internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal)).map((c) => {
+                {candidates.filter((c: any) => (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal)) && c.currentStage !== 'Rejected').map((c) => {
                   const nextStage = getNextStage(c.currentStage as Stage);
                   return (
                     <tr
@@ -332,6 +341,14 @@ export default function Candidates() {
                               <Ban size={15} />
                             </button>
                           )}
+                          <button
+                            onClick={() => doDelete(c.id, `${c.firstName} ${c.lastName}`)}
+                            disabled={deleteMutation.isLoading}
+                            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                            title="Delete (build tool)"
+                          >
+                            <Trash2 size={15} />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -341,6 +358,45 @@ export default function Candidates() {
             </table>
           )}
         </div>
+
+        {/* Rejected candidates — collapsed, out of the main pipeline */}
+        {(candidates ?? []).filter((c: any) => c.currentStage === 'Rejected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).length > 0 && (
+          <div className="mt-6">
+            <button
+              onClick={() => setShowRejected(!showRejected)}
+              className="flex items-center gap-2 text-sm font-medium text-gray-500 mb-2 hover:text-gray-700"
+            >
+              <ChevronDown size={16} className={showRejected ? '' : '-rotate-90'} />
+              Rejected ({(candidates ?? []).filter((c: any) => c.currentStage === 'Rejected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).length})
+            </button>
+            {showRejected && (
+              <div className="bg-white rounded-lg border border-gray-200">
+                <table className="w-full">
+                  <tbody>
+                    {(candidates ?? []).filter((c: any) => c.currentStage === 'Rejected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).map((c: any) => (
+                      <tr key={c.id} className="border-b border-gray-50 text-sm">
+                        <td className="px-4 py-2 font-medium text-gray-700">{c.firstName} {c.lastName}</td>
+                        <td className="px-4 py-2 text-gray-400 text-xs">{c.email}</td>
+                        <td className="px-4 py-2 text-gray-400 text-xs">{getJdTitle(c.jdId ?? null)}</td>
+                        <td className="px-4 py-2 text-gray-400 text-xs">{c.rejectionReason ?? ''}</td>
+                        <td className="px-4 py-2 text-right">
+                          <button
+                            onClick={() => doDelete(c.id, `${c.firstName} ${c.lastName}`)}
+                            disabled={deleteMutation.isLoading}
+                            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                            title="Delete (build tool)"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Detail panel */}

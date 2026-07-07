@@ -344,6 +344,19 @@ export const candidatesRouter = router({
       return candidate;
     }),
 
+  // Hard-delete a candidate (build/testing convenience). Child rows (EPP scores,
+  // stage history, references, value reviews, offer approvals) cascade on delete.
+  delete: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      await ctx.db.delete(candidates).where(eq(candidates.id, input.id));
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'delete');
+      trackActivity(ctx.db, ctx.user.id, 'delete_candidate', 'candidates', { candidateId: input.id }).catch(() => {});
+      return { id: input.id };
+    }),
+
   update: protectedProcedure
     .input(z.object({ id: z.string().uuid() }).merge(CandidateInput.partial()).extend({
       ccatScore: z.number().int().optional(),
