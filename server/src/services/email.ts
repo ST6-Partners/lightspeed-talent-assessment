@@ -967,3 +967,17 @@ export async function emailInterviewerReport(data: {
     `),
   });
 }
+
+export async function emailInternalApplicantHR(data: { firstName: string; lastName: string; email: string; jobTitle?: string; currentRole?: string | null }) {
+  const who = `${data.firstName} ${data.lastName}`;
+  await sendEmail({
+    to: HR_EMAIL,
+    templateId: 'internal_applicant_hr',
+    subject: `Internal applicant: ${who} — ${data.jobTitle ?? 'a role'}`,
+    html: wrap(`
+      ${h1('An internal employee expressed interest')}
+      ${p(`<strong>${who}</strong>${data.currentRole ? ` (currently ${data.currentRole})` : ''} just expressed interest in <strong>${data.jobTitle ?? 'an open role'}</strong> through the internal posting.`)}
+      ${p('They’ve been added to the Internal Pipeline. <strong>Loop in their leadership chain up to ELT now</strong> so no one is caught off guard, and confirm their current manager is aware. You can set their leadership chain and notify it from the candidate’s record.')}
+    `),
+  });
+}

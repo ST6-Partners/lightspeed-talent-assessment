@@ -12,7 +12,7 @@ import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { employees } from '../db/schema/employees.js';
 import { inboundEmails } from '../db/schema/email.js';
-import { sendEmail, emailPostingOpenedExternal, HIRING_TEAM_INBOX } from '../services/email.js';
+import { sendEmail, emailPostingOpenedExternal, emailApplicationReceived, emailInternalApplicantHR, HIRING_TEAM_INBOX } from '../services/email.js';
 import { getPostingWindows, writeExternalOpenMarker } from '../services/posting.js';
 import { trackActivity } from '../services/telemetry.js';
 
@@ -125,6 +125,36 @@ export const internalOpeningsRouter = router({
         candidateId: candidate.id, fromStage: null, toStage: 'Applied', changedBy: null,
         reason: 'Internal application (expressed interest)',
       });
+
+      // Fire the sequence: acknowledge the applicant + flag HR (internal → loop in leadership chain).
+      const req = (jd as any).reqId ? await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, (jd as any).reqId) }) : null;
+      const jobTitle = jd.jobTitle;
+      const department = (req as any)?.department ?? null;
+
+      await emailApplicationReceived({ firstName, lastName, email: input.email, jobTitle }).catch(() => {});
+      await emailInternalApplicantHR({ firstName, lastName, email: input.email, jobTitle, currentRole: input.currentRole ?? null }).catch(() => {});
+
+      // Test-inbox copies so the sequence is verifiable.
+      try {
+        await ctx.db.insert(inboundEmails).values([
+          {
+            fromEmail: process.env.EMAIL_FROM ?? 'careers@lightspeedsystems.com', fromName: 'Lightspeed Careers',
+            toEmail: input.email, subject: `We received your application — ${jobTitle}`,
+            body: `Thanks for your interest in ${jobTitle}. Our team will be in touch.`,
+            replyTag: 'application_received', source: 'simulated',
+            raw: { kind: 'internal_application_ack', candidateId: candidate.id },
+          },
+          {
+            fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
+            toEmail: process.env.HR_EMAIL ?? 'hr@lightspeed.test', subject: `Internal applicant: ${firstName} ${lastName} — ${jobTitle}`,
+            body: `${firstName} ${lastName}${input.currentRole ? ` (currently ${input.currentRole})` : ''} expressed interest in ${jobTitle}${department ? ` (${department})` : ''}. Added to the Internal Pipeline — loop in their leadership chain up to ELT.`,
+            replyTag: 'internal_applicant_hr', source: 'simulated',
+            raw: { kind: 'internal_applicant_hr', candidateId: candidate.id },
+          },
+        ] as any);
+      } catch (err) { console.error('[applyInternal] inbox record failed:', err); }
+
+      trackActivity(ctx.db, null as any, 'express_interest_internal', 'candidates', { candidateId: candidate.id, jdId: input.jdId }).catch(() => {});
       return { ok: true };
     }),
 });
