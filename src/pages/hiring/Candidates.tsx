@@ -281,6 +281,7 @@ export default function Candidates() {
                   <th className="px-4 py-3">Stage</th>
                   <th className="px-4 py-3">CCAT</th>
                   <th className="px-4 py-3">EPP Match</th>
+                  <th className="px-4 py-3">Values Match</th>
                   <th className="px-4 py-3">Applied</th>
                   <th className="px-4 py-3 w-24">Actions</th>
                 </tr>
@@ -305,6 +306,9 @@ export default function Candidates() {
                       <td className="px-4 py-3 text-gray-500">{c.ccatScore ?? '—'}</td>
                       <td className="px-4 py-3 text-gray-500">
                         {c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500">
+                        {(c as any).companyValuesMatchScore != null ? `${(c as any).companyValuesMatchScore}%` : '—'}
                       </td>
                       <td className="px-4 py-3 text-gray-400">{new Date(c.createdAt).toLocaleDateString()}</td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -361,6 +365,7 @@ export default function Candidates() {
             {[
               { label: 'CCAT Score', value: selected.ccatScore },
               { label: 'EPP Match', value: selected.eppValuesMatchScore != null ? `${selected.eppValuesMatchScore}%` : null },
+              { label: 'Values Match', value: (selected as any).companyValuesMatchScore != null ? `${(selected as any).companyValuesMatchScore}%` : null },
               { label: 'Work Sample', value: selected.workSampleScore },
               { label: 'Resume Review', value: selected.resumeReviewScore },
               { label: 'Reference Check', value: selected.referenceCheckScore },
