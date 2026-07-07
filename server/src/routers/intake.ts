@@ -599,7 +599,7 @@ export const intakeRouter = router({
       const target = (await ctx.db.select().from(approvals).where(eq(approvals.id, input.token)))[0];
       if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'This approval link is invalid.' });
       await ctx.db.update(approvals).set({ status: 'rejected', approverRef: 'via approval link', note: input.note, actedAt: new Date() }).where(eq(approvals.id, target.id));
-      await ctx.db.update(jobRequisitions).set({ status: 'Draft', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
+      await ctx.db.update(jobRequisitions).set({ status: 'Rejected', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
       await notifyIntakeRejected(ctx.db, target.reqId, target.approverRole, input.note);
       return { ok: true as const, roleLabel: target.approverRole };
     }),
@@ -654,10 +654,42 @@ export const intakeRouter = router({
       await ctx.db.update(approvals)
         .set({ status: 'rejected', approverRef: ctx.user.id, note: input.note, actedAt: new Date() })
         .where(eq(approvals.id, target.id));
-      await ctx.db.update(jobRequisitions).set({ status: 'Draft', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
+      await ctx.db.update(jobRequisitions).set({ status: 'Rejected', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
       await notifyIntakeRejected(ctx.db, input.reqId, target.approverRole, input.note);
       await auditChange(ctx.db, ctx.user.id, input.reqId, 'job_requisitions', 'update');
       trackActivity(ctx.db, ctx.user.id, 'reject_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch(() => {});
       return { id: input.reqId };
+    }),
+
+  // Send back for EDITS (not a rejection): records a note, marks the step
+  // "changes_requested", and sets the intake to "Changes Requested" so it can be
+  // revised and re-submitted — without showing as Rejected in the status column.
+  sendBack: protectedProcedure
+    .input(z.object({ reqId: z.string().uuid(), step: z.number().int(), note: z.string().min(1, 'A note is required to send back for edits.') }))
+    .mutation(async ({ ctx, input }) => {
+      const rows = await ctx.db.select().from(approvals).where(eq(approvals.reqId, input.reqId)).orderBy(asc(approvals.step));
+      const target = rows.find((r) => r.step === input.step);
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND' });
+      await ctx.db.update(approvals)
+        .set({ status: 'changes_requested', approverRef: ctx.user.id, note: input.note, actedAt: new Date() })
+        .where(eq(approvals.id, target.id));
+      await ctx.db.update(jobRequisitions).set({ status: 'Changes Requested', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
+      await notifyIntakeRejected(ctx.db, input.reqId, target.approverRole, `Sent back for edits: ${input.note}`);
+      await auditChange(ctx.db, ctx.user.id, input.reqId, 'job_requisitions', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'send_back_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch(() => {});
+      return { id: input.reqId };
+    }),
+
+  sendBackViaToken: publicProcedure
+    .input(z.object({ token: z.string().uuid(), note: z.string().min(1, 'A note is required to send back for edits.') }))
+    .mutation(async ({ ctx, input }) => {
+      const target = (await ctx.db.select().from(approvals).where(eq(approvals.id, input.token)))[0];
+      if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'This approval link is invalid.' });
+      await ctx.db.update(approvals)
+        .set({ status: 'changes_requested', approverRef: 'via approval link', note: input.note, actedAt: new Date() })
+        .where(eq(approvals.id, target.id));
+      await ctx.db.update(jobRequisitions).set({ status: 'Changes Requested', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
+      await notifyIntakeRejected(ctx.db, target.reqId, target.approverRole, `Sent back for edits: ${input.note}`);
+      return { ok: true as const, roleLabel: target.approverRole };
     }),
 });

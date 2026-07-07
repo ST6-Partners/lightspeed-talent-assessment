@@ -7,6 +7,8 @@ const STATUS_COLORS: Record<string, string> = {
   'Pending Approval': 'bg-yellow-100 text-yellow-700',
   Approved: 'bg-blue-100 text-blue-700',
   Open: 'bg-green-100 text-green-700',
+  Rejected: 'bg-red-100 text-red-700',
+  'Changes Requested': 'bg-amber-100 text-amber-700',
   'On Hold': 'bg-orange-100 text-orange-700',
   Closed: 'bg-red-100 text-red-700',
 };
@@ -20,7 +22,7 @@ const REASONS = [
 ];
 const COMP_BASIS = [{ v: 'budget', l: 'Budget' }, { v: 'market', l: 'Market data' }, { v: 'philosophy', l: 'Pay philosophy' }];
 const ROLE_LABEL: Record<string, string> = { hiring_manager: 'Hiring Manager', elt: 'ELT Leader', finance: 'Finance', hr: 'HR' };
-const APPROVAL_BADGE: Record<string, string> = { pending: 'bg-gray-100 text-gray-500', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' };
+const APPROVAL_BADGE: Record<string, string> = { pending: 'bg-gray-100 text-gray-500', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700', changes_requested: 'bg-amber-100 text-amber-700' };
 
 interface Round { roundName: string; lengthMin?: number; format?: string; }
 interface Person { personRef: string; roleInProcess?: string; roundRef?: string; }
@@ -137,6 +139,10 @@ export default function Intake() {
     onSuccess: () => { refetchFull(); refetch(); setApprovalNote(''); setErr(null); },
     onError: (e) => setErr(e.message),
   });
+  const sendBackMutation = trpc.intake.sendBack.useMutation({
+    onSuccess: () => { refetchFull(); refetch(); setApprovalNote(''); setErr(null); },
+    onError: (e) => setErr(e.message),
+  });
 
   const buildPayload = () => ({
     ...(editingId ? { id: editingId } : {}),
@@ -207,12 +213,13 @@ export default function Intake() {
             const activeGroup = pendingRows.length ? Math.min(...pendingRows.map((r) => r.groupIdx ?? 0)) : -1;
             const activeRows = rows.filter((r) => r.status === 'pending' && (r.groupIdx ?? 0) === activeGroup);
             const rejected = rows.find((r) => r.status === 'rejected');
+            const changesRequested = rows.find((r) => r.status === 'changes_requested');
             return (
               <section className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold text-ls-primary">Approval chain</h3>
                   <span className="text-xs text-gray-500">
-                    {rejected ? 'Rejected — back to Draft' : activeRows.length ? `In approval · ${activeRows.length} awaiting${activeRows.length > 1 ? ' (concurrent)' : ''}` : 'Fully approved'}
+                    {rejected ? 'Rejected' : changesRequested ? 'Changes requested — awaiting edits' : activeRows.length ? `In approval · ${activeRows.length} awaiting${activeRows.length > 1 ? ' (concurrent)' : ''}` : 'Fully approved'}
                   </span>
                 </div>
                 <div className="space-y-1.5">
@@ -229,7 +236,7 @@ export default function Intake() {
                 {activeRows.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-200">
                     {activeRows.length > 1 && <p className="text-xs text-gray-500 mb-2">These {activeRows.length} approvals are concurrent — approve in any order; the chain advances once all have signed off.</p>}
-                    <label className={lbl}>Note (required to reject, optional to approve)</label>
+                    <label className={lbl}>Note (required to reject or send back, optional to approve)</label>
                     <input value={approvalNote} onChange={(e) => setApprovalNote(e.target.value)} placeholder="Add a note..." className={inp} />
                     <div className="space-y-2 mt-2">
                       {activeRows.map((a) => (
@@ -242,8 +249,15 @@ export default function Intake() {
                             Approve — {a.approverRole}
                           </button>
                           <button
+                            onClick={() => { if (!approvalNote.trim()) { setErr('A note is required to send back for edits.'); return; } sendBackMutation.mutate({ reqId: editingId, step: a.step, note: approvalNote }); }}
+                            disabled={approveMutation.isLoading || rejectMutation.isLoading || sendBackMutation.isLoading}
+                            className="px-3 py-1.5 bg-white border border-amber-300 text-amber-700 rounded-md text-sm font-medium hover:bg-amber-50 disabled:opacity-50"
+                          >
+                            Send back for edits
+                          </button>
+                          <button
                             onClick={() => { if (!approvalNote.trim()) { setErr('A reason is required to reject.'); return; } rejectMutation.mutate({ reqId: editingId, step: a.step, note: approvalNote }); }}
-                            disabled={approveMutation.isLoading || rejectMutation.isLoading}
+                            disabled={approveMutation.isLoading || rejectMutation.isLoading || sendBackMutation.isLoading}
                             className="px-3 py-1.5 bg-white border border-red-300 text-red-600 rounded-md text-sm font-medium hover:bg-red-50 disabled:opacity-50"
                           >
                             Reject

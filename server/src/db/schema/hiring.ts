@@ -39,6 +39,8 @@ export const requisitionStatusEnum = pgEnum('requisition_status', [
   'Open',
   'On Hold',
   'Closed',
+  'Rejected',
+  'Changes Requested',
 ]);
 
 export const jdStatusEnum = pgEnum('jd_status', ['Draft', 'Published', 'Closed']);

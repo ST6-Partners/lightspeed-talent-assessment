@@ -13,16 +13,19 @@ const money = (n: any) => (n != null ? `$${Number(n).toLocaleString()}` : '—')
 export default function Approve() {
   const { token = '' } = useParams();
   const [note, setNote] = useState('');
-  const [done, setDone] = useState<null | { kind: 'approved' | 'rejected'; msg: string }>(null);
+  const [done, setDone] = useState<null | { kind: 'approved' | 'rejected' | 'sentback'; msg: string }>(null);
 
   const { data, isLoading, error, refetch } = trpc.intake.approvalView.useQuery({ token }, { enabled: !!token, retry: false });
   const approve = trpc.intake.approveViaToken.useMutation({
     onSuccess: (r: any) => setDone({ kind: 'approved', msg: r.fullyApproved ? 'Approved — this was the final approval, the intake is now fully approved.' : `Approved as ${r.roleLabel}. It now moves to the next approver.` }),
   });
   const reject = trpc.intake.rejectViaToken.useMutation({
-    onSuccess: () => setDone({ kind: 'rejected', msg: 'Rejected — the intake has been sent back to the hiring team as a draft.' }),
+    onSuccess: () => setDone({ kind: 'rejected', msg: 'Rejected — the intake is marked Rejected for the hiring team.' }),
   });
-  const err = approve.error?.message || reject.error?.message;
+  const sendBack = trpc.intake.sendBackViaToken.useMutation({
+    onSuccess: () => setDone({ kind: 'sentback', msg: 'Sent back for edits — the hiring team can revise and re-submit. This is not a rejection.' }),
+  });
+  const err = approve.error?.message || reject.error?.message || sendBack.error?.message;
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
     <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
@@ -45,8 +48,8 @@ export default function Approve() {
       <Shell>
         <div style={card}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
-            {done.kind === 'approved' ? <CheckCircle2 size={22} color="#15803d" /> : <XCircle size={22} color="#b91c1c" />}
-            <h2 style={{ margin: 0, fontSize: 18 }}>{done.kind === 'approved' ? 'Approval recorded' : 'Rejection recorded'}</h2>
+            {done.kind === 'approved' ? <CheckCircle2 size={22} color="#15803d" /> : done.kind === 'sentback' ? <CheckCircle2 size={22} color="#b45309" /> : <XCircle size={22} color="#b91c1c" />}
+            <h2 style={{ margin: 0, fontSize: 18 }}>{done.kind === 'approved' ? 'Approval recorded' : done.kind === 'sentback' ? 'Sent back for edits' : 'Rejection recorded'}</h2>
           </div>
           <p style={{ color: '#4b5563', fontSize: 14 }}>{done.msg}</p>
           <p style={{ color: '#9aa6b6', fontSize: 12 }}>You can close this window.</p>
@@ -110,7 +113,7 @@ export default function Approve() {
       <div style={card}>
         {data.isCurrentStep ? (
           <>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 6 }}>Note (required to reject, optional to approve)</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#4b5563', display: 'block', marginBottom: 6 }}>Note (required to reject or send back, optional to approve)</label>
             <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note…" style={{ width: '100%', padding: '9px 11px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, marginBottom: 10 }} />
             {err && <div style={{ color: '#b91c1c', fontSize: 13, marginBottom: 10 }}>{err}</div>}
             <div style={{ display: 'flex', gap: 10 }}>
@@ -120,8 +123,13 @@ export default function Approve() {
                 style={{ padding: '10px 20px', background: '#2b6cb0', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
               >{approve.isLoading ? 'Approving…' : `Approve as ${data.roleLabel}`}</button>
               <button
+                onClick={() => { if (!note.trim()) { alert('Please add a note describing the edits.'); return; } sendBack.mutate({ token, note }); }}
+                disabled={approve.isLoading || reject.isLoading || sendBack.isLoading}
+                style={{ padding: '10px 20px', background: '#fff', color: '#b45309', border: '1px solid #f0d3a8', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+              >Send back for edits</button>
+              <button
                 onClick={() => { if (!note.trim()) { reject.reset(); approve.reset(); setNote(note); alert('Please add a reason to reject.'); return; } reject.mutate({ token, note }); }}
-                disabled={approve.isLoading || reject.isLoading}
+                disabled={approve.isLoading || reject.isLoading || sendBack.isLoading}
                 style={{ padding: '10px 20px', background: '#fff', color: '#b91c1c', border: '1px solid #f3c9c9', borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
               >Reject</button>
             </div>
