@@ -160,6 +160,8 @@ export const candidates = pgTable('candidates', {
   screenRecommendation: text('screen_recommendation'),
   screenSummary: text('screen_summary'),
   screenedAt: timestamp('screened_at', { withTimezone: true }),
+  companyValuesMatchScore: integer('company_values_match_score'),
+  companyValuesNotes: text('company_values_notes'),
   // Assessment timing (for reminder + auto-reject scheduler)
   assessmentSentAt: timestamp('assessment_sent_at', { withTimezone: true }),
   assessmentCompletedAt: timestamp('assessment_completed_at', { withTimezone: true }),

@@ -562,7 +562,7 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged }: { ca
   const req = result?.requirements;
   const nice = result?.niceToHaves;
   const skills = result?.skills;
-  const values = result?.values;
+  const eppScans = result?.eppScans;
   const rec = result?.recommendation;
 
   return (
@@ -615,7 +615,8 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged }: { ca
           <div className="space-y-1.5 border border-gray-100 rounded p-2">
             <ScoreBar label="Requirements" score={req && req.totalCount ? Math.round((req.metCount / req.totalCount) * 100) : null} sub={req ? (req.totalCount ? `${req.metCount}/${req.totalCount} required met` : 'No required qualifications listed') : undefined} />
             <ScoreBar label="Skills fit" score={skills ? skills.score : null} sub={skills && skills.mode === 'keyword' ? 'Keyword fallback \u2014 advisory only' : undefined} />
-            <ScoreBar label="Values match" score={result.valuesScore ?? null} sub={values ? (values.error ? values.error : `threshold ${values.threshold}`) : 'No EPP profile on file yet'} />
+            <ScoreBar label="EPP match" score={result.eppMatch ?? null} sub={eppScans?.hasEpp ? `avg across ${eppScans.traitCount} EPP traits` : 'No EPP results on file yet'} />
+            <ScoreBar label="Company values match" score={result.companyValuesMatch ?? null} sub={eppScans?.hasEpp ? `across ${eppScans.scoredValues} company values` : 'No EPP results on file yet'} />
           </div>
 
           {req && req.requirements?.length > 0 && (

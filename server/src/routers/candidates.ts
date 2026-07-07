@@ -26,6 +26,7 @@ import {
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
 import { scoreSkillsFit } from '../services/ai.js';
+import { computeEppScans } from '../services/eppScans.js';
 import { runReferenceCheck } from '../services/ai.js';
 import { draftTransitionPlan } from '../services/ai.js';
 import { renderOfferLetter, renderInternalOfferLetter, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
@@ -628,16 +629,16 @@ export const candidatesRouter = router({
         preferredQualifications: preferred,
       });
 
-      // 3) Values / EPP match (graded) — only if an EPP profile is on file.
-      const requiredValues: string[] = Array.isArray((jd as any)?.eppValues) ? (jd as any).eppValues as string[] : [];
-      const values = candidate.eppProfile
-        ? analyzeEpp(candidate.eppProfile as Record<string, number>, requiredValues)
-        : null;
-      const valuesScore = values && values.score != null ? values.score : null;
+      // 3) EPP scans — two EPP-derived signals from the candidate's real
+      //    12-trait results: overall EPP match + company-values match.
+      const eppScans = await computeEppScans(ctx.db, input.id);
+      const eppMatch = eppScans.eppMatch;                     // overall EPP strength
+      const companyValuesMatch = eppScans.companyValuesMatch; // Lightspeed company-values fit
 
-      // Composite = average of available graded signals (skills + values).
+      // Composite = average of the role-fit signals available: skills fit +
+      // company-values match. (EPP match is shown but not folded into the gate.)
       const graded: number[] = [skills.score];
-      if (valuesScore != null) graded.push(valuesScore);
+      if (companyValuesMatch != null) graded.push(companyValuesMatch);
       const composite = Math.round(graded.reduce((a, b) => a + b, 0) / graded.length);
 
       // Trust the auto-decision only when the REAL AI produced both text signals.
@@ -669,7 +670,9 @@ export const candidatesRouter = router({
       const summaryParts = [
         requirements.summary,
         skills.summary,
-        values ? (values.error ? `Values match: ${values.error}.` : `Values match: ${valuesScore}/100 (threshold ${values.threshold}).`) : 'Values match: no EPP profile on file yet.',
+        eppScans.hasEpp
+          ? `EPP match: ${eppMatch}/100. Company-values match: ${companyValuesMatch}/100 (across ${eppScans.scoredValues} values).`
+          : 'EPP + company-values match: no EPP results on file yet.',
         `Combined screen score: ${composite}/100. Recommendation: ${decision}.`,
       ];
       if (niceToHaves.missing.length) summaryParts.push(`Nice-to-haves missing (FYI): ${niceToHaves.missing.join('; ')}.`);
@@ -681,7 +684,11 @@ export const candidatesRouter = router({
         resumeReviewNotes: requirements.summary + (niceToHaves.missing.length ? ` Nice-to-haves missing: ${niceToHaves.missing.join('; ')}.` : ''),
         skillsFitScore: skills.score,
         skillsFitNotes: skills.summary,
-        ...(valuesScore != null ? { eppValuesMatchScore: valuesScore } : {}),
+        ...(eppMatch != null ? { eppValuesMatchScore: eppMatch } : {}),
+        ...(companyValuesMatch != null ? { companyValuesMatchScore: companyValuesMatch } : {}),
+        companyValuesNotes: eppScans.hasEpp
+          ? `Company-values match ${companyValuesMatch}/100 across ${eppScans.scoredValues}/${eppScans.totalValues} values; EPP match ${eppMatch}/100 across ${eppScans.traitCount} traits.`
+          : 'No EPP results on file yet.',
         screenScore: composite,
         screenRecommendation: recommendation,
         screenSummary,
@@ -727,7 +734,8 @@ export const candidatesRouter = router({
 
       return {
         recommendation, decision, reason, movedToStage,
-        composite, requirements, niceToHaves, skills, values, valuesScore,
+        composite, requirements, niceToHaves, skills,
+        eppMatch, companyValuesMatch, eppScans,
         summary: screenSummary,
       };
     }),
