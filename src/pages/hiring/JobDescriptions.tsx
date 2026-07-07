@@ -50,8 +50,10 @@ export default function JobDescriptions() {
   const approveReviewMutation = trpc.jobDescriptions.approveReview.useMutation({
     onSuccess: () => refetch(),
   });
+  const [announceMsg, setAnnounceMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const announceMutation = trpc.internalOpenings.announceInternally.useMutation({
-    onSuccess: (r) => window.alert(`Announced internally to ${r.sent} employee(s). They can express interest from the email.`),
+    onSuccess: (r) => setAnnounceMsg({ ok: true, text: `Announced to ${r.sent} employee(s). They can express interest from the email (see it in Settings \u2192 Email Test).` }),
+    onError: (e) => setAnnounceMsg({ ok: false, text: `Couldn\u2019t announce: ${e.message}` }),
   });
   const deleteMutation = trpc.jobDescriptions.delete.useMutation({
     onSuccess: () => refetch(),
@@ -129,6 +131,13 @@ export default function JobDescriptions() {
           New Job Description
         </button>
       </div>
+
+      {announceMsg && (
+        <div className={`flex items-center justify-between px-4 py-2 mb-4 rounded-md text-sm ${announceMsg.ok ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+          <span>{announceMsg.text}</span>
+          <button onClick={() => setAnnounceMsg(null)} className="text-gray-400 hover:text-gray-600"><X size={15} /></button>
+        </div>
+      )}
 
       {showForm && (
         <div className="bg-white rounded-lg border border-gray-200 p-5 mb-6">
@@ -330,7 +339,7 @@ export default function JobDescriptions() {
                         </button>
                       )}
                       <button
-                        onClick={() => { if (window.confirm(`Announce "${jd.jobTitle}" internally to all employees?`)) announceMutation.mutate({ jdId: jd.id }); }}
+                        onClick={() => { setAnnounceMsg(null); announceMutation.mutate({ jdId: jd.id }); }}
                         disabled={announceMutation.isLoading}
                         className="p-1 text-gray-400 hover:text-purple-600 transition-colors"
                         title="Announce internally"
