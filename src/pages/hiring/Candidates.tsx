@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, ChevronRight, Ban, ChevronDown, Trash2 } from 'lucide-react';
+import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const STAGES = [
@@ -84,6 +84,11 @@ export default function Candidates() {
     internalEmployee: '',
   });
 
+  const getPrevStage = (current: Stage): Stage | null => {
+    const idx = STAGES.indexOf(current);
+    if (idx <= 0 || current === 'Rejected') return null;
+    return STAGES[idx - 1];
+  };
   const getNextStage = (current: Stage): Stage | null => {
     const idx = STAGES.indexOf(current);
     const next = STAGES[idx + 1];
@@ -328,6 +333,16 @@ export default function Candidates() {
                       <td className="px-4 py-3 text-gray-400">{new Date(c.createdAt).toLocaleDateString()}</td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-1">
+                          {getPrevStage(c.currentStage as Stage) && (
+                            <button
+                              onClick={() => advanceMutation.mutate({ id: c.id, toStage: getPrevStage(c.currentStage as Stage)! })}
+                              disabled={advanceMutation.isLoading}
+                              className="p-1 text-gray-400 hover:text-amber-600 transition-colors"
+                              title={`Move back to ${getPrevStage(c.currentStage as Stage)}`}
+                            >
+                              <ChevronLeft size={16} />
+                            </button>
+                          )}
                           {nextStage && (
                             <button
                               onClick={() => advanceMutation.mutate({ id: c.id, toStage: nextStage })}

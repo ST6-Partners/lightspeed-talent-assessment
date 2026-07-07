@@ -411,6 +411,11 @@ export const candidatesRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Candidate is already in that stage' });
       }
 
+      // Direction: forward = advancing to a later stage. Backward moves are a
+      // quiet correction (no emails, no re-running the assessment review).
+      const STAGE_SEQ = STAGES as readonly string[];
+      const fwd = STAGE_SEQ.indexOf(input.toStage) > STAGE_SEQ.indexOf(existing.currentStage);
+
       // Entering the Assessment stage -> the candidate's CCAT + EPP results land
       // (simulates Criteria returning scores). Resume was seeded at application.
       if (input.toStage === 'Assessment') {
@@ -420,7 +425,7 @@ export const candidatesRouter = router({
       // Advancing a candidate OUT of Assessment runs the automatic review (EPP +
       // company-values + resume gate) — the same decision the CCAT-completion path
       // makes — instead of a plain stage move. Needs a CCAT score (seeded on create).
-      if (existing.currentStage === 'Assessment' && existing.ccatScore != null) {
+      if (fwd && existing.currentStage === 'Assessment' && existing.ccatScore != null) {
         try {
           await applyAssessmentDecision(ctx.db, input.id);
         } catch (err) {
@@ -446,7 +451,8 @@ export const candidatesRouter = router({
         reason: input.reason,
       });
 
-      // Fire emails (non-blocking)
+      // Forward-only side effects: stage emails, work-sample link, interviewer questions.
+      if (fwd) {
       const jobTitle = await getJobTitle(ctx.db, existing.jdId);
       const jd = existing.jdId
         ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, existing.jdId) })
@@ -545,6 +551,8 @@ export const candidatesRouter = router({
           }
         })();
       }
+
+      } // end forward-only side effects
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'advance_stage', 'candidates', {
