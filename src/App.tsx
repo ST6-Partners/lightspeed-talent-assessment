@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom';
+import OfferApproval from './pages/OfferApproval';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import WorkSample from './pages/WorkSample';
@@ -34,6 +35,7 @@ export default function App() {
       <Route path="/book-interview/:token" element={<BookInterview />} />
       <Route path="/apply-internal/:jdId" element={<ApplyInternal />} />
       <Route path="/approve/:token" element={<Approve />} />
+      <Route path="/offer-approval/:token" element={<OfferApproval />} />
       <Route element={<Layout />}>
         {/* Landing → hiring overview */}
         <Route path="/" element={<HiringDashboard />} />

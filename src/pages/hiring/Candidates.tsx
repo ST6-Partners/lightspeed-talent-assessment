@@ -874,6 +874,8 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
   const preview = trpc.candidates.offerPreview.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(false); } });
   const send = trpc.candidates.sendOffer.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(true); onChanged?.(); } });
   const docusign = trpc.candidates.sendOfferViaDocuSign.useMutation({ onSuccess: () => onChanged?.() });
+  const approvalStatus = trpc.candidates.offerApprovalStatus.useQuery({ candidateId });
+  const requestApproval = trpc.candidates.requestOfferApproval.useMutation({ onSuccess: () => { approvalStatus.refetch(); onChanged?.(); } });
 
   const field = (label: string, key: keyof typeof f, placeholder = '') => (
     <div>
@@ -890,7 +892,7 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
   return (
     <Section title="Offer Letter (external)">
       <div className="text-xs text-gray-500">
-        Prefilled from the approved intake. Prefilled from the approved intake (title, comp, manager, department, location, dates). Every field and the standard legal language below are editable, so you can fix any mistake before sending. Custom items go on an addendum. Generated from a fixed template — not AI.
+        Prefilled from the approved intake. Prefilled from the approved intake (title, comp, manager, department, location, dates). Every field and the standard legal language below are editable, so you can fix any mistake before it goes for approval. It is sent to the hiring manager first, who signs off before the candidate is contacted. Custom items go on an addendum. Generated from a fixed template — not AI.
       </div>
 
       {/* Confirm fields (candidate-specific) */}
@@ -953,28 +955,21 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
       <div className="flex gap-2 pt-1">
         <button onClick={() => preview.mutate(payload())} disabled={preview.isLoading}
           className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50">
-          {preview.isLoading ? 'Rendering…' : 'Preview letter'}
+          {preview.isLoading ? 'Rendering...' : 'Preview letter'}
         </button>
-        <button onClick={() => send.mutate(payload())} disabled={send.isLoading}
+        <button onClick={() => requestApproval.mutate(payload())} disabled={requestApproval.isLoading}
           className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
-          {send.isLoading ? 'Sending…' : 'Send offer (email)'}
-        </button>
-        <button onClick={() => docusign.mutate(payload())} disabled={docusign.isLoading}
-          className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50">
-          {docusign.isLoading ? 'Sending…' : 'Send via DocuSign'}
+          {requestApproval.isLoading ? 'Sending...' : 'Send to hiring manager for approval'}
         </button>
       </div>
-      {docusign.data && (
-        <div className={`text-xs ${docusign.data.configured && !(docusign.data as any).error ? 'text-green-700' : 'text-amber-700'}`}>
-          {!docusign.data.configured
-            ? (docusign.data as any).message
-            : (docusign.data as any).error
-              ? `DocuSign error: ${(docusign.data as any).error}`
-              : `Sent for e-signature via DocuSign (envelope ${(docusign.data as any).envelopeId}). Candidate moved to Offered.`}
+      {approvalStatus.data && (
+        <div className={`text-xs mt-1 rounded p-2 border ${approvalStatus.data.status === 'approved' ? 'bg-green-50 border-green-200 text-green-800' : approvalStatus.data.status === 'sent_back' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
+          {approvalStatus.data.status === 'pending' && <>Sent to the hiring manager for approval{approvalStatus.data.managerName ? ` (${approvalStatus.data.managerName})` : ''}. The candidate has not been contacted yet - it is waiting in the test inbox for review and sign-off.</>}
+          {approvalStatus.data.status === 'approved' && <>Approved{approvalStatus.data.managerName ? ` by ${approvalStatus.data.managerName}` : ''} - the offer has been sent to the candidate.</>}
+          {approvalStatus.data.status === 'sent_back' && <>Sent back by the hiring manager{approvalStatus.data.managerNote ? `: "${approvalStatus.data.managerNote}"` : ''}. Fix the offer above and send for approval again.</>}
         </div>
       )}
 
-      {sent && <div className="text-xs text-green-700">Offer sent — candidate moved to Offered.</div>}
       {html && (
         <div className="mt-2 border border-gray-200 rounded bg-white max-h-96 overflow-y-auto">
           <div dangerouslySetInnerHTML={{ __html: html }} />

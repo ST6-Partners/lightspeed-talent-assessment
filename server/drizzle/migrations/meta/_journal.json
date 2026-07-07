@@ -253,6 +253,13 @@
       "when": 1960000006000,
       "tag": "0033_company_values_match",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1960000007000,
+      "tag": "0034_offer_approvals",
+      "breakpoints": true
     }
   ]
 }

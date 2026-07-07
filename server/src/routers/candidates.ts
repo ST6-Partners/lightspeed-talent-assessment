@@ -7,9 +7,10 @@ import { z } from 'zod';
 import { eq, desc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { randomUUID } from 'node:crypto';
-import { router, protectedProcedure } from '../trpc.js';
+import { router, protectedProcedure, publicProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions, emailLog, candidateReferences } from '../db/schema/hiring.js';
 import { inboundEmails } from '../db/schema/email.js';
+import { offerApprovals } from '../db/schema/offerApprovals.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { valueReviews, candidateValueScores, companyValues } from '../db/schema/values.js';
 import { auditChange } from '../services/audit.js';
@@ -160,6 +161,54 @@ async function buildInternalOfferInput(db: any, input: any): Promise<InternalOff
     },
     addendum: input.addendum ?? [],
   };
+}
+
+function escHtml(s: any): string {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Deliver a finalized external offer to the candidate: email + test-inbox copy
+// + advance to Offered + audit/activity. Shared by the direct send path and the
+// hiring-manager sign-off path so the two can't drift. `userId` is the acting
+// user (the recruiter); it may be null when triggered from a tokenized link.
+async function deliverOfferToCandidate(db: any, userId: string | null, candidate: any, offer: OfferLetterInput): Promise<{ html: string; jobTitle: string }> {
+  const jobTitle = offer.jobTitle;
+  const letterHtml = renderOfferLetter(offer);
+
+  await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle, letterHtml }).catch(() => {});
+
+  const offerSubject = `Your offer from Lightspeed Systems${jobTitle ? ` \u2014 ${jobTitle}` : ''}`;
+  try {
+    await db.insert(inboundEmails).values({
+      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+      fromName: 'Lightspeed Hiring',
+      toEmail: candidate.email,
+      subject: offerSubject,
+      body: letterHtml,
+      replyTag: 'offer',
+      source: 'simulated',
+      raw: { kind: 'offer_letter', candidateId: candidate.id },
+    });
+  } catch (err) {
+    console.error('[offer] inbox record failed:', err);
+  }
+
+  if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
+    await db.update(candidates).set({ currentStage: 'Offered', updatedAt: new Date() }).where(eq(candidates.id, candidate.id));
+    await db.insert(candidateStageHistory).values({
+      candidateId: candidate.id,
+      fromStage: candidate.currentStage,
+      toStage: 'Offered',
+      changedBy: userId,
+      reason: 'External offer letter sent',
+    });
+  }
+
+  if (userId) {
+    await auditChange(db, userId, candidate.id, 'candidates', 'update');
+    trackActivity(db, userId, 'send_offer', 'candidates', { candidateId: candidate.id }).catch(() => {});
+  }
+  return { html: letterHtml, jobTitle };
 }
 
 export const candidatesRouter = router({
@@ -904,47 +953,175 @@ export const candidatesRouter = router({
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
       const offer = await buildOfferInput(ctx.db, input);
-      const jobTitle = offer.jobTitle;
+      const { html } = await deliverOfferToCandidate(ctx.db, ctx.user.id, candidate, offer);
+      return { ok: true, html };
+    }),
+
+  // ---- OFFER APPROVAL GATE ------------------------------------------------
+  // The offer goes to the hiring manager for review/edit/sign-off BEFORE it
+  // reaches the candidate. requestOfferApproval drops it into the manager's
+  // test inbox with a tokenized review link; the manager acts via the public
+  // offerApproval* procedures below.
+
+  // Recruiter: send a drafted offer to the hiring manager for approval.
+  requestOfferApproval: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      baseSalary: z.number().int().optional(),
+      variableComp: z.string().optional(),
+      startDate: z.string().optional(),
+      reportsTo: z.string().optional(),
+      department: z.string().optional(),
+      employmentType: z.string().optional(),
+      location: z.string().optional(),
+      jobTitle: z.string().optional(),
+      legalClauses: z.array(z.string()).optional(),
+      addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const offer = await buildOfferInput(ctx.db, input);
+
+      const jd = candidate.jdId ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) }) : null;
+      const req = jd?.reqId ? await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) }) : null;
+      const managerName = (req as any)?.hiringManager ?? offer.reportsTo ?? 'Hiring Manager';
+      const managerEmail = process.env.HIRING_MANAGER_EMAIL ?? process.env.HR_EMAIL ?? 'hiring-manager@lightspeedsystems.com';
+
+      const [row] = await ctx.db.insert(offerApprovals).values({
+        candidateId: candidate.id,
+        payload: offer as any,
+        status: 'pending',
+        createdBy: ctx.user.id,
+      }).returning();
+
+      const candidateName = `${candidate.firstName} ${candidate.lastName}`.trim();
+      const roleLabel = offer.jobTitle || 'the role';
+      const approvalUrl = `/offer-approval/${row.id}`;
       const letterHtml = renderOfferLetter(offer);
-
-      // Email the letter (SendGrid).
-      await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle, letterHtml }).catch(() => {});
-
-      // Also drop a copy into the test inbox (Received messages), matching the
-      // intake-notification pattern — SendGrid send above, inbox copy here.
-      const offerSubject = `Your offer from Lightspeed Systems${jobTitle ? ` \u2014 ${jobTitle}` : ''}`;
+      const body = `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">`
+        + `<p><strong>${escHtml(candidateName)}</strong> has reached the offer stage for <strong>${escHtml(roleLabel)}</strong>. `
+        + `Please review the draft offer letter below, edit anything that needs fixing, then sign off to send it to the candidate — or send it back.</p>`
+        + `<p><a href="${approvalUrl}" style="display:inline-block;padding:8px 14px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Open, review &amp; sign off</a></p>`
+        + `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"/>`
+        + letterHtml + `</div>`;
       try {
         await ctx.db.insert(inboundEmails).values({
           fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
           fromName: 'Lightspeed Hiring',
-          toEmail: candidate.email,
-          subject: offerSubject,
-          body: letterHtml,
-          replyTag: 'offer',
+          toEmail: managerEmail,
+          subject: `Offer approval needed: ${candidateName} — ${roleLabel}`,
+          body,
+          replyTag: 'offer_approval',
           source: 'simulated',
-          raw: { kind: 'offer_letter', candidateId: input.id },
+          raw: { kind: 'offer_approval', approvalId: row.id, candidateId: candidate.id, approvalUrl },
         });
-      } catch (err) {
-        console.error('[offer] inbox record failed:', err);
+      } catch (err) { console.error('[offer-approval] inbox record failed:', err); }
+
+      trackActivity(ctx.db, ctx.user.id, 'request_offer_approval', 'candidates', { candidateId: candidate.id }).catch(() => {});
+      return { ok: true, approvalId: row.id, approvalUrl, managerName };
+    }),
+
+  // Recruiter: latest approval state for a candidate (drives the Offer section UI).
+  offerApprovalStatus: protectedProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [row] = await ctx.db.select().from(offerApprovals)
+        .where(eq(offerApprovals.candidateId, input.candidateId))
+        .orderBy(desc(offerApprovals.createdAt)).limit(1);
+      if (!row) return null;
+      return { id: row.id, status: row.status, managerName: row.managerName, managerNote: row.managerNote, decidedAt: row.decidedAt, sentToCandidateAt: row.sentToCandidateAt, createdAt: row.createdAt };
+    }),
+
+  // Public (tokenized): the manager's review view.
+  offerApprovalView: publicProcedure
+    .input(z.object({ token: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [row] = await ctx.db.select().from(offerApprovals).where(eq(offerApprovals.id, input.token)).limit(1);
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, row.candidateId) });
+      const payload = row.payload as OfferLetterInput;
+      return {
+        status: row.status,
+        candidateName: candidate ? `${candidate.firstName} ${candidate.lastName}`.trim() : '',
+        payload,
+        managerName: row.managerName,
+        managerNote: row.managerNote,
+        html: renderOfferLetter(payload),
+      };
+    }),
+
+  // Public (tokenized): save the manager's edits to the draft.
+  offerApprovalSaveEdits: publicProcedure
+    .input(z.object({
+      token: z.string().uuid(),
+      payload: z.object({
+        firstName: z.string(),
+        lastName: z.string(),
+        jobTitle: z.string(),
+        department: z.string().nullable().optional(),
+        reportsTo: z.string().nullable().optional(),
+        employmentType: z.string().nullable().optional(),
+        baseSalary: z.number().nullable().optional(),
+        variableComp: z.string().nullable().optional(),
+        startDate: z.string().nullable().optional(),
+        location: z.string().nullable().optional(),
+        legalClauses: z.array(z.string()).optional(),
+        addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
+      }),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const [row] = await ctx.db.select().from(offerApprovals).where(eq(offerApprovals.id, input.token)).limit(1);
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (row.status !== 'pending') throw new TRPCError({ code: 'BAD_REQUEST', message: 'This offer has already been decided.' });
+      await ctx.db.update(offerApprovals).set({ payload: input.payload as any, updatedAt: new Date() }).where(eq(offerApprovals.id, input.token));
+      return { ok: true, html: renderOfferLetter(input.payload as OfferLetterInput) };
+    }),
+
+  // Public (tokenized): the manager signs off (delivers to candidate) or sends back.
+  offerApprovalDecide: publicProcedure
+    .input(z.object({
+      token: z.string().uuid(),
+      action: z.enum(['approve', 'send_back']),
+      managerName: z.string().optional(),
+      note: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const [row] = await ctx.db.select().from(offerApprovals).where(eq(offerApprovals.id, input.token)).limit(1);
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (row.status !== 'pending') throw new TRPCError({ code: 'BAD_REQUEST', message: 'This offer has already been decided.' });
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, row.candidateId) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const payload = row.payload as OfferLetterInput;
+
+      if (input.action === 'approve') {
+        await deliverOfferToCandidate(ctx.db, row.createdBy ?? null, candidate, payload);
+        await ctx.db.update(offerApprovals)
+          .set({ status: 'approved', managerName: input.managerName ?? null, managerNote: input.note ?? null, decidedAt: new Date(), sentToCandidateAt: new Date(), updatedAt: new Date() })
+          .where(eq(offerApprovals.id, input.token));
+        return { ok: true, status: 'approved' as const };
       }
 
-      // Advance to Offered (skip if already there / terminal).
-      if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
-        await ctx.db.update(candidates)
-          .set({ currentStage: 'Offered', updatedAt: new Date() })
-          .where(eq(candidates.id, input.id));
-        await ctx.db.insert(candidateStageHistory).values({
-          candidateId: input.id,
-          fromStage: candidate.currentStage,
-          toStage: 'Offered',
-          changedBy: ctx.user.id,
-          reason: 'External offer letter sent',
+      // send_back: return to the recruiter/HR inbox with the reason; do not advance.
+      await ctx.db.update(offerApprovals)
+        .set({ status: 'sent_back', managerName: input.managerName ?? null, managerNote: input.note ?? null, decidedAt: new Date(), updatedAt: new Date() })
+        .where(eq(offerApprovals.id, input.token));
+      const candidateName = `${candidate.firstName} ${candidate.lastName}`.trim();
+      try {
+        await ctx.db.insert(inboundEmails).values({
+          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+          fromName: input.managerName ? `${input.managerName} (Hiring Manager)` : 'Hiring Manager',
+          toEmail: process.env.HR_EMAIL ?? process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+          subject: `Offer sent back: ${candidateName} — ${payload.jobTitle || 'the role'}`,
+          body: `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">`
+            + `<p>The draft offer for <strong>${escHtml(candidateName)}</strong> was sent back by the hiring manager and was <strong>not</strong> sent to the candidate.</p>`
+            + `<p><strong>Reason:</strong> ${escHtml(input.note ?? '(none given)')}</p></div>`,
+          replyTag: 'offer_approval',
+          source: 'simulated',
+          raw: { kind: 'offer_sent_back', approvalId: row.id, candidateId: candidate.id },
         });
-      }
-
-      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'send_offer', 'candidates', { candidateId: input.id }).catch(() => {});
-      return { ok: true, html: letterHtml };
+      } catch (err) { console.error('[offer-approval] send-back inbox failed:', err); }
+      return { ok: true, status: 'sent_back' as const };
     }),
 
   // Send the offer letter for e-signature via DocuSign. DocuSign emails the
