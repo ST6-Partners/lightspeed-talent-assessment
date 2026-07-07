@@ -129,19 +129,54 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
 
 // Email + test-inbox record: tell the hiring manager a NEW JD is waiting for their
 // review in the JD tab (fires for every different-JD / new-headcount approval).
-async function notifyJdReview(db: DrizzleClient, req: any, jdTitle?: string): Promise<void> {
+async function notifyJdReview(db: DrizzleClient, req: any, jdTitle: string | undefined, jdId: string): Promise<void> {
   const to = approverEmail('hiring manager');
+  const reviewUrl = `${appBaseUrl()}/jd-review/${jdId}`;
   const role = `${req.department}${jdTitle ? ' \u00b7 ' + jdTitle : ''}`;
-  const subject = `New JD to review: ${role}`;
-  const body = `A new job description for ${role} was generated from the approved intake and is waiting for your review. Open the Talent Assessment app \u2192 Job Descriptions, review the details, and approve it to clear the "NEW JD for review" flag.`;
+  const subject = `New JD to review & sign off: ${role}`;
+  const body = `A new job description for ${role} was generated from the approved intake and is waiting for your review. Open the Talent Assessment app \u2192 Job Descriptions, review the details, and approve it to clear the "NEW JD for review" flag. The role is NOT opened and no hiring kickoff is sent until you approve. Review & sign off: ${reviewUrl}`;
   try {
     await db.insert(inboundEmails).values({
       fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
       toEmail: to, subject, body, replyTag: 'jd_review', source: 'simulated',
-      raw: { kind: 'jd_review', reqId: req.id },
+      raw: { kind: 'jd_review', reqId: req.id, jdId, reviewUrl },
     });
   } catch (err) { console.error('[intake] jd-review inbox record failed:', err); }
-  try { await sendEmail({ to, subject, html: `<p>${body}</p>`, templateId: 'jd_review' }); } catch (err) { console.error('[intake] jd-review send failed:', err); }
+  const html = `<p>A new job description for <strong>${role}</strong> needs your review. <strong>The role is not opened and no hiring kickoff is sent until you approve.</strong></p><p><a href="${reviewUrl}" style="display:inline-block;padding:10px 18px;background:#15803d;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;">Review &amp; sign off</a></p><p style="font-size:12px;color:#888;">Or paste this link: ${reviewUrl}</p>`;
+  try { await sendEmail({ to, subject, html, templateId: 'jd_review' }); } catch (err) { console.error('[intake] jd-review send failed:', err); }
+}
+
+// Shared: open the role (status -> Open) and send the hiring kickoff. Fires
+// immediately for backfill (same JD); for new-JD reasons it fires only after the
+// hiring manager signs off on the JD.
+async function openRoleAndSendKickoff(db: DrizzleClient, req: any, jdTitle?: string): Promise<void> {
+  const qRow = (await db.select().from(interviewQuestions)
+    .where(eq(interviewQuestions.reqId, req.id))
+    .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0];
+  const questions = ((qRow?.questions as any[]) ?? []);
+  const externalPostDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  try {
+    await db.update(jobRequisitions).set({ status: 'Open', postedAt: new Date(), updatedAt: new Date() }).where(eq(jobRequisitions.id, req.id));
+  } catch (err) { console.error('[intake] posting (status Open) failed:', err); }
+  await sendKickoff(db, req, { jdTitle, questions, externalPostDate });
+}
+
+// Clear the "NEW JD for review" flag and, if the role was waiting on this JD, open
+// the role + send the kickoff. Shared by the tokenized email link and the in-app
+// button. Idempotent: a JD that is not pending review is left as-is (no duplicate
+// kickoff); the kickoff only fires while the requisition is still 'Approved'.
+export async function approveJdAndOpenRole(db: DrizzleClient, jdId: string): Promise<any | null> {
+  const jd = (await db.select().from(jobDescriptions).where(eq(jobDescriptions.id, jdId)))[0] ?? null;
+  if (!jd) return null;
+  if (!(jd as any).pendingReview) return jd;
+  const [updated] = await db.update(jobDescriptions)
+    .set({ pendingReview: false, updatedAt: new Date() })
+    .where(eq(jobDescriptions.id, jdId)).returning();
+  const req = jd.reqId ? await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) }) : null;
+  if (req && req.status === 'Approved') {
+    await openRoleAndSendKickoff(db, req, jd.jobTitle);
+  }
+  return updated;
 }
 
 // On final approval, the intake "reason" drives what happens to the JD:
@@ -176,6 +211,8 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
       questions = (prevQ?.questions as any[]) ?? standardQuestionSet(req.department);
       await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'reused' });
     } catch (err) { console.error('[intake] backfill question copy failed:', err); }
+    // Same JD is already approved -> open the role + send the kickoff immediately.
+    await openRoleAndSendKickoff(db, req, jdTitle);
   } else {
     // Different JD (replacement/termination) or brand-new role (new_headcount).
     // generateRoleJD never throws (internal fallback), so a JD is always produced;
@@ -187,12 +224,12 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
       changeNote: changeNote || null,
     });
     jdTitle = jd.jobTitle;
-    await db.insert(jobDescriptions).values({
+    const [newJd] = await db.insert(jobDescriptions).values({
       reqId: req.id, jobTitle: jd.jobTitle, summary: jd.summary,
       responsibilities: jd.responsibilities, requiredQualifications: jd.requiredQualifications,
       preferredQualifications: jd.preferredQualifications, eppValues: jd.eppValues,
       workSampleInstructions: jd.workSampleInstructions, status: 'Draft', pendingReview: true,
-    });
+    }).returning();
     try {
       questions = await generateStandardQuestions({
         department: req.department, jobTitle: jd.jobTitle,
@@ -200,15 +237,10 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
       });
       await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'ai' });
     } catch (err) { console.error('[intake] question generation failed:', err); }
-    try { await notifyJdReview(db, req, jdTitle); } catch (err) { console.error('[intake] JD-review notify failed:', err); }
+    try { await notifyJdReview(db, req, jdTitle, newJd.id); } catch (err) { console.error('[intake] JD-review notify failed:', err); }
+    // New-JD reasons: the role stays closed and no kickoff is sent until the hiring
+    // manager signs off on the JD (see approveJdAndOpenRole).
   }
-
-  const externalPostDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  try {
-    await db.update(jobRequisitions).set({ status: 'Open', postedAt: new Date(), updatedAt: new Date() }).where(eq(jobRequisitions.id, req.id));
-  } catch (err) { console.error('[intake] posting (status Open) failed:', err); }
-
-  await sendKickoff(db, req, { jdTitle, questions, externalPostDate });
 }
 
 const RoundInput = z.object({
@@ -285,6 +317,32 @@ const APPROVAL_STEPS = [
 ];
 
 export const intakeRouter = router({
+  jdReviewView: publicProcedure
+    .input(z.object({ token: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const jd = (await ctx.db.select().from(jobDescriptions).where(eq(jobDescriptions.id, input.token)))[0];
+      if (!jd) throw new TRPCError({ code: 'NOT_FOUND', message: 'This review link is invalid or has expired.' });
+      const req = jd.reqId ? await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) }) : null;
+      const qRow = (await ctx.db.select().from(interviewQuestions)
+        .where(eq(interviewQuestions.reqId, jd.reqId))
+        .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0];
+      return {
+        jd,
+        department: req?.department ?? null,
+        hiringManager: req?.hiringManager ?? null,
+        alreadyDecided: !(jd as any).pendingReview,
+        questions: (qRow?.questions as any[]) ?? [],
+      };
+    }),
+
+  jdReviewApprove: publicProcedure
+    .input(z.object({ token: z.string().uuid(), approverName: z.string().optional(), note: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const jd = await approveJdAndOpenRole(ctx.db, input.token);
+      if (!jd) throw new TRPCError({ code: 'NOT_FOUND', message: 'This review link is invalid.' });
+      return { ok: true as const, jobTitle: jd.jobTitle };
+    }),
+
   // Intakes are job_requisitions; list them newest-first.
   list: protectedProcedure.query(async ({ ctx }) => {
     return ctx.db.query.jobRequisitions.findMany({

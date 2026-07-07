@@ -9,6 +9,7 @@ import { router, protectedProcedure } from '../trpc.js';
 import { jobDescriptions } from '../db/schema/hiring.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
+import { approveJdAndOpenRole } from './intake.js';
 
 // All 13 Lightspeed company values for EPP matching
 export const LIGHTSPEED_VALUES = [
@@ -139,14 +140,11 @@ export const jobDescriptionsRouter = router({
   approveReview: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const existing = await ctx.db.query.jobDescriptions.findFirst({
-        where: eq(jobDescriptions.id, input.id),
-      });
-      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
-      const [jd] = await ctx.db.update(jobDescriptions)
-        .set({ pendingReview: false, updatedAt: new Date() })
-        .where(eq(jobDescriptions.id, input.id))
-        .returning();
+      // In-app sign-off from the JD tab. Delegates to the shared helper so it
+      // behaves exactly like the tokenized email link: clears the review flag and,
+      // if the role was waiting on this JD, opens the role + sends the kickoff.
+      const jd = await approveJdAndOpenRole(ctx.db, input.id);
+      if (!jd) throw new TRPCError({ code: 'NOT_FOUND' });
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_descriptions', 'update');
       trackActivity(ctx.db, ctx.user.id, 'approve_job_description', 'job_descriptions', { jdId: input.id }).catch(() => {});
       return jd;
