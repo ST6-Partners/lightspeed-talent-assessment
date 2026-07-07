@@ -303,7 +303,7 @@ export default function Intake() {
               </div>
               <div className="col-span-2">
                 <label className={lbl}>Job description (optional — base this role on an existing JD)</label>
-                <select value={form.baseJdId} onChange={(e) => setForm({ ...form, baseJdId: e.target.value })} className={inp} disabled={!form.department}>
+                <select value={form.baseJdId} onChange={(e) => { const id = e.target.value; const jd: any = ((allJds as any[]) || []).find((j) => j.id === id); setForm({ ...form, baseJdId: id, mustHaves: jd ? (jd.requiredQualifications || '') : '', niceToHaves: jd ? (jd.preferredQualifications || '') : '' }); }} className={inp} disabled={!form.department}>
                   <option value="">{form.department ? '— none (new role) —' : 'Select a department first'}</option>
                   {jdOptions.map((jd) => <option key={jd.id} value={jd.id}>{jd.jobTitle}</option>)}
                 </select>
@@ -316,9 +316,7 @@ export default function Intake() {
           <section>
             <h3 className="text-sm font-semibold text-ls-primary mb-2">2A · Role profile &amp; search criteria</h3>
             <p className="text-xs text-gray-400 mb-2">Filled by the hiring manager — the full picture of who we’re looking for. Applies to every role.</p>
-            {form.baseJdId && (
-              <button type="button" onClick={() => { const jd: any = ((allJds as any[]) || []).find((j) => j.id === form.baseJdId); if (jd) setForm({ ...form, mustHaves: form.mustHaves || jd.requiredQualifications || '', niceToHaves: form.niceToHaves || jd.preferredQualifications || '' }); }} className="mb-3 text-xs px-2 py-1 border border-gray-300 rounded-md text-ls-primary hover:bg-gray-50">Prefill must / nice-to-haves from selected JD</button>
-            )}
+            <p className="text-xs text-gray-400 mb-3">Must-haves and nice-to-haves auto-fill from the selected JD (Section 2). They stay blank for a brand-new JD. Edit as needed.</p>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={lbl}>Must-haves (non-negotiables) — one per line</label>
