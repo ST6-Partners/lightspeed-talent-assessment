@@ -698,3 +698,108 @@ Effective date: ${input.effectiveDate ?? 'not set'}`;
     return { text: placeholderTransitionPlan(input), mode: 'sandbox' };
   }
 }
+
+
+// ============================================================
+// SKILLS FIT — grades how well a resume evidences the ROLE'S key
+// skills, 0–100. Distinct from the required-qualifications gate
+// (which is a pass/fail knockout): skills-fit is a GRADED signal
+// used to inform — not solely gate — the combined screen. It only
+// considers job-relevant skills. Scores are provisional (see module
+// notes): calibrate before letting them drive real decisions.
+// ============================================================
+
+const SKILLS_FIT_MODEL = 'claude-sonnet-4-6';
+
+export interface SkillCheck {
+  skill: string;
+  rating: number;
+  evidence: string;
+}
+
+export interface SkillsFitResult {
+  score: number;
+  skills: SkillCheck[];
+  summary: string;
+  mode: 'ai' | 'keyword';
+}
+
+interface SkillsFitJobInput {
+  jobTitle?: string;
+  summary?: string | null;
+  responsibilities?: string | null;
+  requiredQualifications?: string | null;
+  preferredQualifications?: string | null;
+}
+
+function summarizeSkillsFit(skills: SkillCheck[], mode: 'ai' | 'keyword'): SkillsFitResult {
+  if (skills.length === 0) {
+    return { score: 0, skills: [], summary: 'No role skills could be derived from the job description — nothing to score.', mode };
+  }
+  const score = Math.round(skills.reduce((s, c) => s + (Number.isFinite(c.rating) ? c.rating : 0), 0) / skills.length);
+  const strong = skills.filter((s) => s.rating >= 70).map((s) => s.skill);
+  const weak = skills.filter((s) => s.rating < 40).map((s) => s.skill);
+  const parts = [`Skills fit: ${score}/100 across ${skills.length} role skills.`];
+  if (strong.length) parts.push(`Strong: ${strong.join(', ')}.`);
+  if (weak.length) parts.push(`Weak/absent: ${weak.join(', ')}.`);
+  return { score, skills, summary: parts.join(' '), mode };
+}
+
+function keywordSkillsFit(job: SkillsFitJobInput, resumeText: string): SkillsFitResult {
+  const jdText = [job.jobTitle, job.summary, job.responsibilities, job.requiredQualifications, job.preferredQualifications]
+    .filter(Boolean).join('\n');
+  const terms = Array.from(new Set(
+    jdText.toLowerCase().replace(/[^a-z0-9+ ]/g, ' ').split(/\s+/)
+      .filter((w) => w.length > 3 && !STOPWORDS.has(w)),
+  )).slice(0, 8);
+  const hay = resumeText.toLowerCase();
+  const skills: SkillCheck[] = terms.map((t) => {
+    const hit = hay.includes(t);
+    return { skill: t, rating: hit ? 75 : 25, evidence: hit ? 'Term appears in resume.' : 'Term not found in resume.' };
+  });
+  return summarizeSkillsFit(skills, 'keyword');
+}
+
+export async function scoreSkillsFit(resumeText: string, job: SkillsFitJobInput): Promise<SkillsFitResult> {
+  if (!resumeText || resumeText.trim().length < 20) {
+    return { score: 0, skills: [], summary: 'No resume text provided — skills fit not scored.', mode: 'keyword' };
+  }
+  if (SANDBOX) {
+    console.log('[AI SANDBOX] scoreSkillsFit | keyword fallback (no ANTHROPIC_API_KEY)');
+    return keywordSkillsFit(job, resumeText);
+  }
+
+  const system = `You assess how well a candidate's resume evidences the KEY SKILLS a role needs.
+Step 1: from the job information, infer the 5–8 most important, job-relevant skills for the role
+(technical and functional; ignore generic soft-skill filler and anything not tied to the work).
+Step 2: for EACH skill, rate 0–100 how strongly the resume shows real evidence the candidate has it,
+citing where. Be evidence-based and fair: absence of evidence is a low rating, not zero unless nothing relates.
+Do NOT reject or make a hire/no-hire judgement — output only per-skill ratings.
+Return ONLY a JSON array. Each element:
+  { "skill": "<short skill name>", "rating": <0-100 integer>, "evidence": "<short reason / where found>" }`;
+
+  const user = `JOB TITLE: ${job.jobTitle ?? '(unspecified)'}
+SUMMARY: ${job.summary ?? ''}
+RESPONSIBILITIES: ${job.responsibilities ?? ''}
+REQUIRED QUALIFICATIONS: ${job.requiredQualifications ?? ''}
+PREFERRED QUALIFICATIONS: ${job.preferredQualifications ?? ''}
+
+RESUME:
+${resumeText}`;
+
+  try {
+    const raw = await callClaude(system, user, SKILLS_FIT_MODEL);
+    const parsed = JSON.parse(extractJsonArray(raw)) as SkillCheck[];
+    const skills: SkillCheck[] = (Array.isArray(parsed) ? parsed : [])
+      .filter((p) => p && typeof p.skill === 'string')
+      .map((p) => ({
+        skill: String(p.skill).trim(),
+        rating: Math.max(0, Math.min(100, Math.round(Number(p.rating) || 0))),
+        evidence: String(p.evidence ?? ''),
+      }));
+    return summarizeSkillsFit(skills, 'ai');
+  } catch (err) {
+    console.error('[AI] scoreSkillsFit failed — falling back to keyword skills fit:', err);
+    return keywordSkillsFit(job, resumeText);
+  }
+}

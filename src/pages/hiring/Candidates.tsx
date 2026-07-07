@@ -463,7 +463,7 @@ export default function Candidates() {
           {/* Internal candidate handling */}
           <InternalSection key={`int-${selected.id}`} candidate={selected} onChanged={refetch} />
 
-          <ResumeScreenSection key={selected.id} candidateId={selected.id} existingNotes={(selected as any).resumeReviewNotes ?? null} onChanged={refetch} />
+          <CombinedScreenSection key={selected.id} candidateId={selected.id} existingSummary={(selected as any).screenSummary ?? null} onChanged={refetch} />
 
           {/* Reference check — agent report (after interview, before offer) */}
           <ReferenceCheckSection key={`ref-${selected.id}`} candidateId={selected.id} existingNotes={(selected as any).referenceCheckNotes ?? null} onChanged={refetch} />
@@ -531,20 +531,39 @@ export default function Candidates() {
 
 // ── Sub-components ─────────────────────────────────────────
 
-function ResumeScreenSection({ candidateId, existingNotes, onChanged }: { candidateId: string; existingNotes: string | null; onChanged?: () => void }) {
+function ScoreBar({ label, score, sub }: { label: string; score: number | null; sub?: string }) {
+  const pct = score == null ? 0 : Math.max(0, Math.min(100, score));
+  const color = score == null ? 'bg-gray-300' : pct >= 65 ? 'bg-green-500' : pct >= 40 ? 'bg-amber-500' : 'bg-red-500';
+  return (
+    <div>
+      <div className="flex justify-between text-xs">
+        <span className="font-medium text-gray-800">{label}</span>
+        <span className="text-gray-600">{score == null ? '\u2014' : `${score}/100`}</span>
+      </div>
+      <div className="h-1.5 bg-gray-100 rounded mt-0.5"><div className={`h-1.5 rounded ${color}`} style={{ width: `${pct}%` }} /></div>
+      {sub ? <div className="text-xs text-gray-400 mt-0.5">{sub}</div> : null}
+    </div>
+  );
+}
+
+function CombinedScreenSection({ candidateId, existingSummary, onChanged }: { candidateId: string; existingSummary: string | null; onChanged?: () => void }) {
   const [resumeText, setResumeText] = useState('');
+  const [needsSponsorship, setNeedsSponsorship] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const screen = trpc.candidates.screenResume.useMutation({
+  const screen = trpc.candidates.runScreen.useMutation({
     onSuccess: (r) => { setResult(r); onChanged?.(); },
   });
 
   const req = result?.requirements;
   const nice = result?.niceToHaves;
+  const skills = result?.skills;
+  const values = result?.values;
+  const rec = result?.recommendation;
 
   return (
-    <Section title="Resume Screen (requirements gate)">
+    <Section title="Screen \u2014 resume \u00b7 skills \u00b7 values">
       <div className="text-xs text-gray-500">
-        Checks the resume against the job's <strong>required</strong> qualifications. Missing a requirement (or needing sponsorship) auto-rejects; all met moves the candidate forward. <strong>Nice-to-haves</strong> never reject — they just leave a note for the hiring manager.
+        One automated screen for the 200 \u2192 20 gate. It checks the resume against the job's <strong>required</strong> qualifications (missing any, or needing sponsorship, auto-rejects), grades <strong>skills fit</strong> and <strong>values match</strong>, and gives one recommendation. Skills and values inform the call but never reject on their own. Scores are provisional \u2014 calibrate before relying on them.
       </div>
 
       <textarea
@@ -554,58 +573,72 @@ function ResumeScreenSection({ candidateId, existingNotes, onChanged }: { candid
         placeholder="Paste the candidate's resume text here..."
         className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-ls-cyan"
       />
+      <label className="flex items-center gap-1.5 text-xs text-gray-600">
+        <input type="checkbox" checked={needsSponsorship} onChange={(e) => setNeedsSponsorship(e.target.checked)} />
+        Requires international sponsorship (knockout)
+      </label>
       <button
-        onClick={() => screen.mutate({ id: candidateId, resumeText })}
+        onClick={() => screen.mutate({ id: candidateId, resumeText, needsSponsorship })}
         disabled={!resumeText.trim() || screen.isLoading}
         className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
       >
-        {screen.isLoading ? 'Screening…' : 'Screen resume'}
+        {screen.isLoading ? 'Screening\u2026' : 'Run screen'}
       </button>
 
       {result && (
         <div className="mt-2 space-y-2">
-          {/* Decision banner */}
-          {result.decision === 'rejected' && (
+          {rec === 'rejected' && (
             <div className="bg-red-50 border border-red-200 rounded p-2">
-              <div className="text-xs font-semibold text-red-700">Auto-rejected</div>
+              <div className="text-xs font-semibold text-red-700">Recommend reject{result.movedToStage ? ' \u2014 moved to Rejected' : ''}</div>
               <div className="text-xs text-red-700 mt-0.5">{result.reason}</div>
             </div>
           )}
-          {result.decision === 'advanced' && (
+          {rec === 'advanced' && (
             <div className="bg-green-50 border border-green-200 rounded p-2">
               <div className="text-xs font-semibold text-green-700">
-                Passed — moved forward{result.movedToStage ? ` to ${result.movedToStage}` : ''}
+                Recommend advance{result.movedToStage ? ` \u2014 moved to ${result.movedToStage}` : ''} \u00b7 combined {result.composite}/100
               </div>
             </div>
           )}
-          {result.decision === 'flagged' && (
-            <div className="bg-gray-50 border border-gray-200 rounded p-2">
-              <div className="text-xs font-semibold text-gray-700">Screen recorded (no stage change)</div>
-              {result.reason ? <div className="text-xs text-gray-600 mt-0.5">{result.reason}</div> : null}
+          {rec === 'review' && (
+            <div className="bg-amber-50 border border-amber-200 rounded p-2">
+              <div className="text-xs font-semibold text-amber-800">Needs human review \u00b7 combined {result.composite}/100</div>
+              {result.reason ? <div className="text-xs text-amber-700 mt-0.5">{result.reason}</div> : null}
             </div>
           )}
 
-          {/* Requirements (must-haves) */}
-          {req && (
+          <div className="space-y-1.5 border border-gray-100 rounded p-2">
+            <ScoreBar label="Requirements" score={req && req.totalCount ? Math.round((req.metCount / req.totalCount) * 100) : null} sub={req ? (req.totalCount ? `${req.metCount}/${req.totalCount} required met` : 'No required qualifications listed') : undefined} />
+            <ScoreBar label="Skills fit" score={skills ? skills.score : null} sub={skills && skills.mode === 'keyword' ? 'Keyword fallback \u2014 advisory only' : undefined} />
+            <ScoreBar label="Values match" score={result.valuesScore ?? null} sub={values ? (values.error ? values.error : `threshold ${values.threshold}`) : 'No EPP profile on file yet'} />
+          </div>
+
+          {req && req.requirements?.length > 0 && (
             <div className="space-y-1">
-              <div className="text-xs font-medium text-gray-800">
-                {req.totalCount === 0
-                  ? 'No required qualifications listed on this job description.'
-                  : `Requirements: ${req.metCount}/${req.totalCount} met`}
-              </div>
-              {req.requirements?.map((r: any, i: number) => (
+              {req.requirements.map((r: any, i: number) => (
                 <div key={i} className="text-xs flex gap-1.5">
-                  <span className={r.met ? 'text-green-600' : 'text-red-600'}>{r.met ? '✓' : '✗'}</span>
+                  <span className={r.met ? 'text-green-600' : 'text-red-600'}>{r.met ? '\u2713' : '\u2717'}</span>
                   <span className="text-gray-700">
                     <span className="font-medium">{r.requirement}</span>
-                    {r.evidence ? <span className="text-gray-400 italic"> — {r.evidence}</span> : null}
+                    {r.evidence ? <span className="text-gray-400 italic"> \u2014 {r.evidence}</span> : null}
                   </span>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Nice-to-haves (never reject) */}
+          {skills && skills.skills?.length > 0 && (
+            <div className="border-t border-gray-100 pt-2 space-y-1">
+              <div className="text-xs font-medium text-gray-800">Skills fit detail</div>
+              {skills.skills.map((sk: any, i: number) => (
+                <div key={i} className="text-xs flex gap-1.5">
+                  <span className={sk.rating >= 65 ? 'text-green-600' : sk.rating >= 40 ? 'text-amber-600' : 'text-red-600'}>{sk.rating}</span>
+                  <span className="text-gray-700"><span className="font-medium">{sk.skill}</span>{sk.evidence ? <span className="text-gray-400 italic"> \u2014 {sk.evidence}</span> : null}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           {nice && nice.totalCount > 0 && (
             <div className="border-t border-gray-100 pt-2">
               <div className="text-xs font-medium text-gray-800 mb-1">Nice-to-haves (note only)</div>
@@ -613,21 +646,17 @@ function ResumeScreenSection({ candidateId, existingNotes, onChanged }: { candid
                 <div className="bg-amber-50 border border-amber-200 rounded p-2">
                   <div className="text-xs text-amber-700">Missing (noted for hiring manager, not a dealbreaker):</div>
                   <ul className="list-disc list-inside">
-                    {nice.missing.map((m: string, i: number) => (
-                      <li key={i} className="text-xs text-amber-700">{m}</li>
-                    ))}
+                    {nice.missing.map((m: string, i: number) => (<li key={i} className="text-xs text-amber-700">{m}</li>))}
                   </ul>
                 </div>
-              ) : (
-                <div className="text-xs text-green-700">All nice-to-haves met.</div>
-              )}
+              ) : (<div className="text-xs text-green-700">All nice-to-haves met.</div>)}
             </div>
           )}
         </div>
       )}
 
-      {!result && existingNotes && (
-        <div className="text-xs text-gray-600 whitespace-pre-wrap mt-1">{existingNotes}</div>
+      {!result && existingSummary && (
+        <div className="text-xs text-gray-600 whitespace-pre-wrap mt-1">{existingSummary}</div>
       )}
     </Section>
   );

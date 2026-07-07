@@ -153,6 +153,13 @@ export const candidates = pgTable('candidates', {
   resumeReviewNotes: text('resume_review_notes'),
   referenceCheckNotes: text('reference_check_notes'),
   valuesMatchNotes: text('values_match_notes'),
+  // Combined screen (resume + values + skills) — one automated screen result
+  skillsFitScore: integer('skills_fit_score'),
+  skillsFitNotes: text('skills_fit_notes'),
+  screenScore: integer('screen_score'),
+  screenRecommendation: text('screen_recommendation'),
+  screenSummary: text('screen_summary'),
+  screenedAt: timestamp('screened_at', { withTimezone: true }),
   // Assessment timing (for reminder + auto-reject scheduler)
   assessmentSentAt: timestamp('assessment_sent_at', { withTimezone: true }),
   assessmentCompletedAt: timestamp('assessment_completed_at', { withTimezone: true }),

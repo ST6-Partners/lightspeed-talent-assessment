@@ -25,6 +25,7 @@ import {
 } from '../services/email.js';
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
+import { scoreSkillsFit } from '../services/ai.js';
 import { runReferenceCheck } from '../services/ai.js';
 import { draftTransitionPlan } from '../services/ai.js';
 import { renderOfferLetter, renderInternalOfferLetter, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
@@ -576,6 +577,150 @@ export const candidatesRouter = router({
       trackActivity(ctx.db, ctx.user.id, 'screen_resume', 'candidates', { candidateId: input.id, decision }).catch(() => {});
 
       return { decision, reason, movedToStage, requirements, niceToHaves, notes };
+    }),
+
+  // ── COMBINED SCREEN (resume + values + skills) ─────────────
+  // One automated screen at the 200 -> 20 gate. Runs three signals in a single
+  // pass and returns ONE recommendation:
+  //   • Requirements gate (must-haves + sponsorship) — the ONLY hard auto-reject,
+  //     and only when the real AI screened (keyword fallback is advisory).
+  //   • Skills fit (graded 0-100) — decision support, never a sole rejecter.
+  //   • Values / EPP match (graded 0-100) — decision support.
+  // Composite = average of the available graded signals. Recommendation:
+  //   reject (hard gate) | advance (requirements met + composite >= threshold)
+  //   | review (anything advisory / below bar / EPP not yet on file).
+  runScreen: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      resumeText: z.string().min(1),
+      needsSponsorship: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const jd = candidate.jdId
+        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null;
+      const required = ((jd as any)?.requiredQualifications ?? '') as string;
+      const preferred = ((jd as any)?.preferredQualifications ?? '') as string;
+      const jobTitle = jd?.jobTitle ?? undefined;
+
+      // 1) Requirements gate (must-haves + nice-to-haves).
+      const requirements = await screenResumeRequirements(input.resumeText, required);
+      const niceToHaves = await screenResumeRequirements(input.resumeText, preferred);
+
+      // 2) Skills fit (graded).
+      const skills = await scoreSkillsFit(input.resumeText, {
+        jobTitle,
+        summary: (jd as any)?.summary ?? null,
+        responsibilities: (jd as any)?.responsibilities ?? null,
+        requiredQualifications: required,
+        preferredQualifications: preferred,
+      });
+
+      // 3) Values / EPP match (graded) — only if an EPP profile is on file.
+      const requiredValues: string[] = Array.isArray((jd as any)?.eppValues) ? (jd as any).eppValues as string[] : [];
+      const values = candidate.eppProfile
+        ? analyzeEpp(candidate.eppProfile as Record<string, number>, requiredValues)
+        : null;
+      const valuesScore = values && values.score != null ? values.score : null;
+
+      // Composite = average of available graded signals (skills + values).
+      const graded: number[] = [skills.score];
+      if (valuesScore != null) graded.push(valuesScore);
+      const composite = Math.round(graded.reduce((a, b) => a + b, 0) / graded.length);
+
+      // Trust the auto-decision only when the REAL AI produced both text signals.
+      const trustworthy = requirements.mode === 'ai' && skills.mode === 'ai';
+      const ADVANCE_THRESHOLD = 65;
+
+      // Decide.
+      let decision: 'rejected' | 'advanced' | 'review' = 'review';
+      let recommendation = '';
+      let reason = '';
+      if (input.needsSponsorship) {
+        decision = 'rejected';
+        reason = 'Requires international sponsorship, which Lightspeed does not offer.';
+      } else if (requirements.mode === 'ai' && requirements.missing.length > 0) {
+        decision = 'rejected';
+        reason = `Missing required qualification(s): ${requirements.missing.join('; ')}.`;
+      } else if (!trustworthy) {
+        decision = 'review';
+        reason = 'Advisory only — set the AI key (ANTHROPIC_API_KEY) for the screen to auto-decide.';
+      } else if (composite >= ADVANCE_THRESHOLD) {
+        decision = 'advanced';
+      } else {
+        decision = 'review';
+        reason = `Requirements met, but combined screen score ${composite}/100 is below the ${ADVANCE_THRESHOLD} bar — needs a human look.`;
+      }
+      recommendation = decision;
+
+      // Combined summary + notes.
+      const summaryParts = [
+        requirements.summary,
+        skills.summary,
+        values ? (values.error ? `Values match: ${values.error}.` : `Values match: ${valuesScore}/100 (threshold ${values.threshold}).`) : 'Values match: no EPP profile on file yet.',
+        `Combined screen score: ${composite}/100. Recommendation: ${decision}.`,
+      ];
+      if (niceToHaves.missing.length) summaryParts.push(`Nice-to-haves missing (FYI): ${niceToHaves.missing.join('; ')}.`);
+      const screenSummary = summaryParts.join(' ');
+
+      // Persist the scores + combined result (regardless of stage move).
+      await ctx.db.update(candidates).set({
+        resumeReviewScore: requirements.totalCount ? Math.round((requirements.metCount / requirements.totalCount) * 100) : null,
+        resumeReviewNotes: requirements.summary + (niceToHaves.missing.length ? ` Nice-to-haves missing: ${niceToHaves.missing.join('; ')}.` : ''),
+        skillsFitScore: skills.score,
+        skillsFitNotes: skills.summary,
+        ...(valuesScore != null ? { eppValuesMatchScore: valuesScore } : {}),
+        screenScore: composite,
+        screenRecommendation: recommendation,
+        screenSummary,
+        screenedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, input.id));
+
+      // Apply the stage change (skip if already Hired/Rejected).
+      const terminal = candidate.currentStage === 'Hired' || candidate.currentStage === 'Rejected';
+      const STAGE_ORDER = STAGES as readonly string[];
+      const idx = STAGE_ORDER.indexOf(candidate.currentStage);
+      let movedToStage: string | null = null;
+
+      if (!terminal && decision === 'rejected') {
+        await ctx.db.update(candidates)
+          .set({ currentStage: 'Rejected', rejectionReason: reason, updatedAt: new Date() })
+          .where(eq(candidates.id, input.id));
+        await ctx.db.insert(candidateStageHistory).values({
+          candidateId: input.id, fromStage: candidate.currentStage, toStage: 'Rejected',
+          changedBy: ctx.user.id, reason,
+        });
+        movedToStage = 'Rejected';
+        await dispatchStageEmail('Rejected', candidate.currentStage, {
+          firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
+        }).catch(() => {});
+      } else if (!terminal && decision === 'advanced' && idx >= 0 && idx <= 3) {
+        const nextStage = STAGE_ORDER[idx + 1];
+        await ctx.db.update(candidates)
+          .set({ currentStage: nextStage as any, updatedAt: new Date() })
+          .where(eq(candidates.id, input.id));
+        await ctx.db.insert(candidateStageHistory).values({
+          candidateId: input.id, fromStage: candidate.currentStage, toStage: nextStage as any,
+          changedBy: ctx.user.id, reason: `Combined screen passed: requirements met, score ${composite}/100`,
+        });
+        movedToStage = nextStage;
+        await dispatchStageEmail(nextStage, candidate.currentStage, {
+          firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
+        }).catch(() => {});
+      }
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'run_screen', 'candidates', { candidateId: input.id, decision, composite }).catch(() => {});
+
+      return {
+        recommendation, decision, reason, movedToStage,
+        composite, requirements, niceToHaves, skills, values, valuesScore,
+        summary: screenSummary,
+      };
     }),
 
   // Reference check = agent-assembled report of positive signals + concerns for
