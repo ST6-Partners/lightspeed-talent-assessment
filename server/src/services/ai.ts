@@ -130,8 +130,8 @@ Notes: ${input.resumeReviewNotes || 'None provided'}
 Work sample score: ${input.workSampleScore ?? 'N/A'}`;
 
   try {
-    const raw = await callClaude(system, user);
-    const questions = JSON.parse(raw) as InterviewQuestion[];
+    const raw = await callClaude(system, user, 'claude-sonnet-4-6');
+    const questions = JSON.parse(extractJsonArray(raw)) as InterviewQuestion[];
     return questions;
   } catch (err) {
     console.error('[AI] generateInterviewQuestions failed:', err);
@@ -199,8 +199,11 @@ Return a JSON object with:
 Return ONLY the JSON object, no other text.`;
 
   try {
-    const raw = await callClaude(system, user);
-    const feedback = JSON.parse(raw) as InterviewFeedback;
+    const raw = await callClaude(system, user, 'claude-sonnet-4-6');
+    const fenced = raw.replace(/```json|```/g, '');
+    const objStart = fenced.indexOf('{');
+    const objEnd = fenced.lastIndexOf('}');
+    const feedback = JSON.parse(fenced.slice(objStart, objEnd + 1)) as InterviewFeedback;
     return feedback;
   } catch (err) {
     console.error('[AI] analyzeInterviewTranscript failed:', err);
