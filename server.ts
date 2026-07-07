@@ -16,6 +16,7 @@ import { readDoc } from './server/src/services/dropboxDocs.js';
 import { eq } from 'drizzle-orm';
 import { pool, db } from './server/src/db.js';
 import * as backupService from './server/src/services/backup.js';
+import { runRealJobs } from './server/src/seedRealJobs.js';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { inspect } from 'node:util';
 import { env } from './server/src/env.js';
@@ -69,6 +70,14 @@ async function main() {
   // a few seconds to come up at container start, so the first migrate()
   // attempts may hit ECONNREFUSED. Fails loudly only after exhausting retries.
   await applyMigrationsWithRetry();
+
+  // Seed the role library (20 job descriptions) if it's empty. Idempotent:
+  // runRealJobs() skips when the roles are already present. Non-fatal on error.
+  try {
+    await runRealJobs();
+  } catch (e) {
+    console.error('[boot] job-description seed failed (non-fatal):', e);
+  }
 
   // ── Automatic daily database backups (best-effort) ──
   // Snapshots all tables to a local backup file + prunes per retention policy.
