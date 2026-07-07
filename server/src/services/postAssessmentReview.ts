@@ -2,26 +2,29 @@
 // POST-ASSESSMENT REVIEW — runs automatically when a candidate
 // passes the CCAT gate. It:
 //   1. Scores EPP match + company-values match from the Criteria
-//      EPP results (computeEppScans — no extra input needed).
-//   2. Folds in a prior resume-screen result if one exists.
-//   3. Gate: reject if resume screening failed, or EPP match < 70,
-//      or company-values match < 70.
-//   4. On pass: generate the 30% tailored questions, move to
-//      Interview Scheduled, and email the interviewer a summary
-//      report + questions via SendGrid.
+//      EPP results (computeEppScans).
+//   2. Runs the resume screen against the job's required quals
+//      using the candidate's stored resume text (falls back to a
+//      prior screen result if there's no text).
+//   3. Gate: reject if resume screening fails a required qual, or
+//      EPP match < 70, or company-values match < 70.
+//   4. On pass: generate the 30% tailored questions, advance to
+//      Work Sample (work sample now sits AFTER this gate), email
+//      the candidate their work-sample link, and email the
+//      interviewer a summary report + questions via SendGrid.
 //
-// If the candidate has NO EPP results on file, we cannot run the
-// 70/70 gate — the caller falls back to the legacy Work Sample
-// advance. Idempotent enough for the single call from the CCAT
-// pass path.
+// No EPP results on file → returns 'skipped' so the caller falls
+// back to the legacy Work Sample advance.
 // ============================================================
 
 import { eq, desc } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { valueReviews, candidateValueScores, companyValues } from '../db/schema/values.js';
 import { computeEppScans } from './eppScans.js';
-import { generateInterviewQuestions } from './ai.js';
+import { generateInterviewQuestions, screenResumeRequirements } from './ai.js';
+import { resolveDeptWorkSample } from './workSampleResolver.js';
 import { dispatchStageEmail, emailInterviewerReport, emailAssessmentFailedHR } from './email.js';
 
 // Both EPP match and company-values match must be at or above this to advance.
@@ -31,6 +34,14 @@ export type ReviewResult =
   | { decision: 'passed'; eppMatch: number; valuesMatch: number }
   | { decision: 'rejected'; reason: string; eppMatch: number | null; valuesMatch: number | null }
   | { decision: 'skipped'; reason: string };
+
+function appBaseUrl(): string {
+  const explicit = process.env.APP_BASE_URL;
+  if (explicit) return explicit.replace(/\/$/, '');
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (railway) return `https://${railway}`;
+  return '';
+}
 
 export async function runPostAssessmentReview(db: any, candidateId: string): Promise<ReviewResult> {
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
@@ -50,9 +61,28 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
   const eppMatch = scans.eppMatch ?? 0;
   const valuesMatch = scans.companyValuesMatch ?? 0;
 
-  // 2) Resume screening: reuse a prior screen result if one exists (no resume
-  //    text is stored to run a fresh screen automatically).
-  const resumeRejected = candidate.screenRecommendation === 'rejected';
+  // 2) Resume screening against the job's required qualifications.
+  let resumeFailed = candidate.screenRecommendation === 'rejected';
+  let resumeMissing: string[] = [];
+  const required = ((jd as any)?.requiredQualifications ?? '') as string;
+  if (candidate.resumeText && required) {
+    try {
+      const req = await screenResumeRequirements(candidate.resumeText, required);
+      if (req.totalCount) {
+        await db.update(candidates).set({
+          resumeReviewScore: Math.round((req.metCount / req.totalCount) * 100),
+          resumeReviewNotes: req.summary,
+          updatedAt: new Date(),
+        }).where(eq(candidates.id, candidateId));
+      }
+      if (req.mode === 'ai' && req.missing.length > 0) {
+        resumeFailed = true;
+        resumeMissing = req.missing;
+      }
+    } catch (err) {
+      console.error('[PostReview] resume screen failed:', err);
+    }
+  }
 
   // Persist the computed matches so the panel reflects the auto-review.
   await db.update(candidates).set({
@@ -65,7 +95,7 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
 
   // 3) Gate.
   const fails: string[] = [];
-  if (resumeRejected) fails.push('resume screening');
+  if (resumeFailed) fails.push(resumeMissing.length ? `resume missing required: ${resumeMissing.join('; ')}` : 'resume screening');
   if (eppMatch < MATCH_PASS_THRESHOLD) fails.push(`EPP match ${eppMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
   if (valuesMatch < MATCH_PASS_THRESHOLD) fails.push(`company-values match ${valuesMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
 
@@ -88,7 +118,7 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
     return { decision: 'rejected', reason, eppMatch, valuesMatch };
   }
 
-  // 4) PASS — gather data, generate the 30% tailored questions, send interviewer report.
+  // 4) PASS — generate the tailored questions, advance to Work Sample, notify.
   const eppTraits = await db
     .select({ trait: candidateEppScores.trait, percentile: candidateEppScores.percentile })
     .from(candidateEppScores)
@@ -116,14 +146,34 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
     workSampleScore: candidate.workSampleScore, ccatScore: candidate.ccatScore,
   });
 
+  // Ensure a work-sample link exists so the advancement email carries it.
+  let token: string | null = candidate.workSampleToken ?? null;
+  if (!token) {
+    token = randomUUID();
+    await db.update(candidates).set({ workSampleToken: token, updatedAt: new Date() }).where(eq(candidates.id, candidateId));
+  }
+  const workSampleUrl = `${appBaseUrl()}/work-sample/${token}`;
+  let workSampleInstructions: string | undefined = jd?.workSampleInstructions ?? undefined;
+  const resolved = await resolveDeptWorkSample(db, candidate);
+  if (resolved) {
+    workSampleInstructions = `<strong>${resolved.title}</strong><br/><br/>` + resolved.instructions.replace(/\n/g, '<br/>');
+  }
+
   await db.update(candidates)
-    .set({ interviewQuestions: questions, currentStage: 'Interview Scheduled', updatedAt: new Date() })
+    .set({ interviewQuestions: questions, currentStage: 'Work Sample', updatedAt: new Date() })
     .where(eq(candidates.id, candidateId));
   await db.insert(candidateStageHistory).values({
-    candidateId, fromStage, toStage: 'Interview Scheduled', changedBy: null,
-    reason: `Auto-review passed: EPP match ${eppMatch}%, company-values match ${valuesMatch}%`,
+    candidateId, fromStage, toStage: 'Work Sample', changedBy: null,
+    reason: `Auto-review passed (EPP ${eppMatch}%, company-values ${valuesMatch}%) — sent to Work Sample`,
   });
 
+  // Candidate: work-sample link + HR "passed" (SendGrid).
+  await dispatchStageEmail('Work Sample', fromStage, {
+    firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email,
+    jobTitle, workSampleInstructions, workSampleUrl,
+  }).catch((err: unknown) => console.error('[PostReview] work-sample email failed:', err));
+
+  // Interviewer: summary brief + tailored questions (early heads-up; goes to HR if no interviewer set).
   const interviewerEmail = candidate.interviewerEmail || process.env.HR_EMAIL || 'jade.friedman@lsscorp.net';
   await emailInterviewerReport({
     interviewerEmail,
@@ -138,6 +188,6 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
     eppTraits, valueScores, questions,
   }).catch((err: unknown) => console.error('[PostReview] interviewer report email failed:', err));
 
-  console.log(`[PostReview] ${candidate.email} passed — EPP ${eppMatch}% / values ${valuesMatch}%; interviewer report sent`);
+  console.log(`[PostReview] ${candidate.email} passed — EPP ${eppMatch}% / values ${valuesMatch}%; sent to Work Sample + interviewer brief`);
   return { decision: 'passed', eppMatch, valuesMatch };
 }
