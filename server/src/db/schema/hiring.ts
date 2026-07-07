@@ -118,6 +118,8 @@ export const jobDescriptions = pgTable('job_descriptions', {
   // Which Work Sample library task this job uses (FK enforced in migration 0017)
   workSampleTaskId: uuid('work_sample_task_id'),
   status: jdStatusEnum('status').notNull().default('Draft'),
+  // Intake-generated JD awaiting hiring-manager review (NEW JD for review)
+  pendingReview: boolean('pending_review').notNull().default(false),
   publishedAt: timestamp('published_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

@@ -13,10 +13,10 @@ const STATUS_COLORS: Record<string, string> = {
 
 const DEPARTMENTS = ['Engineering', 'Product', 'Sales', 'Marketing', 'Operations', 'Finance', 'HR', 'Customer Success', 'Legal', 'Other'];
 const REASONS = [
-  { v: 'backfill', l: 'Backfill (same role)' },
+  { v: 'backfill', l: 'Backfill (same JD)' },
   { v: 'new_headcount', l: 'New headcount' },
-  { v: 'replacement_diff', l: 'Replacement — different profile' },
-  { v: 'termination_diff', l: 'Termination — different profile' },
+  { v: 'replacement_diff', l: 'Replacement — different JD' },
+  { v: 'termination_diff', l: 'Termination — different JD' },
 ];
 const COMP_BASIS = [{ v: 'budget', l: 'Budget' }, { v: 'market', l: 'Market data' }, { v: 'philosophy', l: 'Pay philosophy' }];
 const ROLE_LABEL: Record<string, string> = { hiring_manager: 'Hiring Manager', elt: 'ELT Leader', finance: 'Finance', hr: 'HR' };
@@ -264,15 +264,36 @@ export default function Intake() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={lbl}>Reason</label>
-                <select value={form.reasonType} onChange={(e) => setForm({ ...form, reasonType: e.target.value })} className={inp}>
+                <select
+                  value={form.reasonType}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setForm({
+                      ...form,
+                      reasonType: v,
+                      // New headcount has no base JD; backfill has no change note.
+                      ...(v === 'new_headcount' ? { baseJdId: '' } : {}),
+                      ...(v === 'backfill' ? { roleChangeNote: '' } : {}),
+                    });
+                  }}
+                  className={inp}
+                >
                   <option value="">Select reason</option>
                   {REASONS.map((r) => <option key={r.v} value={r.v}>{r.l}</option>)}
                 </select>
               </div>
-              <div>
-                <label className={lbl}>How the role should differ (optional)</label>
-                <input type="text" value={form.roleChangeNote} onChange={(e) => setForm({ ...form, roleChangeNote: e.target.value })} placeholder="e.g. was senior, now hiring junior" className={inp} />
-              </div>
+              {(form.reasonType === 'replacement_diff' || form.reasonType === 'termination_diff') && (
+                <div>
+                  <label className={lbl}>How the role should differ (optional)</label>
+                  <input type="text" value={form.roleChangeNote} onChange={(e) => setForm({ ...form, roleChangeNote: e.target.value })} placeholder="e.g. was senior, now hiring junior" className={inp} />
+                </div>
+              )}
+              {form.reasonType === 'new_headcount' && (
+                <div>
+                  <label className={lbl}>Describe the new role</label>
+                  <textarea rows={3} value={form.roleChangeNote} onChange={(e) => setForm({ ...form, roleChangeNote: e.target.value })} placeholder="Describe the new role: what the person will do, focus areas, key skills. The full JD, work sample, and interview questions are generated from this." className={inp} />
+                </div>
+              )}
             </div>
           </section>
 
@@ -301,14 +322,25 @@ export default function Intake() {
                   {['Low', 'Medium', 'High', 'Critical'].map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              <div className="col-span-2">
-                <label className={lbl}>Job description (optional — base this role on an existing JD)</label>
-                <select value={form.baseJdId} onChange={(e) => { const id = e.target.value; const jd: any = ((allJds as any[]) || []).find((j) => j.id === id); setForm({ ...form, baseJdId: id, mustHaves: jd ? (jd.requiredQualifications || '') : '', niceToHaves: jd ? (jd.preferredQualifications || '') : '' }); }} className={inp} disabled={!form.department}>
-                  <option value="">{form.department ? '— none (new role) —' : 'Select a department first'}</option>
-                  {jdOptions.map((jd) => <option key={jd.id} value={jd.id}>{jd.jobTitle}</option>)}
-                </select>
-                <p className="text-xs text-gray-400 mt-1">Leave "How the role should differ" (above) blank to reuse this JD as-is; fill it in to generate an updated JD + questions from it.</p>
-              </div>
+              {form.reasonType !== 'new_headcount' && (
+                <div className="col-span-2">
+                  <label className={lbl}>Existing job description{form.reasonType === 'backfill' ? '' : ' (base the new JD on this)'}</label>
+                  <select value={form.baseJdId} onChange={(e) => { const id = e.target.value; const jd: any = ((allJds as any[]) || []).find((j) => j.id === id); setForm({ ...form, baseJdId: id, mustHaves: jd ? (jd.requiredQualifications || '') : '', niceToHaves: jd ? (jd.preferredQualifications || '') : '' }); }} className={inp} disabled={!form.department}>
+                    <option value="">{form.department ? '— select the existing JD —' : 'Select a department first'}</option>
+                    {jdOptions.map((jd) => <option key={jd.id} value={jd.id}>{jd.jobTitle}</option>)}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {form.reasonType === 'backfill'
+                      ? 'Same role: this JD is reused as-is on approval. No new JD is created — the role just opens against it.'
+                      : 'Different JD: on approval a NEW JD is generated from this one plus your "how the role should differ" note, flagged for the hiring manager to review.'}
+                  </p>
+                </div>
+              )}
+              {form.reasonType === 'new_headcount' && (
+                <div className="col-span-2">
+                  <p className="text-xs text-gray-400 mt-1">New role: on approval a NEW JD is generated from your description above, flagged for the hiring manager to review.</p>
+                </div>
+              )}
             </div>
           </section>
 

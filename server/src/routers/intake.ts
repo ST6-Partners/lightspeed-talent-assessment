@@ -127,53 +127,81 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
   }
 }
 
-// On final approval: generate a draft JD, generate role interview questions, post
-// the role (internal now, external in 3 days), then send the kickoff.
+// Email + test-inbox record: tell the hiring manager a NEW JD is waiting for their
+// review in the JD tab (fires for every different-JD / new-headcount approval).
+async function notifyJdReview(db: DrizzleClient, req: any, jdTitle?: string): Promise<void> {
+  const to = approverEmail('hiring manager');
+  const role = `${req.department}${jdTitle ? ' \u00b7 ' + jdTitle : ''}`;
+  const subject = `New JD to review: ${role}`;
+  const body = `A new job description for ${role} was generated from the approved intake and is waiting for your review. Open the Talent Assessment app \u2192 Job Descriptions, review the details, and approve it to clear the "NEW JD for review" flag.`;
+  try {
+    await db.insert(inboundEmails).values({
+      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
+      toEmail: to, subject, body, replyTag: 'jd_review', source: 'simulated',
+      raw: { kind: 'jd_review', reqId: req.id },
+    });
+  } catch (err) { console.error('[intake] jd-review inbox record failed:', err); }
+  try { await sendEmail({ to, subject, html: `<p>${body}</p>`, templateId: 'jd_review' }); } catch (err) { console.error('[intake] jd-review send failed:', err); }
+}
+
+// On final approval, the intake "reason" drives what happens to the JD:
+//   - backfill                    -> reuse the existing JD as-is; NO new JD row is
+//                                    created (it already lives in the JD tab).
+//   - replacement_diff /          -> author a NEW JD from the old JD + the "how it
+//     termination_diff               should differ" note; flag pending_review; email HM.
+//   - new_headcount               -> author a NEW JD from the free-text description
+//                                    alone; flag pending_review; email HM.
+// The JD is generated at creation time so the hiring manager reviews real content.
+// AI materials are net-new and role-specific, not a summary of the old JD.
 async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> {
   let jdTitle: string | undefined;
   let questions: Array<{ category?: string; question: string }> = [];
-  try {
-    const baseJd = req.baseJdId
-      ? (await db.select().from(jobDescriptions).where(eq(jobDescriptions.id, req.baseJdId)))[0] ?? null
-      : null;
-    const differ = (req.roleChangeNote ?? '').trim();
 
-    if (baseJd && !differ) {
-      // Selected JD, no changes noted -> REUSE it and its questions as-is.
-      jdTitle = baseJd.jobTitle;
-      await db.insert(jobDescriptions).values({
-        reqId: req.id, jobTitle: baseJd.jobTitle, summary: baseJd.summary,
-        responsibilities: baseJd.responsibilities, requiredQualifications: baseJd.requiredQualifications,
-        preferredQualifications: baseJd.preferredQualifications, eppValues: baseJd.eppValues,
-        workSampleInstructions: baseJd.workSampleInstructions, status: 'Draft',
-      });
-      const prevQ = (await db.select().from(interviewQuestions)
-        .where(eq(interviewQuestions.reqId, baseJd.reqId))
-        .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0];
+  const reason = (req.reasonType ?? '').trim();
+  const baseJd = req.baseJdId
+    ? (await db.select().from(jobDescriptions).where(eq(jobDescriptions.id, req.baseJdId)))[0] ?? null
+    : null;
+  const changeNote = (req.roleChangeNote ?? '').trim();
+
+  if (reason === 'backfill') {
+    // Same JD: reuse the existing one; do NOT create a duplicate JD row. The role
+    // opens against the JD already in the JD tab. Copy its question set to this req.
+    jdTitle = baseJd?.jobTitle;
+    try {
+      const prevQ = baseJd
+        ? (await db.select().from(interviewQuestions)
+            .where(eq(interviewQuestions.reqId, baseJd.reqId))
+            .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0]
+        : undefined;
       questions = (prevQ?.questions as any[]) ?? standardQuestionSet(req.department);
       await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'reused' });
-    } else {
-      // NEW: from (selected JD + how-it-should-differ) if a base was picked, else fresh from the intake.
-      const jd = await generateRoleJD({
-        department: req.department, workArrangement: req.workArrangement,
-        location: req.location, salaryMin: req.salaryMin, salaryMax: req.salaryMax,
-        baseJd: baseJd ? { jobTitle: baseJd.jobTitle, summary: baseJd.summary, responsibilities: baseJd.responsibilities, requiredQualifications: baseJd.requiredQualifications, preferredQualifications: baseJd.preferredQualifications, workSampleInstructions: baseJd.workSampleInstructions } : null,
-        changeNote: differ || null,
-      });
-      jdTitle = jd.jobTitle;
-      await db.insert(jobDescriptions).values({
-        reqId: req.id, jobTitle: jd.jobTitle, summary: jd.summary,
-        responsibilities: jd.responsibilities, requiredQualifications: jd.requiredQualifications,
-        preferredQualifications: jd.preferredQualifications, status: 'Draft',
-        workSampleInstructions: jd.workSampleInstructions,
-      });
+    } catch (err) { console.error('[intake] backfill question copy failed:', err); }
+  } else {
+    // Different JD (replacement/termination) or brand-new role (new_headcount).
+    // generateRoleJD never throws (internal fallback), so a JD is always produced;
+    // the insert is intentionally NOT swallowed so a real DB failure surfaces.
+    const jd = await generateRoleJD({
+      department: req.department, workArrangement: req.workArrangement,
+      location: req.location, salaryMin: req.salaryMin, salaryMax: req.salaryMax,
+      baseJd: baseJd ? { jobTitle: baseJd.jobTitle, summary: baseJd.summary, responsibilities: baseJd.responsibilities, requiredQualifications: baseJd.requiredQualifications, preferredQualifications: baseJd.preferredQualifications, workSampleInstructions: baseJd.workSampleInstructions, eppValues: (baseJd.eppValues as string[] | null) ?? [] } : null,
+      changeNote: changeNote || null,
+    });
+    jdTitle = jd.jobTitle;
+    await db.insert(jobDescriptions).values({
+      reqId: req.id, jobTitle: jd.jobTitle, summary: jd.summary,
+      responsibilities: jd.responsibilities, requiredQualifications: jd.requiredQualifications,
+      preferredQualifications: jd.preferredQualifications, eppValues: jd.eppValues,
+      workSampleInstructions: jd.workSampleInstructions, status: 'Draft', pendingReview: true,
+    });
+    try {
       questions = await generateStandardQuestions({
         department: req.department, jobTitle: jd.jobTitle,
         jdSummary: jd.summary, jdResponsibilities: jd.responsibilities, jdQualifications: jd.requiredQualifications,
       });
       await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'ai' });
-    }
-  } catch (err) { console.error('[intake] JD/question generation failed:', err); }
+    } catch (err) { console.error('[intake] question generation failed:', err); }
+    try { await notifyJdReview(db, req, jdTitle); } catch (err) { console.error('[intake] JD-review notify failed:', err); }
+  }
 
   const externalPostDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   try {

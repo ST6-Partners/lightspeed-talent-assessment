@@ -88,7 +88,7 @@ export const jobDescriptionsRouter = router({
 
       const { id, ...updates } = input;
       const [jd] = await ctx.db.update(jobDescriptions)
-        .set({ ...updates, updatedAt: new Date() })
+        .set({ ...updates, pendingReview: false, updatedAt: new Date() })
         .where(eq(jobDescriptions.id, id))
         .returning();
 
@@ -124,12 +124,31 @@ export const jobDescriptionsRouter = router({
       }
 
       const [jd] = await ctx.db.update(jobDescriptions)
-        .set({ status: 'Published', publishedAt: new Date(), updatedAt: new Date() })
+        .set({ status: 'Published', pendingReview: false, publishedAt: new Date(), updatedAt: new Date() })
         .where(eq(jobDescriptions.id, input.id))
         .returning();
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_descriptions', 'update');
       trackActivity(ctx.db, ctx.user.id, 'publish_job_description', 'job_descriptions', { jdId: input.id }).catch(() => {});
+      return jd;
+    }),
+
+  // Hiring-manager approval of an intake-generated JD: clears the
+  // "NEW JD for review" flag (pending_review). The JD content itself was already
+  // generated at creation time, so this just marks it reviewed/accepted.
+  approveReview: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.jobDescriptions.findFirst({
+        where: eq(jobDescriptions.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      const [jd] = await ctx.db.update(jobDescriptions)
+        .set({ pendingReview: false, updatedAt: new Date() })
+        .where(eq(jobDescriptions.id, input.id))
+        .returning();
+      await auditChange(ctx.db, ctx.user.id, input.id, 'job_descriptions', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'approve_job_description', 'job_descriptions', { jdId: input.id }).catch(() => {});
       return jd;
     }),
 

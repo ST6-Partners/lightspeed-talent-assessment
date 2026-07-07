@@ -569,23 +569,33 @@ export interface RoleJD {
   requiredQualifications: string;
   preferredQualifications: string;
   workSampleInstructions: string;
+  eppValues: string[];
 }
 
-function templateJD(title: string, department: string): RoleJD {
+// The canonical Lightspeed company values the JD's EPP match is drawn from
+// (must stay in sync with LIGHTSPEED_VALUES in routers/jobDescriptions.ts).
+const EPP_VALUE_OPTIONS = [
+  'Coachable', 'Purposeful', 'Resilient', 'Collaborative', 'Humble', 'Transparent',
+  'Accountable', 'Courageous', 'Creative', 'Driven', 'Focused', 'High Standards', 'Self-Aware',
+];
+
+function templateJD(title: string, department: string, description?: string | null): RoleJD {
+  const note = description ? ` Focus per intake: ${description}.` : '';
   return {
     jobTitle: title,
-    summary: `Lightspeed Systems is hiring a ${title} to join our ${department} team. [Draft auto-generated from the intake — review and refine before publishing.]`,
+    summary: `Lightspeed Systems is hiring a ${title} to join our ${department} team.${note} [Draft auto-generated from the intake — review and refine before publishing.]`,
     responsibilities: '- Own key deliverables for the team\n- Collaborate across functions to ship outcomes\n- Bring an ownership mindset to day-to-day work',
     requiredQualifications: `- Relevant experience in ${department}\n- Strong communication and follow-through\n- Alignment with Lightspeed's values`,
     preferredQualifications: '- Prior K-12 or edtech experience\n- Comfort using AI tools in daily work',
-    workSampleInstructions: `A short, realistic task that mirrors day-to-day ${department} work (about 1-2 hours). [Draft auto-generated from the intake - review and refine before sending.]`,
+    workSampleInstructions: `A short, realistic task that mirrors day-to-day ${department} work${description ? ' (' + description + ')' : ''} (about 1-2 hours). [Draft auto-generated from the intake - review and refine before sending.]`,
+    eppValues: [],
   };
 }
 
 export async function generateRoleJD(input: {
   department: string; seniority?: string | null; workArrangement?: string | null;
   location?: string | null; salaryMin?: number | null; salaryMax?: number | null;
-  baseJd?: { jobTitle: string; summary?: string | null; responsibilities?: string | null; requiredQualifications?: string | null; preferredQualifications?: string | null; workSampleInstructions?: string | null } | null;
+  baseJd?: { jobTitle: string; summary?: string | null; responsibilities?: string | null; requiredQualifications?: string | null; preferredQualifications?: string | null; workSampleInstructions?: string | null; eppValues?: string[] | null } | null;
   changeNote?: string | null;
 }): Promise<RoleJD> {
   const title = input.baseJd?.jobTitle ?? (`${input.department}${input.seniority ? ' ' + input.seniority : ''}`.trim() + (input.seniority ? '' : ' Position'));
@@ -599,11 +609,12 @@ export async function generateRoleJD(input: {
         requiredQualifications: input.baseJd.requiredQualifications ?? '',
         preferredQualifications: input.baseJd.preferredQualifications ?? '',
         workSampleInstructions: `${input.baseJd.workSampleInstructions ?? ''}${input.changeNote ? `\n\n[Adapted per intake — reflect: ${input.changeNote}]` : ''}`.trim(),
+        eppValues: input.baseJd.eppValues ?? [],
       };
     }
-    return templateJD(title, input.department);
+    return templateJD(title, input.department, input.changeNote);
   }
-  const system = `You write concise, inclusive job descriptions for Lightspeed Systems, a K-12 edtech company. Core values: ${LIGHTSPEED_VALUES.join(', ')}. Return ONLY JSON with keys: jobTitle, summary, responsibilities, requiredQualifications, preferredQualifications, workSampleInstructions (a short realistic task the candidate would do, ~1-2 hours). The list fields should be short newline-separated bullets using "- ".`;
+  const system = `You write concise, inclusive job descriptions for Lightspeed Systems, a K-12 edtech company. Core values: ${LIGHTSPEED_VALUES.join(', ')}. Return ONLY JSON with keys: jobTitle, summary, responsibilities, requiredQualifications, preferredQualifications, workSampleInstructions (a short realistic task the candidate would do, ~1-2 hours), eppValues (an array of 3-6 value names chosen ONLY from this list: ${EPP_VALUE_OPTIONS.join(', ')}). The list fields should be short newline-separated bullets using "- ". Author net-new, role-specific content that fits THIS role; do not merely restate the source.`;
   const user = input.baseJd
     ? `Here is an existing job description for ${input.baseJd.jobTitle} (${input.department}):
 Summary: ${input.baseJd.summary ?? ''}
@@ -615,11 +626,11 @@ Work sample task: ${input.baseJd.workSampleInstructions ?? '(none on file)'}
 The role should DIFFER from that as follows: ${input.changeNote ?? ''}
 
 Produce the UPDATED job description AND an updated work sample task, reflecting those differences — keep what still applies, change what should change.`
-    : `Draft a job description for a ${title} in ${input.department}. Work arrangement: ${input.workArrangement ?? 'On-site'}${input.location ? ', ' + input.location : ''}.${input.salaryMin && input.salaryMax ? ` Salary band $${input.salaryMin}–$${input.salaryMax}.` : ''} Keep it realistic and concise.`;
+    : `Draft a brand-new job description for a role in ${input.department}. Work arrangement: ${input.workArrangement ?? 'On-site'}${input.location ? ', ' + input.location : ''}.${input.salaryMin && input.salaryMax ? ` Salary band $${input.salaryMin}–$${input.salaryMax}.` : ''}${input.changeNote ? `\n\nRole description provided by the hiring team (build the ENTIRE JD, work sample, and interview focus from this): ${input.changeNote}` : ''}\n\nProduce the full job description AND a fitting work sample task. Keep it realistic and concise.`;
   try {
     const jd = JSON.parse(await callClaude(system, user));
-    return { jobTitle: jd.jobTitle || title, summary: jd.summary || '', responsibilities: jd.responsibilities || '', requiredQualifications: jd.requiredQualifications || '', preferredQualifications: jd.preferredQualifications || '', workSampleInstructions: jd.workSampleInstructions || '' };
-  } catch (err) { console.error('[AI] generateRoleJD failed:', err); return input.baseJd ? { jobTitle: input.baseJd.jobTitle, summary: input.baseJd.summary ?? '', responsibilities: input.baseJd.responsibilities ?? '', requiredQualifications: input.baseJd.requiredQualifications ?? '', preferredQualifications: input.baseJd.preferredQualifications ?? '', workSampleInstructions: input.baseJd.workSampleInstructions ?? '' } : templateJD(title, input.department); }
+    return { jobTitle: jd.jobTitle || title, summary: jd.summary || '', responsibilities: jd.responsibilities || '', requiredQualifications: jd.requiredQualifications || '', preferredQualifications: jd.preferredQualifications || '', workSampleInstructions: jd.workSampleInstructions || '', eppValues: Array.isArray(jd.eppValues) ? jd.eppValues.filter((v: string) => EPP_VALUE_OPTIONS.includes(v)) : [] };
+  } catch (err) { console.error('[AI] generateRoleJD failed:', err); return input.baseJd ? { jobTitle: input.baseJd.jobTitle, summary: input.baseJd.summary ?? '', responsibilities: input.baseJd.responsibilities ?? '', requiredQualifications: input.baseJd.requiredQualifications ?? '', preferredQualifications: input.baseJd.preferredQualifications ?? '', workSampleInstructions: input.baseJd.workSampleInstructions ?? '', eppValues: input.baseJd.eppValues ?? [] } : templateJD(title, input.department, input.changeNote); }
 }
 
 // The FIXED standard question set — asked of EVERY candidate for a role (the "70%").

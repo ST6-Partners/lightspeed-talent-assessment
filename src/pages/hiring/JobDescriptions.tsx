@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, Send, Pencil, Trash2 , Megaphone} from 'lucide-react';
+import { Plus, X, Send, Pencil, Trash2 , Megaphone, CheckCircle2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const LIGHTSPEED_VALUES = [
@@ -45,6 +45,9 @@ export default function JobDescriptions() {
     onSuccess: () => { refetch(); closeForm(); },
   });
   const publishMutation = trpc.jobDescriptions.publish.useMutation({
+    onSuccess: () => refetch(),
+  });
+  const approveReviewMutation = trpc.jobDescriptions.approveReview.useMutation({
     onSuccess: () => refetch(),
   });
   const announceMutation = trpc.internalOpenings.announceInternally.useMutation({
@@ -283,9 +286,12 @@ export default function JobDescriptions() {
             </thead>
             <tbody>
               {jobDescriptions.map((jd) => (
-                <tr key={jd.id} className="border-b border-gray-50 hover:bg-gray-50 text-sm">
+                <tr key={jd.id} className={`border-b border-gray-50 text-sm ${(jd as any).pendingReview ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}`}>
                   <td className="px-4 py-3 font-medium text-gray-900">
                     {jd.jobTitle}
+                    {(jd as any).pendingReview && (
+                      <span className="ml-2 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-amber-200 text-amber-800 align-middle">NEW JD for review</span>
+                    )}
                     <div className="text-gray-400 text-xs font-normal mt-0.5">Work sample: {taskLabel(jd.workSampleTaskId)}</div>
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs font-medium">{getReqDept(jd.reqId)}</td>
@@ -305,6 +311,16 @@ export default function JobDescriptions() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
+                      {(jd as any).pendingReview && (
+                        <button
+                          onClick={() => approveReviewMutation.mutate({ id: jd.id })}
+                          disabled={approveReviewMutation.isLoading}
+                          className="p-1 text-gray-400 hover:text-amber-600 transition-colors"
+                          title="Approve new JD (clears the review flag)"
+                        >
+                          <CheckCircle2 size={15} />
+                        </button>
+                      )}
                       {jd.status === 'Draft' && (
                         <button
                           onClick={() => publishMutation.mutate({ id: jd.id })}
