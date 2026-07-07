@@ -78,3 +78,26 @@ export async function computeEppScans(db: any, candidateId: string): Promise<Epp
     breakdown,
   };
 }
+
+
+// Upsert a candidate's EPP results (keyed by the 12 Criteria trait names) into
+// candidate_epp_scores — the store the whole app reads — then return both scans.
+// Call this from the Criteria refresh/webhook path so real assessment results
+// actually drive EPP + company-values screening.
+export async function ingestEppResults(
+  db: any,
+  candidateId: string,
+  epp: Record<string, number>,
+): Promise<EppScansResult> {
+  const entries = Object.entries(epp || {}).filter(([, v]) => typeof v === 'number');
+  for (const [trait, percentile] of entries) {
+    const p = Math.max(0, Math.min(100, Math.round(percentile)));
+    await db.insert(candidateEppScores)
+      .values({ candidateId, trait, percentile: p })
+      .onConflictDoUpdate({
+        target: [candidateEppScores.candidateId, candidateEppScores.trait],
+        set: { percentile: p, updatedAt: new Date() },
+      });
+  }
+  return computeEppScans(db, candidateId);
+}

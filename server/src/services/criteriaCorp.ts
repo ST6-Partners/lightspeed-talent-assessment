@@ -49,7 +49,7 @@ export interface CcatScores {
   criteriaApplicantId: string;
   ccatScore: number | null;           // 0–50 raw score
   ccatPercentile: number | null;      // 0–99
-  eppProfile: Record<string, number> | null;  // Big Five percentiles
+  eppProfile: Record<string, number> | null;  // 12-trait EPP percentiles (Criteria trait names)
   assessmentCompletedAt: string | null;       // ISO timestamp
   status: 'completed' | 'pending' | 'expired';
 }
@@ -144,17 +144,21 @@ export async function getScores(
       criteriaApplicantId,
       ccatScore:            Math.floor(Math.random() * 20) + 20, // 20–39 mock
       ccatPercentile:       Math.floor(Math.random() * 60) + 20,
+      // Criteria's EPP returns 12 traits as percentiles (0-100). Mock the real 12
+      // (matches candidate_epp_scores — the store the whole app reads).
       eppProfile: {
-        openness:            Math.floor(Math.random() * 40) + 40,
-        conscientiousness:   Math.floor(Math.random() * 40) + 40,
-        extraversion:        Math.floor(Math.random() * 40) + 30,
-        agreeableness:       Math.floor(Math.random() * 40) + 40,
-        emotional_stability: Math.floor(Math.random() * 40) + 35,
-        achievement:         Math.floor(Math.random() * 40) + 40,
-        sociability:         Math.floor(Math.random() * 40) + 35,
-        dependability:       Math.floor(Math.random() * 40) + 40,
-        cooperativeness:     Math.floor(Math.random() * 40) + 40,
-        order:               Math.floor(Math.random() * 40) + 35,
+        'Achievement':       Math.floor(Math.random() * 45) + 40,
+        'Assertiveness':     Math.floor(Math.random() * 45) + 35,
+        'Competitiveness':   Math.floor(Math.random() * 45) + 35,
+        'Conscientiousness': Math.floor(Math.random() * 45) + 40,
+        'Cooperativeness':   Math.floor(Math.random() * 45) + 40,
+        'Extroversion':      Math.floor(Math.random() * 45) + 35,
+        'Managerial':        Math.floor(Math.random() * 45) + 35,
+        'Motivation':        Math.floor(Math.random() * 45) + 40,
+        'Openness':          Math.floor(Math.random() * 45) + 40,
+        'Patience':          Math.floor(Math.random() * 45) + 40,
+        'Self-Confidence':   Math.floor(Math.random() * 45) + 40,
+        'Stress Tolerance':  Math.floor(Math.random() * 45) + 40,
       },
       assessmentCompletedAt: new Date().toISOString(),
       status: 'completed',
@@ -164,7 +168,9 @@ export async function getScores(
   const body = await criteriaFetch(`/applicants/${criteriaApplicantId}/scores`);
 
   // Normalize Criteria Corp response → our internal shape
-  // ⚠️  Field names may need adjustment based on your account's API response
+  // ⚠️  Field names may need adjustment. eppProfile MUST be keyed by the 12
+  //     Criteria trait names (Achievement, Assertiveness, … Stress Tolerance) so it
+  //     lands in candidate_epp_scores and drives EPP + company-values screening.
   return {
     criteriaApplicantId,
     ccatScore:            body.scores?.ccat?.rawScore ?? null,

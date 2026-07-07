@@ -14,7 +14,6 @@ import { candidateEppScores } from '../db/schema/epp.js';
 import { valueReviews, candidateValueScores, companyValues } from '../db/schema/values.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
-import { analyzeEpp } from '../services/eppAnalyzer.js';
 import { analyzeInterviewTranscript } from '../services/ai.js';
 import { sendAssessment, getScores } from '../services/criteriaCorp.js';
 import {
@@ -28,7 +27,7 @@ import {
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
 import { scoreSkillsFit } from '../services/ai.js';
-import { computeEppScans } from '../services/eppScans.js';
+import { computeEppScans, ingestEppResults } from '../services/eppScans.js';
 import { runReferenceCheck } from '../services/ai.js';
 import { draftTransitionPlan } from '../services/ai.js';
 import { renderOfferLetter, renderInternalOfferLetter, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
@@ -1303,18 +1302,16 @@ export const candidatesRouter = router({
         })
         .where(eq(candidates.id, input.id));
 
-      // Auto-run EPP analysis if we got an EPP profile back
+      // Ingest the 12-trait EPP into candidate_epp_scores (the store the whole app
+      // reads), then compute + persist both EPP-derived scores from the real data.
       if (scores.eppProfile) {
-        const jd = candidate.jdId
-          ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
-          : null;
-        const requiredValues: string[] = Array.isArray(jd?.eppValues) ? jd.eppValues as string[] : [];
-
-        const { analyzeEpp: runEpp } = await import('../services/eppAnalyzer.js');
-        const analysis = runEpp(scores.eppProfile, requiredValues);
-
+        const scans = await ingestEppResults(ctx.db, input.id, scores.eppProfile as Record<string, number>);
         await ctx.db.update(candidates)
-          .set({ eppValuesMatchScore: analysis.score ?? undefined, updatedAt: new Date() })
+          .set({
+            ...(scans.eppMatch != null ? { eppValuesMatchScore: scans.eppMatch } : {}),
+            ...(scans.companyValuesMatch != null ? { companyValuesMatchScore: scans.companyValuesMatch } : {}),
+            updatedAt: new Date(),
+          })
           .where(eq(candidates.id, input.id));
       }
 
@@ -1329,40 +1326,34 @@ export const candidatesRouter = router({
   analyzeEpp: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const candidate = await ctx.db.query.candidates.findFirst({
-        where: eq(candidates.id, input.id),
-      });
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
 
-      if (!candidate.eppProfile) {
-        return { skipped: true, reason: 'No EPP profile on record — run after Criteria Corp EPP results are received' };
+      // Screen from the candidate's real 12-trait EPP results (candidate_epp_scores).
+      const scans = await computeEppScans(ctx.db, input.id);
+      if (!scans.hasEpp) {
+        return { skipped: true, reason: 'No EPP results on file — run after Criteria Corp EPP results are received (Refresh scores).' };
       }
 
-      const jd = candidate.jdId
-        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
-        : null;
+      // Persist both EPP-derived scores.
+      await ctx.db.update(candidates).set({
+        ...(scans.eppMatch != null ? { eppValuesMatchScore: scans.eppMatch } : {}),
+        ...(scans.companyValuesMatch != null ? { companyValuesMatchScore: scans.companyValuesMatch } : {}),
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, input.id));
 
-      const requiredValues: string[] = Array.isArray(jd?.eppValues) ? jd.eppValues as string[] : [];
-      const analysis = analyzeEpp(candidate.eppProfile as Record<string, number>, requiredValues);
-
-      // Persist the score
-      await ctx.db.update(candidates)
-        .set({ eppValuesMatchScore: analysis.score ?? undefined, updatedAt: new Date() })
-        .where(eq(candidates.id, input.id));
-
-      // If in Work Sample stage and passes → advance to Values Review
+      // Company-values match gates the Work Sample -> Values Review advance.
+      const THRESHOLD = 70;
       let stageAction: string | null = null;
-      if (candidate.currentStage === 'Work Sample' && analysis.score !== null) {
-        if (analysis.pass) {
+      if (candidate.currentStage === 'Work Sample' && scans.companyValuesMatch != null) {
+        if (scans.companyValuesMatch >= THRESHOLD) {
           await ctx.db.update(candidates)
             .set({ currentStage: 'Values Review', updatedAt: new Date() })
             .where(eq(candidates.id, input.id));
           await ctx.db.insert(candidateStageHistory).values({
-            candidateId: input.id,
-            fromStage: 'Work Sample',
-            toStage: 'Values Review',
+            candidateId: input.id, fromStage: 'Work Sample', toStage: 'Values Review',
             changedBy: ctx.user.id,
-            reason: `EPP values match score ${analysis.score} met threshold of ${analysis.threshold}`,
+            reason: `Company-values match ${scans.companyValuesMatch} met threshold of ${THRESHOLD}`,
           });
           stageAction = 'advanced_to_values_review';
         } else {
@@ -1370,7 +1361,8 @@ export const candidatesRouter = router({
         }
       }
 
-      return { analysis, stageAction };
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      return { scans, threshold: THRESHOLD, stageAction };
     }),
 
   // Process interview transcript through AI and store feedback
