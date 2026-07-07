@@ -1253,7 +1253,7 @@ function InternalSection({ candidate, onChanged }: { candidate: any; onChanged?:
       {isInternal && (
         <div className="space-y-2 mt-1">
           <div>
-            <div className="text-xs text-gray-500 mb-0.5">Current role / manager</div>
+            <div className="text-xs text-gray-500 mb-0.5">Current role at Lightspeed</div>
             <div className="flex gap-1">
               <input value={emp} onChange={(e) => setEmp(e.target.value)} className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs" />
               <button onClick={() => upd.mutate({ id: candidate.id, internalEmployee: emp })} className="text-xs px-2 py-1 bg-ls-primary text-white rounded">Save</button>
@@ -1263,11 +1263,11 @@ function InternalSection({ candidate, onChanged }: { candidate: any; onChanged?:
           <label className="flex items-center gap-2 text-xs text-gray-700">
             <input type="checkbox" checked={!!candidate.managerAware}
               onChange={(e) => upd.mutate({ id: candidate.id, managerAware: e.target.checked })} />
-            Their manager is aware they applied
+            Their current manager knows they applied
           </label>
 
           <div>
-            <div className="text-xs text-gray-500 mb-0.5">Leadership awareness — emails up the chain to ELT (comma-separated)</div>
+            <div className="text-xs text-gray-500 mb-0.5">This candidate\u2019s leadership chain (comma-separated) — notified so no one is blindsided</div>
             <textarea value={chain} onChange={(e) => setChain(e.target.value)} rows={2}
               placeholder="manager@…, skip-level@…, elt@…"
               className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
