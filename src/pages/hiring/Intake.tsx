@@ -176,9 +176,8 @@ export default function Intake() {
   };
   const handleDelete = (r: any) => {
     if (editingId === r.id) close();
-    if (window.confirm(`Delete the ${r.department} intake (${r.hiringManager})? This removes its interview plan, team, and approvals, and cannot be undone.`)) {
-      deleteMutation.mutate({ id: r.id });
-    }
+    // Delete immediately — no confirmation dialog (per PM request).
+    deleteMutation.mutate({ id: r.id });
   };
   const toggleBasis = (v: string) => setForm({ ...form, compBasis: form.compBasis.includes(v) ? form.compBasis.filter((x) => x !== v) : [...form.compBasis, v] });
   const saving = saveMutation.isLoading || submitMutation.isLoading;
