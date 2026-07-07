@@ -23,6 +23,7 @@ import { getSessionMiddleware, verifyToken } from './server/src/auth.js';
 import { registerBuiltInJobs, startCronJobs } from './server/src/services/job-runner.js';
 import { registerHiringJobs } from './server/src/services/hiring-scheduler.js';
 import { verifyZoomWebhook, handleZoomRecordingReady } from './server/src/services/zoomService.js';
+import { verifyCalendlySignature, applyCalendlyEvent } from './server/src/services/calendly.js';
 import { parseCriteriaWebhook } from './server/src/services/criteriaCorp.js';
 import { uploadFile, downloadFile, deleteFile } from './server/src/services/storage.js';
 
@@ -123,7 +124,7 @@ async function main() {
 
   // Skip JSON body parsing for file upload routes (handled by express.raw inline)
   app.use((req, res, next) => {
-    if (req.path === '/api/upload/video' || req.path === '/api/webhooks/zoom') return next();
+    if (req.path === '/api/upload/video' || req.path === '/api/webhooks/zoom' || req.path === '/api/webhooks/calendly') return next();
     express.json()(req, res, next);
   });
 
@@ -346,6 +347,30 @@ async function main() {
 
     handleZoomRecordingReady(parsed).catch((err) => {
       console.error('[Zoom] handleZoomRecordingReady error:', err);
+    });
+  });
+
+  // ── Calendly webhook — interview booked / canceled ────────
+  app.post('/api/webhooks/calendly', express.raw({ type: '*/*' }), async (req, res) => {
+    const signingKey = process.env.CALENDLY_WEBHOOK_SIGNING_KEY;
+    const rawBody = req.body.toString('utf8');
+    let parsed: any;
+    try { parsed = JSON.parse(rawBody); } catch { return res.status(400).json({ error: 'Invalid JSON' }); }
+
+    if (!signingKey) {
+      console.warn('[Calendly] CALENDLY_WEBHOOK_SIGNING_KEY not set — rejecting webhook');
+      return res.status(503).json({ error: 'Calendly not configured' });
+    }
+    const sig = req.headers['calendly-webhook-signature'] as string | undefined;
+    if (!verifyCalendlySignature(rawBody, sig, signingKey)) {
+      console.warn('[Calendly] Webhook signature verification failed');
+      return res.status(401).json({ error: 'Invalid signature' });
+    }
+
+    res.json({ received: true }); // acknowledge before async work
+
+    applyCalendlyEvent(parsed.event, parsed.payload).catch((err) => {
+      console.error('[Calendly] applyCalendlyEvent error:', err);
     });
   });
 

@@ -459,6 +459,9 @@ export default function Candidates() {
             />
           </Section>
 
+          {/* Interview scheduling — availability request + candidate self-booking */}
+          <SchedulingSection key={`sched-${selected.id}`} candidate={selected} onChanged={refetch} />
+
           {/* Resume screen — checks resume vs REQUIRED qualifications only */}
           {/* Internal candidate handling */}
           <InternalSection key={`int-${selected.id}`} candidate={selected} onChanged={refetch} />
@@ -1130,6 +1133,56 @@ function InternalSection({ candidate, onChanged }: { candidate: any; onChanged?:
           </div>
         </div>
       )}
+    </Section>
+  );
+}
+
+function SchedulingSection({ candidate, onChanged }: { candidate: any; onChanged?: () => void }) {
+  const status = trpc.scheduling.statusFor.useQuery({ candidateId: candidate.id });
+  const open = trpc.scheduling.open.useMutation({ onSuccess: () => { status.refetch(); onChanged?.(); } });
+  const [calendlyUrl, setCalendlyUrl] = useState('');
+
+  const s = status.data;
+  const scheduled = s?.scheduledAt ? new Date(s.scheduledAt) : null;
+
+  return (
+    <Section title="Interview Scheduling">
+      {scheduled ? (
+        <div className="text-sm text-gray-700 space-y-1">
+          <div className="font-medium text-green-700">Booked for {scheduled.toLocaleString()}</div>
+          {s?.joinUrl && <div className="text-xs">Meeting: <a href={s.joinUrl} className="text-ls-primary underline">join link</a></div>}
+          {s?.cancelUrl && <div className="text-xs">Candidate can <a href={s.cancelUrl} className="text-ls-primary underline">reschedule/cancel</a> (Calendly).</div>}
+        </div>
+      ) : s?.opened ? (
+        <div className="text-sm text-gray-600 space-y-1">
+          <div>Booking link sent to the candidate. Waiting on them to pick a time in Calendly.</div>
+          {s?.bookingUrl && <div className="text-xs">Candidate link: <a className="text-ls-primary underline" href={s.bookingUrl}>booking page</a></div>}
+          {s?.schedulingUrl && <div className="text-xs text-gray-400">Calendly: {s.schedulingUrl}</div>}
+          {!s?.calendlyConfigured && <div className="text-xs text-amber-600">Calendly webhook key not set — bookings won't record until it's configured on the server.</div>}
+          <button onClick={() => open.mutate({ candidateId: candidate.id })} disabled={open.isLoading} className="mt-1 text-xs text-ls-primary font-medium">Re-send booking link</button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-500">
+            Emails the candidate a link to book through Calendly. Leave the field blank to use the org default scheduling link, or paste this interviewer's Calendly event URL.
+          </p>
+          <input
+            type="url"
+            value={calendlyUrl}
+            onChange={(e) => setCalendlyUrl(e.target.value)}
+            placeholder="https://calendly.com/… (optional)"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+          />
+          <button
+            onClick={() => open.mutate({ candidateId: candidate.id, calendlyUrl: calendlyUrl || undefined })}
+            disabled={open.isLoading}
+            className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50"
+          >
+            {open.isLoading ? 'Opening…' : 'Open scheduling'}
+          </button>
+        </div>
+      )}
+      {open.error && <p className="text-sm text-red-600">{open.error.message}</p>}
     </Section>
   );
 }

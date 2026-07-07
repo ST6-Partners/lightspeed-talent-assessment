@@ -21,6 +21,13 @@ const HR_EMAIL = process.env.HR_EMAIL ?? 'jade.friedman@lsscorp.net';
 
 // ── Core send function ─────────────────────────────────────
 
+interface EmailAttachment {
+  content: string;      // base64-encoded
+  filename: string;
+  type: string;         // MIME type, e.g. 'text/calendar'
+  disposition?: string; // 'attachment' (default)
+}
+
 interface EmailPayload {
   to: string;
   subject: string;
@@ -28,6 +35,8 @@ interface EmailPayload {
   templateId: string;
   /** Optional reply-to address; defaults to EMAIL_REPLY_TO when set. */
   replyTo?: string;
+  /** Optional attachments (e.g. an .ics calendar invite). */
+  attachments?: EmailAttachment[];
 }
 
 /** True when a SendGrid key is configured (i.e. emails actually send). */
@@ -54,6 +63,14 @@ function buildSendGridBody(payload: EmailPayload) {
     content: [{ type: 'text/html', value: payload.html }],
   };
   if (replyTo) body.reply_to = { email: replyTo };
+  if (payload.attachments && payload.attachments.length) {
+    body.attachments = payload.attachments.map((a) => ({
+      content: a.content,
+      filename: a.filename,
+      type: a.type,
+      disposition: a.disposition ?? 'attachment',
+    }));
+  }
   return body;
 }
 
@@ -474,6 +491,147 @@ export async function emailInterviewerQuestions(data: {
       </table>
       ${p('You don\'t need to ask every question — use these as a guide. Focus on areas where the candidate showed lower scores or where the notes flagged something to probe.')}
       ${p('Questions or concerns? Reply to this email or reach out to the hiring team.')}
+    `),
+  });
+}
+
+// ── Interview scheduling emails ────────────────────────────
+
+// Sent to an interviewer: "please share your availability" (tokenized link).
+export async function emailAvailabilityRequest(data: {
+  interviewerEmail: string;
+  interviewerName?: string;
+  candidateName: string;
+  jobTitle?: string;
+  availabilityUrl: string;
+}) {
+  await sendEmail({
+    to: data.interviewerEmail,
+    templateId: 'availability_request',
+    subject: `Share your interview availability — ${data.candidateName}${data.jobTitle ? ` (${data.jobTitle})` : ''}`,
+    html: wrap(`
+      ${h1('Share your interview availability')}
+      ${p(`Hi ${data.interviewerName ?? 'there'},`)}
+      ${p(`It's time to interview <strong>${data.candidateName}</strong>${data.jobTitle ? ` for <strong>${data.jobTitle}</strong>` : ''}. Please add a few open time blocks and the candidate will pick one that works for them.`)}
+      ${button('Add your availability', data.availabilityUrl)}
+      ${p(`<span style="font-size:12px;color:#888;">If the button doesn't work, paste this link: ${data.availabilityUrl}</span>`)}
+    `),
+  });
+}
+
+// Sent to a candidate: "pick your interview time" (tokenized link).
+export async function emailBookingInvite(data: {
+  email: string;
+  firstName: string;
+  jobTitle?: string;
+  bookingUrl: string;
+}) {
+  await sendEmail({
+    to: data.email,
+    templateId: 'booking_invite',
+    subject: `Book your interview — ${data.jobTitle ?? 'Lightspeed Systems'}`,
+    html: wrap(`
+      ${h1('Book your interview')}
+      ${p(`Hi ${data.firstName},`)}
+      ${p(`Good news — you're advancing to the interview stage${data.jobTitle ? ` for <strong>${data.jobTitle}</strong>` : ''}. Please pick the time that works best for you from the available slots.`)}
+      ${button('Choose your interview time', data.bookingUrl)}
+      ${p(`<span style="font-size:12px;color:#888;">If the button doesn't work, paste this link: ${data.bookingUrl}</span>`)}
+    `),
+  });
+}
+
+// Sent to a candidate once they book — includes a calendar invite.
+export async function emailInterviewBookedCandidate(data: {
+  email: string;
+  firstName: string;
+  jobTitle?: string;
+  interviewDate: string;
+  interviewerName?: string;
+  joinUrl?: string;
+  icsBase64?: string;
+}) {
+  await sendEmail({
+    to: data.email,
+    templateId: 'interview_booked',
+    subject: `Your interview is confirmed — ${data.jobTitle ?? 'Lightspeed Systems'}`,
+    html: wrap(`
+      ${h1('Your interview is confirmed')}
+      ${p(`Hi ${data.firstName},`)}
+      ${p(`Your interview${data.jobTitle ? ` for <strong>${data.jobTitle}</strong>` : ''} is booked.`)}
+      ${p(`<strong>When:</strong> ${data.interviewDate}`)}
+      ${data.interviewerName ? p(`<strong>Interviewer:</strong> ${data.interviewerName}`) : ''}
+      ${data.joinUrl ? p(`<strong>Join link:</strong> <a href="${data.joinUrl}">${data.joinUrl}</a>`) : p('You\'ll receive the Zoom join link shortly.')}
+      ${p('A calendar invite is attached. If you need to reschedule, reply to this email as soon as possible.')}
+    `),
+    attachments: data.icsBase64
+      ? [{ content: data.icsBase64, filename: 'interview.ics', type: 'text/calendar' }]
+      : undefined,
+  });
+}
+
+// Sent to the interviewer once the candidate books — includes a calendar invite.
+export async function emailInterviewerBooked(data: {
+  interviewerEmail: string;
+  interviewerName?: string;
+  candidateName: string;
+  jobTitle?: string;
+  interviewDate: string;
+  joinUrl?: string;
+  icsBase64?: string;
+}) {
+  await sendEmail({
+    to: data.interviewerEmail,
+    templateId: 'interviewer_booked',
+    subject: `Interview booked: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+    html: wrap(`
+      ${h1('Interview booked')}
+      ${p(`Hi ${data.interviewerName ?? 'there'},`)}
+      ${p(`<strong>${data.candidateName}</strong> booked an interview slot${data.jobTitle ? ` for <strong>${data.jobTitle}</strong>` : ''}.`)}
+      ${p(`<strong>When:</strong> ${data.interviewDate}`)}
+      ${data.joinUrl ? p(`<strong>Join link:</strong> <a href="${data.joinUrl}">${data.joinUrl}</a>`) : ''}
+      ${p('A calendar invite is attached.')}
+    `),
+    attachments: data.icsBase64
+      ? [{ content: data.icsBase64, filename: 'interview.ics', type: 'text/calendar' }]
+      : undefined,
+  });
+}
+
+// Sent to a candidate who hasn't booked within the window.
+export async function emailBookingReminderCandidate(data: {
+  email: string;
+  firstName: string;
+  jobTitle?: string;
+  bookingUrl: string;
+}) {
+  await sendEmail({
+    to: data.email,
+    templateId: 'interview_booking_reminder',
+    subject: `Reminder: book your interview — ${data.jobTitle ?? 'Lightspeed Systems'}`,
+    html: wrap(`
+      ${h1('Don\'t forget to book your interview')}
+      ${p(`Hi ${data.firstName},`)}
+      ${p(`This is a friendly reminder to choose your interview time${data.jobTitle ? ` for <strong>${data.jobTitle}</strong>` : ''}. Slots are limited, so please book as soon as you can.`)}
+      ${button('Choose your interview time', data.bookingUrl)}
+      ${p(`<span style="font-size:12px;color:#888;">If the button doesn't work, paste this link: ${data.bookingUrl}</span>`)}
+    `),
+  });
+}
+
+// Sent to HR when a candidate hasn't booked past the target window.
+export async function emailBookingStalledHR(data: {
+  candidateName: string;
+  jobTitle?: string;
+  daysOpen: number;
+}) {
+  await sendEmail({
+    to: HR_EMAIL,
+    templateId: 'interview_booking_stalled_hr',
+    subject: `Interview not booked: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+    html: wrap(`
+      ${h1('Candidate hasn\'t booked an interview')}
+      ${p(`<strong>${data.candidateName}</strong>${data.jobTitle ? ` (${data.jobTitle})` : ''} was invited to book an interview ${data.daysOpen} day(s) ago and still hasn't picked a slot — past the target window.`)}
+      ${p('You may want to follow up directly or check that interviewer availability was provided.')}
     `),
   });
 }

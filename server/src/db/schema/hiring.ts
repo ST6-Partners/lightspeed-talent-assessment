@@ -167,6 +167,14 @@ export const candidates = pgTable('candidates', {
   interviewerName: varchar('interviewer_name', { length: 200 }),
   interviewerEmail: varchar('interviewer_email', { length: 300 }),
   zoomMeetingId: varchar('zoom_meeting_id', { length: 100 }),
+  // Interview scheduling (Calendly self-booking)
+  interviewBookingToken: varchar('interview_booking_token', { length: 64 }), // candidate self-book link (our tracking id)
+  interviewBookingOpenedAt: timestamp('interview_booking_opened_at', { withTimezone: true }), // window start (for the 48h reminder)
+  calendlySchedulingUrl: text('calendly_scheduling_url'),                // interviewer's Calendly event link the candidate books through
+  interviewScheduledAt: timestamp('interview_scheduled_at', { withTimezone: true }),           // booked time (from the Calendly webhook)
+  interviewJoinUrl: text('interview_join_url'),                          // meeting join link (from Calendly, e.g. Zoom)
+  calendlyEventUri: text('calendly_event_uri'),                          // Calendly scheduled_event uri
+  calendlyCancelUrl: text('calendly_cancel_url'),                        // Calendly reschedule/cancel link
   // AI-generated interview content
   interviewQuestions: jsonb('interview_questions'),
   interviewTranscript: text('interview_transcript'),

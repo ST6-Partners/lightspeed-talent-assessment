@@ -15,7 +15,15 @@ import { candidates, candidateStageHistory, emailLog, jobDescriptions } from '..
 import { registerJob, type JobResult } from './job-runner.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { getInternalReportConfig, composeInternalReport } from './internalReport.js';
-import { sendEmail } from './email.js';
+import { sendEmail, emailBookingReminderCandidate, emailBookingStalledHR } from './email.js';
+
+function schedAppBaseUrl(): string {
+  const explicit = process.env.APP_BASE_URL;
+  if (explicit) return explicit.replace(/\/$/, '');
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (railway) return `https://${railway}`;
+  return '';
+}
 
 // ── Helpers ────────────────────────────────────────────────
 
@@ -237,6 +245,67 @@ async function runInternalReport(): Promise<JobResult> {
   return { affected: sent, details: `Sent internal report (${count} candidate(s)) to ${sent} recipient(s).` };
 }
 
+// ── Job: interview booking reminder + stall alert ──────────
+// For candidates whose scheduling was opened but who haven't booked:
+//   >= 1 day open, no booking, no reminder yet  → nudge the candidate
+//   >= 2 days open, no booking, no HR alert yet → flag HR (past the ~48h window)
+async function runInterviewBookingReminder({ force = false }: { force?: boolean } = {}): Promise<JobResult> {
+  const oneDayAgo = daysAgo(1);
+  const twoDaysAgo = daysAgo(2);
+
+  const rows = await db.query.candidates.findMany({
+    where: and(isNotNull(candidates.interviewBookingOpenedAt), isNull(candidates.interviewScheduledAt)),
+  });
+
+  let nudged = 0;
+  let flagged = 0;
+  const skipped: string[] = [];
+
+  for (const candidate of rows) {
+    const openedAt = candidate.interviewBookingOpenedAt as Date | null;
+    if (!openedAt) { continue; }
+    if (['Rejected', 'Hired', 'Interview Scheduled', 'Interviewed', 'Offered'].includes(candidate.currentStage)) {
+      skipped.push(`${candidate.email} (stage ${candidate.currentStage})`); continue;
+    }
+
+    const jd = candidate.jdId
+      ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+      : null;
+    const jobTitle = jd?.jobTitle ?? undefined;
+    const candidateName = `${candidate.firstName} ${candidate.lastName}`;
+    const daysOpen = Math.floor((Date.now() - openedAt.getTime()) / 86_400_000);
+
+    // Candidate nudge at >= 1 day.
+    if (openedAt <= oneDayAgo && candidate.interviewBookingToken) {
+      if (force || !(await alreadySentTemplate(candidate.id, 'interview_booking_reminder'))) {
+        const bookingUrl = `${schedAppBaseUrl()}/book-interview/${candidate.interviewBookingToken}`;
+        try {
+          await emailBookingReminderCandidate({ email: candidate.email, firstName: candidate.firstName, jobTitle, bookingUrl });
+          await logEmail(candidate.id, candidate.email, 'interview_booking_reminder', `Reminder: book your interview`, 'sent');
+          nudged++;
+        } catch (err: any) {
+          await logEmail(candidate.id, candidate.email, 'interview_booking_reminder', 'Reminder: book your interview', 'failed', err?.message);
+        }
+      }
+    }
+
+    // HR stall alert at >= 2 days.
+    if (openedAt <= twoDaysAgo) {
+      if (force || !(await alreadySentTemplate(candidate.id, 'interview_booking_stalled_hr'))) {
+        try {
+          await emailBookingStalledHR({ candidateName, jobTitle, daysOpen });
+          await logEmail(candidate.id, process.env.HR_EMAIL ?? 'hr', 'interview_booking_stalled_hr', `Interview not booked: ${candidateName}`, 'sent');
+          flagged++;
+        } catch (err: any) {
+          await logEmail(candidate.id, process.env.HR_EMAIL ?? 'hr', 'interview_booking_stalled_hr', `Interview not booked: ${candidateName}`, 'failed', err?.message);
+        }
+      }
+    }
+  }
+
+  return { affected: nudged + flagged, details: `Nudged ${nudged} candidate(s); flagged ${flagged} to HR.${skipped.length ? ` Skipped ${skipped.length}.` : ''}` };
+}
+
 export function registerHiringJobs(): void {
   registerJob({
     name:           'assessment-reminder',
@@ -265,5 +334,14 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '0 9 * * 1',   // Mondays 9:00 AM (Railway server time)
     handler:        runInternalReport,
+  });
+  registerJob({
+    name:           'interview-booking-reminder',
+    label:          'Interview Booking Reminder',
+    description:    'Nudge candidates who were invited to book an interview but haven\'t, and flag HR when a booking stalls past the ~48h window.',
+    color:          '#0ea5e9',
+    jobType:        'cron',
+    cronExpression: '10 9 * * *',  // 9:10 AM daily
+    handler:        runInterviewBookingReminder,
   });
 }
