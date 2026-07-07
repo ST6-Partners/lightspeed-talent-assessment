@@ -957,6 +957,7 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
 
   const preview = trpc.candidates.internalOfferPreview.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(false); } });
   const send = trpc.candidates.sendInternalOffer.useMutation({ onSuccess: (r) => { setHtml(r.html); setSent(true); onChanged?.(); } });
+  const docusign = trpc.candidates.sendInternalOfferViaDocuSign.useMutation({ onSuccess: () => onChanged?.() });
   const draftPlan = trpc.candidates.draftTransitionPlan.useMutation({
     onSuccess: (r) => {
       setAddendum((prev) => {
@@ -1056,7 +1057,20 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
           className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
           {send.isLoading ? 'Sending\u2026' : 'Send internal offer (email)'}
         </button>
+        <button onClick={() => docusign.mutate(payload())} disabled={docusign.isLoading}
+          className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50">
+          {docusign.isLoading ? 'Sending\u2026' : 'Send via DocuSign'}
+        </button>
       </div>
+      {docusign.data && (
+        <div className={`text-xs ${docusign.data.configured && !(docusign.data as any).error ? 'text-green-700' : 'text-amber-700'}`}>
+          {!docusign.data.configured
+            ? (docusign.data as any).message
+            : (docusign.data as any).error
+              ? `DocuSign error: ${(docusign.data as any).error}`
+              : `Sent for e-signature via DocuSign (envelope ${(docusign.data as any).envelopeId}). Candidate moved to Offered.`}
+        </div>
+      )}
 
       {sent && <div className="text-xs text-green-700">Internal offer sent \u2014 candidate moved to Offered.</div>}
       {html && (

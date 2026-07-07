@@ -1077,6 +1077,69 @@ export const candidatesRouter = router({
       return { ok: true, html: letterHtml };
     }),
 
+  // Send the internal-move offer for e-signature via DocuSign. Same env-gated
+  // DocuSign service as the external letter (stub-safe with no credentials) —
+  // just renders the internal before/now letter instead.
+  sendInternalOfferViaDocuSign: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      effectiveDate: z.string().optional(),
+      newTitle: z.string().optional(),
+      newBaseSalary: z.number().int().optional(),
+      newBonus: z.string().optional(),
+      newManager: z.string().optional(),
+      newDepartment: z.string().optional(),
+      newStipends: z.string().optional(),
+      currentTitle: z.string().optional(),
+      currentBaseSalary: z.number().int().optional(),
+      currentBonus: z.string().optional(),
+      currentManager: z.string().optional(),
+      currentDepartment: z.string().optional(),
+      currentStipends: z.string().optional(),
+      addendum: z.array(z.object({ title: z.string(), body: z.string() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const offer = await buildInternalOfferInput(ctx.db, input);
+      const newTitle = offer.comp.newTitle;
+      const letterHtml = renderInternalOfferLetter(offer);
+
+      const result = await createOfferEnvelope({
+        candidateName: `${candidate.firstName} ${candidate.lastName}`.trim(),
+        candidateEmail: candidate.email,
+        jobTitle: newTitle,
+        letterHtml,
+      });
+
+      if (!result.configured) {
+        return { configured: false as const, message: 'DocuSign is not connected yet — add DOCUSIGN_BASE_URL, DOCUSIGN_ACCOUNT_ID and DOCUSIGN_ACCESS_TOKEN (Railway) to enable sending.' };
+      }
+      if (result.error) {
+        return { configured: true as const, error: result.error };
+      }
+
+      if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
+        await ctx.db.update(candidates).set({ currentStage: 'Offered', updatedAt: new Date() }).where(eq(candidates.id, input.id));
+        await ctx.db.insert(candidateStageHistory).values({
+          candidateId: input.id, fromStage: candidate.currentStage, toStage: 'Offered',
+          changedBy: ctx.user.id, reason: `Internal offer sent for e-signature via DocuSign (envelope ${result.envelopeId})`,
+        });
+      }
+      try {
+        await ctx.db.insert(inboundEmails).values({
+          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+          fromName: 'DocuSign (internal offer)', toEmail: candidate.email,
+          subject: `Internal offer sent via DocuSign — ${newTitle}`,
+          body: `DocuSign envelope ${result.envelopeId} (status: ${result.status}) sent to ${candidate.email} for signature.`,
+          replyTag: 'docusign_internal_offer', source: 'simulated', raw: { kind: 'docusign_internal_offer', envelopeId: result.envelopeId, candidateId: input.id },
+        });
+      } catch (err) { console.error('[docusign-internal] inbox record failed:', err); }
+
+      trackActivity(ctx.db, ctx.user.id, 'send_internal_offer_docusign', 'candidates', { candidateId: input.id, envelopeId: result.envelopeId }).catch(() => {});
+      return { configured: true as const, envelopeId: result.envelopeId, status: result.status };
+    }),
+
   // Notify an internal candidate's leadership chain (manual list for now;
   // auto org-chart via HRIS later). SendGrid + test-inbox copy, like the rest.
   notifyLeadership: protectedProcedure
