@@ -91,9 +91,7 @@ export default function JobDescriptions() {
     id ? (workSampleTasks?.find((t: any) => t.id === id)?.title ?? 'Unknown task') : 'Not set';
 
   const handleDelete = (jd: any) => {
-    if (window.confirm(`Delete the job description "${jd.jobTitle}"? This cannot be undone.`)) {
-      deleteMutation.mutate({ id: jd.id });
-    }
+    deleteMutation.mutate({ id: jd.id });
   };
 
   const toggleValue = (v: string) => {

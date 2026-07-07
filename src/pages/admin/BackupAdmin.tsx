@@ -106,7 +106,6 @@ export default function BackupAdmin() {
   };
 
   const deleteBackup = (filename: string) => {
-    if (!window.confirm(`Delete ${filename}?`)) return;
     deleteMutation.mutate({ filename });
   };
 

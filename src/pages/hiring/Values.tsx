@@ -167,7 +167,7 @@ export default function Values() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       <button onClick={() => startEdit(v)} className="p-1.5 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100" title="Edit"><Pencil size={15} /></button>
-                      <button onClick={() => { if (confirm(`Delete "${v.name}"?`)) deleteMutation.mutate({ id: v.id }); }} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-gray-100" title="Delete"><Trash2 size={15} /></button>
+                      <button onClick={() => deleteMutation.mutate({ id: v.id })} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-gray-100" title="Delete"><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>

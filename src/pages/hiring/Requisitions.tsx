@@ -83,9 +83,7 @@ export default function Requisitions() {
   };
 
   const handleDelete = (r: any) => {
-    if (window.confirm(`Delete the ${r.department} requisition (${r.hiringManager})? This also removes its job description and cannot be undone.`)) {
-      deleteMutation.mutate({ id: r.id });
-    }
+    deleteMutation.mutate({ id: r.id });
   };
 
   const saving = createMutation.isLoading || updateMutation.isLoading;

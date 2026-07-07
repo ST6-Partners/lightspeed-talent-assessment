@@ -94,7 +94,7 @@ export default function Employees() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
                       <button onClick={() => startEdit(r)} className="p-1 text-gray-400 hover:text-ls-primary" title="Edit"><Pencil size={15} /></button>
-                      <button onClick={() => { if (confirm(`Delete employee "${r.name}"?`)) deleteM.mutate({ id: r.id }); }} className="p-1 text-gray-400 hover:text-red-600" title="Delete"><Trash2 size={15} /></button>
+                      <button onClick={() => deleteM.mutate({ id: r.id })} className="p-1 text-gray-400 hover:text-red-600" title="Delete"><Trash2 size={15} /></button>
                     </div>
                   </td>
                 </tr>

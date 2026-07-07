@@ -278,7 +278,6 @@ export default function GettingStarted() {
   }, [updateMutation]);
 
   const handleDelete = useCallback((id: string) => {
-    if (!window.confirm('Delete this video permanently?')) return;
     deleteMutation.mutate({ id });
   }, [deleteMutation]);
 

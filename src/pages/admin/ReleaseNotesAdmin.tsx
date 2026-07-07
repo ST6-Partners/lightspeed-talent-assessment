@@ -180,7 +180,6 @@ export default function ReleaseNotesAdmin() {
   }, [unpublishMutation]);
 
   const handleDelete = useCallback((id: string) => {
-    if (!window.confirm('Delete this draft? This cannot be undone.')) return;
     deleteMutation.mutate({ id });
   }, [deleteMutation]);
 
