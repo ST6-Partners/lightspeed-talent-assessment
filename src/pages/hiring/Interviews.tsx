@@ -19,6 +19,8 @@ const STATUS_STYLE: Record<string, string> = {
   completed: 'bg-green-100 text-green-700',
 };
 const FOLLOW_LABEL: Record<string, string> = { avoided: 'Avoided', half_answered: 'Half-answered', suggested: 'Suggested' };
+// Interviews tab only surfaces candidates at the interview stage or beyond.
+const INTERVIEW_STAGES = ['Interview Scheduled', 'Interviewed', 'Offered', 'Hired'];
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -176,14 +178,13 @@ export default function Interviews() {
   const seed = trpc.interviews.seedFromPlan.useMutation({ onSuccess: () => refreshAll() });
   const add = trpc.interviews.addRound.useMutation({ onSuccess: () => { setNewRound(''); refreshAll(); } });
 
-  const active = (candidates ?? []).filter((c: any) => c.currentStage !== 'Rejected');
+  const active = (candidates ?? []).filter((c: any) => INTERVIEW_STAGES.includes(c.currentStage));
   const selected: any = (candidates ?? []).find((c: any) => c.id === candidateId) ?? null;
   useEffect(() => { if (!candidateId && active.length) setCandidateId(active[0].id); }, [candidates]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-create rounds from the role's plan when viewing a candidate at/after the
   // interview stage who has none yet (covers candidates who advanced before this
   // was automatic). Idempotent + attempted once per candidate per view.
-  const INTERVIEW_STAGES = ['Interview Scheduled', 'Interviewed', 'Offered', 'Hired'];
   useEffect(() => {
     if (!selected || !candidateId) return;
     if (rounds.isLoading || !rounds.data) return;

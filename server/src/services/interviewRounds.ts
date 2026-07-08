@@ -14,7 +14,7 @@
 import { eq, and, lt, asc } from 'drizzle-orm';
 import { db } from '../db.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
-import { candidates, jobDescriptions } from '../db/schema/hiring.js';
+import { candidates, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { interviewPlan } from '../db/schema/intake.js';
 import {
   analyzeInterviewTranscript,
@@ -51,11 +51,20 @@ export async function seedRoundsFromPlan(candidateId: string) {
   const plan = await db.select().from(interviewPlan)
     .where(eq(interviewPlan.reqId, jd.reqId))
     .orderBy(asc(interviewPlan.sortOrder));
-  if (!plan.length) return existing;
 
-  await db.insert(candidateInterviews).values(
-    plan.map((r, i) => ({ candidateId, roundName: r.roundName, interviewerName: (r as any).interviewer ?? null, sortOrder: r.sortOrder ?? i })),
-  );
+  let toInsert: Array<{ candidateId: string; roundName: string; interviewerName?: string | null; sortOrder: number }>;
+  if (plan.length) {
+    // Named rounds defined on the role's intake.
+    toInsert = plan.map((r, i) => ({ candidateId, roundName: r.roundName, interviewerName: (r as any).interviewer ?? null, sortOrder: r.sortOrder ?? i }));
+  } else {
+    // No named rounds — fall back to the requisition's round COUNT so rounds
+    // still appear (generic "Round 1..N"). Only skip if we truly can't tell.
+    const req = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) });
+    const n = Math.max(1, Math.min(5, ((req as any)?.interviewRounds ?? 1)));
+    toInsert = Array.from({ length: n }, (_, i) => ({ candidateId, roundName: `Round ${i + 1}`, sortOrder: i }));
+  }
+
+  await db.insert(candidateInterviews).values(toInsert);
   return db.select().from(candidateInterviews)
     .where(eq(candidateInterviews.candidateId, candidateId))
     .orderBy(asc(candidateInterviews.sortOrder));
