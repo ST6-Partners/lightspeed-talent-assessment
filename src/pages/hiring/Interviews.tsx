@@ -164,7 +164,8 @@ export default function Interviews() {
   const [search, setSearch] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [newRound, setNewRound] = useState('');
-  const [seedMsg, setSeedMsg] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [autoSeeded, setAutoSeeded] = useState<Record<string, boolean>>({});
   const [showQuestions, setShowQuestions] = useState(false);
 
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(undefined);
@@ -172,18 +173,26 @@ export default function Interviews() {
   const rounds = trpc.interviews.list.useQuery({ candidateId: candidateId ?? '' }, { enabled: !!candidateId });
   const refreshAll = () => { rounds.refetch(); refetch(); };
 
-  const seed = trpc.interviews.seedFromPlan.useMutation({
-    onSuccess: (result: any) => {
-      const n = Array.isArray(result) ? result.length : 0;
-      setSeedMsg(n === 0 ? "No rounds are defined on this role's intake (or this candidate isn't linked to a role yet), so there was nothing to pull. Add rounds below." : null);
-      refreshAll();
-    },
-  });
+  const seed = trpc.interviews.seedFromPlan.useMutation({ onSuccess: () => refreshAll() });
   const add = trpc.interviews.addRound.useMutation({ onSuccess: () => { setNewRound(''); refreshAll(); } });
 
   const active = (candidates ?? []).filter((c: any) => c.currentStage !== 'Rejected');
   const selected: any = (candidates ?? []).find((c: any) => c.id === candidateId) ?? null;
   useEffect(() => { if (!candidateId && active.length) setCandidateId(active[0].id); }, [candidates]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-create rounds from the role's plan when viewing a candidate at/after the
+  // interview stage who has none yet (covers candidates who advanced before this
+  // was automatic). Idempotent + attempted once per candidate per view.
+  const INTERVIEW_STAGES = ['Interview Scheduled', 'Interviewed', 'Offered', 'Hired'];
+  useEffect(() => {
+    if (!selected || !candidateId) return;
+    if (rounds.isLoading || !rounds.data) return;
+    if (rounds.data.length > 0) return;
+    if (!INTERVIEW_STAGES.includes(selected.currentStage)) return;
+    if (autoSeeded[candidateId]) return;
+    setAutoSeeded((m) => ({ ...m, [candidateId]: true }));
+    seed.mutate({ candidateId });
+  }, [candidateId, rounds.data, rounds.isLoading, selected?.currentStage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const roleTitle = selected ? ((jobDescriptions ?? []).find((j: any) => j.id === selected.jdId)?.jobTitle ?? '—') : '';
   const list = (rounds.data ?? []) as any[];
@@ -217,7 +226,7 @@ export default function Interviews() {
             <div className="absolute z-20 mt-1 w-full max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
               {filtered.map((c: any) => (
                 <button key={c.id}
-                  onMouseDown={(e) => { e.preventDefault(); setCandidateId(c.id); setParams({ id: c.id }); setPickerOpen(false); setSearch(''); setSeedMsg(null); }}
+                  onMouseDown={(e) => { e.preventDefault(); setCandidateId(c.id); setParams({ id: c.id }); setPickerOpen(false); setSearch(''); }}
                   className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between gap-2 ${c.id === candidateId ? 'bg-gray-50' : ''}`}>
                   <span className="truncate">{c.firstName} {c.lastName}{c.email ? <span className="text-gray-400"> · {c.email}</span> : null}</span>
                   <span className="text-[11px] text-gray-500 shrink-0">{c.currentStage}</span>
@@ -262,23 +271,26 @@ export default function Interviews() {
               {list.map((r) => (
                 <RoundCard key={r.id} round={r} defaultOpen={r.id === firstIncompleteId} onChanged={refreshAll} />
               ))}
-              {list.length === 0 && <div className="text-xs text-gray-400 pb-1">No rounds yet.</div>}
+              {list.length === 0 && <div className="text-xs text-gray-400 pb-1">No rounds yet. They appear automatically from the role plan when a candidate reaches the interview stage, or add one below.</div>}
             </div>
 
-            {/* Add / seed */}
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              <input value={newRound} onChange={(e) => setNewRound(e.target.value)} placeholder="New round name (e.g. Final with VP)"
-                className="px-2 py-1.5 border border-gray-300 rounded text-xs flex-1 min-w-[180px]" />
-              <button onClick={() => newRound.trim() && add.mutate({ candidateId: selected.id, roundName: newRound.trim() })} disabled={add.isLoading || !newRound.trim()}
-                className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50 flex items-center gap-1">
-                <Plus size={13} /> Add round
+            {/* Rounds appear automatically from the role's plan at the interview stage.
+                Add round stays available, tucked away, for one-off extras. */}
+            {addOpen ? (
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <input autoFocus value={newRound} onChange={(e) => setNewRound(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && newRound.trim()) { add.mutate({ candidateId: selected.id, roundName: newRound.trim() }); setAddOpen(false); } }}
+                  placeholder="Round name (e.g. Final with VP)"
+                  className="px-2 py-1.5 border border-gray-300 rounded text-xs flex-1 min-w-[180px]" />
+                <button onClick={() => { if (newRound.trim()) { add.mutate({ candidateId: selected.id, roundName: newRound.trim() }); setAddOpen(false); } }} disabled={add.isLoading || !newRound.trim()}
+                  className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">Add</button>
+                <button onClick={() => { setAddOpen(false); setNewRound(''); }} className="text-xs px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-gray-50">Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setAddOpen(true)} className="mt-2 text-xs text-gray-500 hover:text-ls-primary flex items-center gap-1">
+                <Plus size={13} /> Add a round
               </button>
-              <button onClick={() => seed.mutate({ candidateId: selected.id })} disabled={seed.isLoading}
-                className="text-xs px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-gray-50 disabled:opacity-50">
-                {seed.isLoading ? 'Seeding…' : 'Seed from plan'}
-              </button>
-            </div>
-            {seedMsg && <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-2">{seedMsg}</div>}
+            )}
           </div>
 
           {/* Candidate self-scheduling (Calendly) — collapsed */}

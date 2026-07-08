@@ -17,6 +17,7 @@ import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { analyzeInterviewTranscript } from '../services/ai.js';
 import { processInterviewFeedback } from '../services/interviewFeedback.js';
+import { seedRoundsFromPlan } from '../services/interviewRounds.js';
 import { sendAssessment, getScores } from '../services/criteriaCorp.js';
 import {
   emailApplicationReceived,
@@ -493,6 +494,9 @@ export const candidatesRouter = router({
       // 1. Generate tailored interview questions (AI)
       // 2. Email questions to the interviewer
       if (input.toStage === 'Interview Scheduled') {
+        // Auto-create the per-round interview records from the role's plan
+        // (idempotent — no-op if rounds already exist or no plan is defined).
+        seedRoundsFromPlan(input.id).catch((err) => console.error('[advance] auto-seed interview rounds failed:', err));
         (async () => {
           try {
             // Pull assessment data to tailor questions: EPP per-trait percentiles,
