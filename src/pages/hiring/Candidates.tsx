@@ -599,6 +599,9 @@ export default function Candidates() {
             </Section>
           )}
 
+          {/* Per-round interviews + cross-round briefing */}
+          <InterviewRoundsSection key={`ivr-${selected.id}`} candidateId={selected.id} onChanged={refetch} />
+
           {/* Interview transcript -> feedback (candidate, HR, interviewer) + email */}
           <InterviewFeedbackSection key={`ivf-${selected.id}`} candidate={selected} onChanged={refetch} />
         </div>
@@ -692,6 +695,183 @@ function InterviewFeedbackSection({ candidate, onChanged }: { candidate: any; on
   );
 }
 
+
+function InterviewRoundsSection({ candidateId, onChanged }: { candidateId: string; onChanged?: () => void }) {
+  const rounds = trpc.interviews.list.useQuery({ candidateId });
+  const [transcripts, setTranscripts] = useState<Record<string, string>>({});
+  const [briefingFor, setBriefingFor] = useState<string | null>(null);
+  const [newRound, setNewRound] = useState('');
+
+  const refresh = () => { rounds.refetch(); onChanged?.(); };
+  const seed = trpc.interviews.seedFromPlan.useMutation({ onSuccess: refresh });
+  const add = trpc.interviews.addRound.useMutation({ onSuccess: () => { setNewRound(''); refresh(); } });
+  const update = trpc.interviews.updateRound.useMutation({ onSuccess: () => rounds.refetch() });
+  const remove = trpc.interviews.removeRound.useMutation({ onSuccess: refresh });
+  const record = trpc.interviews.recordFeedback.useMutation({ onSuccess: refresh });
+  const sendPrep = trpc.interviews.sendPrep.useMutation({ onSuccess: () => rounds.refetch() });
+  const briefing = trpc.interviews.briefing.useQuery({ id: briefingFor ?? '' }, { enabled: !!briefingFor });
+
+  const list = (rounds.data ?? []) as any[];
+  const statusStyle: Record<string, string> = {
+    planned: 'bg-gray-100 text-gray-600',
+    scheduled: 'bg-blue-100 text-blue-700',
+    completed: 'bg-green-100 text-green-700',
+  };
+  const followLabel: Record<string, string> = { avoided: 'Avoided', half_answered: 'Half-answered', suggested: 'Suggested' };
+
+  return (
+    <Section title="Interview Rounds">
+      <div className="text-xs text-gray-500">
+        Each round is tracked on its own — interviewer, transcript, score, and feedback. When you email an
+        interviewer their prep, it includes the read on the candidate from earlier completed rounds (scores hidden)
+        plus a follow-up list, and leaves out the coaching notes written for the earlier interviewers.
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 pt-2">
+        <button
+          onClick={() => seed.mutate({ candidateId })}
+          disabled={seed.isLoading}
+          className="text-xs px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-gray-50 disabled:opacity-50"
+        >
+          {seed.isLoading ? 'Seeding…' : 'Seed rounds from plan'}
+        </button>
+        <input
+          value={newRound}
+          onChange={(e) => setNewRound(e.target.value)}
+          placeholder="New round name (e.g. Final with VP)"
+          className="px-2 py-1 border border-gray-300 rounded text-xs flex-1 min-w-[180px]"
+        />
+        <button
+          onClick={() => newRound.trim() && add.mutate({ candidateId, roundName: newRound.trim() })}
+          disabled={add.isLoading || !newRound.trim()}
+          className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+        >
+          Add round
+        </button>
+      </div>
+
+      {list.length === 0 && (
+        <div className="text-xs text-gray-400 pt-2">No rounds yet. Seed from the interview plan or add one.</div>
+      )}
+
+      <div className="space-y-2 pt-2">
+        {list.map((r) => {
+          const fus = Array.isArray(r.followUps) ? r.followUps : [];
+          return (
+            <div key={r.id} className="border border-gray-200 rounded p-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-gray-800">{r.roundName}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusStyle[r.status] ?? 'bg-gray-100 text-gray-600'}`}>{r.status}</span>
+                  {r.score != null && <span className="text-[11px] text-gray-500">score {r.score}/100</span>}
+                </div>
+                <button onClick={() => remove.mutate({ id: r.id })} className="text-[11px] text-gray-400 hover:text-red-600">Remove</button>
+              </div>
+
+              <div className="flex flex-wrap gap-2 mt-1.5">
+                <input
+                  defaultValue={r.interviewerName ?? ''}
+                  onBlur={(e) => e.target.value !== (r.interviewerName ?? '') && update.mutate({ id: r.id, interviewerName: e.target.value || null })}
+                  placeholder="Interviewer name"
+                  className="px-2 py-1 border border-gray-300 rounded text-xs flex-1 min-w-[130px]"
+                />
+                <input
+                  defaultValue={r.interviewerEmail ?? ''}
+                  onBlur={(e) => e.target.value !== (r.interviewerEmail ?? '') && update.mutate({ id: r.id, interviewerEmail: e.target.value || null })}
+                  placeholder="Interviewer email"
+                  className="px-2 py-1 border border-gray-300 rounded text-xs flex-1 min-w-[160px]"
+                />
+              </div>
+
+              <textarea
+                value={transcripts[r.id] ?? ''}
+                onChange={(e) => setTranscripts((t) => ({ ...t, [r.id]: e.target.value }))}
+                placeholder="Paste this round's transcript (optional — leave blank for a generated sample)…"
+                rows={2}
+                className="w-full px-2 py-1 border border-gray-300 rounded text-xs font-mono mt-1.5"
+              />
+
+              <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                <button
+                  onClick={() => record.mutate({ id: r.id, transcript: (transcripts[r.id] ?? '').trim() || undefined })}
+                  disabled={record.isLoading}
+                  className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+                >
+                  {record.isLoading ? 'Processing…' : (r.status === 'completed' ? 'Re-run feedback' : 'Record feedback')}
+                </button>
+                <button
+                  onClick={() => sendPrep.mutate({ id: r.id })}
+                  disabled={sendPrep.isLoading || !r.interviewerEmail}
+                  title={r.interviewerEmail ? '' : 'Set an interviewer email first'}
+                  className="text-xs px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Email prep + briefing
+                </button>
+                <button
+                  onClick={() => setBriefingFor(briefingFor === r.id ? null : r.id)}
+                  className="text-xs px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-gray-50"
+                >
+                  {briefingFor === r.id ? 'Hide briefing' : 'Preview briefing'}
+                </button>
+                {r.prepSentAt && <span className="text-[11px] text-green-600">prep emailed</span>}
+              </div>
+
+              {r.feedbackHr && (
+                <div className="mt-1.5">
+                  <div className="text-[11px] font-semibold text-gray-700">Read on the candidate</div>
+                  <p className="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 rounded p-2">{r.feedbackHr}</p>
+                </div>
+              )}
+              {fus.length > 0 && (
+                <div className="mt-1.5">
+                  <div className="text-[11px] font-semibold text-gray-700">Follow up in later rounds</div>
+                  <ul className="text-[11px] text-gray-600 list-disc pl-4">
+                    {fus.map((f: any, i: number) => (
+                      <li key={i}><strong>{followLabel[f.type] ?? 'Follow up'}:</strong> {f.text}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {briefingFor === r.id && (
+                <div className="mt-2 border-t border-gray-200 pt-2">
+                  <div className="text-[11px] font-semibold text-gray-700 mb-1">Briefing this interviewer would receive</div>
+                  {briefing.isLoading && <div className="text-[11px] text-gray-400">Loading…</div>}
+                  {briefing.data && briefing.data.rounds.length === 0 && briefing.data.followUps.length === 0 && (
+                    <div className="text-[11px] text-gray-400">No earlier completed rounds yet — nothing to carry forward.</div>
+                  )}
+                  {briefing.data && briefing.data.rounds.map((b: any, i: number) => (
+                    <div key={i} className="mb-1.5">
+                      <div className="text-[11px] font-medium text-gray-700">{b.roundName}{b.interviewerName ? ` · ${b.interviewerName}` : ''}</div>
+                      <p className="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 rounded p-2">{b.writtenRead}</p>
+                    </div>
+                  ))}
+                  {briefing.data && briefing.data.followUps.length > 0 && (
+                    <div className="mt-1">
+                      <div className="text-[11px] font-semibold text-blue-700">Follow up in this round</div>
+                      <ul className="text-[11px] text-blue-700 list-disc pl-4">
+                        {briefing.data.followUps.map((f: any, i: number) => (
+                          <li key={i}><strong>{followLabel[f.type] ?? 'Follow up'} ({f.roundName}):</strong> {f.text}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {briefing.data && (briefing.data.rounds.length > 0 || briefing.data.followUps.length > 0) && (
+                    <div className="text-[10px] text-gray-400 mt-1">Scores hidden. Coaching notes for earlier interviewers are not shared.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {(seed.error || add.error || record.error || sendPrep.error) && (
+        <div className="text-xs text-red-600 pt-1">{(seed.error || add.error || record.error || sendPrep.error)?.message}</div>
+      )}
+    </Section>
+  );
+}
 
 function ScoreBar({ label, score, sub }: { label: string; score: number | null; sub?: string }) {
   const pct = score == null ? 0 : Math.max(0, Math.min(100, score));

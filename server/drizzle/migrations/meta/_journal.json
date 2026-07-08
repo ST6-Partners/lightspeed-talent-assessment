@@ -309,6 +309,13 @@
       "when": 1960000014000,
       "tag": "0041_interview_interviewer_feedback",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1960000015000,
+      "tag": "0042_candidate_interviews",
+      "breakpoints": true
     }
   ]
 }

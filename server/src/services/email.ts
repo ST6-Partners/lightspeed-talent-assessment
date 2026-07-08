@@ -1043,3 +1043,62 @@ export async function emailInternalInterestAlert(to: string, d: { applicantName:
     `),
   });
 }
+
+// ── Per-round interviewer prep (with cross-round briefing) ──
+// Sent to the interviewer BEFORE a round. Includes the read on the
+// candidate from earlier COMPLETED rounds (numeric scores hidden) and a
+// consolidated "follow up in this round" list. Interviewer-coaching
+// notes from earlier rounds are deliberately NOT included.
+export async function emailInterviewRoundPrep(data: {
+  to: string;
+  interviewerName?: string | null;
+  firstName: string;
+  lastName: string;
+  jobTitle?: string;
+  roundName: string;
+  briefing: {
+    rounds: { roundName: string; interviewerName: string | null; writtenRead: string }[];
+    followUps: { roundName: string; type: 'avoided' | 'half_answered' | 'suggested'; text: string }[];
+  };
+}) {
+  const label: Record<string, string> = {
+    avoided: 'Avoided',
+    half_answered: 'Half-answered',
+    suggested: 'Suggested',
+  };
+
+  const contextBlock = data.briefing.rounds.length
+    ? `<h2 style="font-size:16px;font-weight:600;margin:24px 0 8px;">Context from earlier rounds</h2>` +
+      data.briefing.rounds.map((r) => `
+        <div style="margin:0 0 14px;">
+          <div style="font-size:14px;font-weight:600;">${esc(r.roundName)}${r.interviewerName ? ` <span style="font-weight:400;color:#888;">· ${esc(r.interviewerName)}</span>` : ''}</div>
+          <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.6;margin:6px 0 0;color:#444;">${esc(r.writtenRead)}</pre>
+        </div>`).join('')
+    : p('This is the first interview round on file, so there is no earlier context to share yet.');
+
+  const followBlock = data.briefing.followUps.length
+    ? `<h2 style="font-size:16px;font-weight:600;margin:24px 0 8px;">Follow up in this round</h2>
+       <ul style="font-size:14px;line-height:1.6;margin:0 0 16px;padding-left:20px;">` +
+       data.briefing.followUps.map((f) =>
+         `<li><strong>${label[f.type] ?? 'Follow up'} (${esc(f.roundName)}):</strong> ${esc(f.text)}</li>`).join('') +
+       `</ul>`
+    : '';
+
+  const guard = data.briefing.rounds.length
+    ? p(`<span style="font-size:12px;color:#888;">Earlier scores are hidden so each round stays independent, and coaching notes written for the earlier interviewers aren't shared — this is the read on the candidate only.</span>`)
+    : '';
+
+  await sendEmail({
+    to: data.to,
+    templateId: 'interview_round_prep',
+    subject: `Interview prep: ${data.firstName} ${data.lastName} — ${data.roundName}`,
+    html: wrap(`
+      ${h1(`Interview prep — ${esc(data.roundName)}`)}
+      ${p(`Hi ${data.interviewerName ? esc(data.interviewerName) : 'there'},`)}
+      ${p(`You're up for the <strong>${esc(data.roundName)}</strong> interview with <strong>${esc(data.firstName)} ${esc(data.lastName)}</strong>${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}. Here's what earlier rounds found and what to dig into.`)}
+      ${contextBlock}
+      ${followBlock}
+      ${guard}
+    `),
+  });
+}

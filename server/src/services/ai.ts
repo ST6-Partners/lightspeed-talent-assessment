@@ -24,11 +24,20 @@ export interface InterviewQuestion {
   rationale: string;
 }
 
+export interface InterviewFollowUp {
+  // 'avoided'      — a question the candidate dodged / did not answer
+  // 'half_answered'— answered partially; needs more depth next round
+  // 'suggested'    — a topic a later round should probe
+  type: 'avoided' | 'half_answered' | 'suggested';
+  text: string;
+}
+
 export interface InterviewFeedback {
   interviewScore: number;          // 0–100
   feedbackHr: string;              // full report for hiring manager
   feedbackCandidate: string;       // candidate-facing summary
   feedbackInterviewer: string;     // coaching summary for the interviewer
+  followUps: InterviewFollowUp[];  // open threads to carry into later rounds
 }
 
 // ── Core Claude caller ─────────────────────────────────────
@@ -203,7 +212,8 @@ Return a JSON object with:
   "interviewScore": <integer 0-100>,
   "feedbackHr": "<full hiring manager report — include: overall assessment; WHAT WENT WELL and WHAT DIDN'T for the candidate; which planned questions were asked vs. missed; which questions the candidate did not fully answer or actively AVOIDED/deflected; values alignment; recommendation>",
   "feedbackCandidate": "<candidate-facing summary — professional, constructive, positive where warranted, specific on growth areas, no internal scoring details or interviewer critique>",
-  "feedbackInterviewer": "<coaching summary addressed to the interviewer — WHAT THEY DID WELL and WHAT TO IMPROVE in how they conducted the interview; which planned questions they did not get to; where they let the candidate dodge a question without following up; question coverage and time balance; specific, actionable, collegial>"
+  "feedbackInterviewer": "<coaching summary addressed to the interviewer — WHAT THEY DID WELL and WHAT TO IMPROVE in how they conducted the interview; which planned questions they did not get to; where they let the candidate dodge a question without following up; question coverage and time balance; specific, actionable, collegial>",
+  "followUps": [ { "type": "avoided" | "half_answered" | "suggested", "text": "<one specific question or topic a LATER interview round should ask this candidate — for 'avoided' name what they dodged, for 'half_answered' name what needs more depth, for 'suggested' name a topic worth probing next. Write it about the CANDIDATE only, never about the interviewer.>" } ]
 }
 
 Return ONLY the JSON object, no other text.`;
@@ -214,6 +224,7 @@ Return ONLY the JSON object, no other text.`;
     const objStart = fenced.indexOf('{');
     const objEnd = fenced.lastIndexOf('}');
     const feedback = JSON.parse(fenced.slice(objStart, objEnd + 1)) as InterviewFeedback;
+    if (!Array.isArray(feedback.followUps)) feedback.followUps = [];
     return feedback;
   } catch (err) {
     console.error('[AI] analyzeInterviewTranscript failed:', err);
@@ -373,6 +384,11 @@ QUESTIONS THE CANDIDATE AVOIDED
 - Partial dodge on the employment-gap question — gave a timeline but not the substance.
 
 Overall a solid, well-run interview; the main opportunity is following up harder when an answer is evasive or incomplete.`,
+    followUps: [
+      { type: 'avoided', text: 'Own the individual contribution on the work sample — what specifically was YOURS vs. the team\'s?' },
+      { type: 'half_answered', text: 'The employment-gap timeline was given but not the substance — what happened and what was learned?' },
+      { type: 'suggested', text: 'Probe ownership and quantifiable impact ("what changed as a result?") for the Drive value.' },
+    ],
   };
 }
 

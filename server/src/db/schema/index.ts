@@ -64,3 +64,5 @@ export { assessmentPackages } from './assessmentPackages.js';
 
 // Intake Form child tables (migration 0019)
 export { interviewPlan, hiringTeam, awarenessList, approvals, interviewQuestions } from './intake.js';
+
+export { candidateInterviews } from './interviews.js';
