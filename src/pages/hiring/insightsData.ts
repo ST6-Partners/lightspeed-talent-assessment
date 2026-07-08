@@ -35,10 +35,10 @@ export type InsightsProfile = {
 };
 
 export const COLOURS: Record<ColourKey, { label: string; hex: string }> = {
-  red:    { label: 'Fiery Red',       hex: '#E5352B' },
-  yellow: { label: 'Sunshine Yellow', hex: '#F5B800' },
-  green:  { label: 'Earth Green',     hex: '#2E9E4F' },
-  blue:   { label: 'Cool Blue',       hex: '#1E7FC2' },
+  red:    { label: 'Red',       hex: '#E5352B' },
+  yellow: { label: 'Yellow', hex: '#F5B800' },
+  green:  { label: 'Green',     hex: '#2E9E4F' },
+  blue:   { label: 'Blue',       hex: '#1E7FC2' },
 };
 export const COLOUR_ORDER: ColourKey[] = ['blue', 'green', 'yellow', 'red'];
 
