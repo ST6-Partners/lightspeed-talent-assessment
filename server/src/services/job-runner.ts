@@ -185,38 +185,9 @@ export async function startCronJobs(db: DrizzleClient): Promise<void> {
 // These demonstrate the pattern. Real adopters replace with their domain jobs.
 
 export function registerBuiltInJobs(): void {
-  registerJob({
-    name: 'db-vacuum',
-    label: 'DB Vacuum',
-    description: 'Run VACUUM ANALYZE on all tables to reclaim space and update statistics',
-    color: '#2563eb',
-    jobType: 'manual',
-    handler: async () => {
-      // Note: this is a no-op placeholder. Real implementation needs raw pool access.
-      // Adopters should replace with their actual vacuum logic.
-      return { affected: 0, details: 'VACUUM ANALYZE completed (placeholder — wire up pool access for real execution)' };
-    },
-  });
-
-  registerJob({
-    name: 'cleanup-expired-sessions',
-    label: 'Cleanup Sessions',
-    description: 'Remove expired session records from the session store',
-    color: '#059669',
-    jobType: 'manual',
-    handler: async () => {
-      return { affected: 0, details: 'Session cleanup completed (placeholder — wire up session store for real execution)' };
-    },
-  });
-
-  registerJob({
-    name: 'recompute-stats',
-    label: 'Recompute Stats',
-    description: 'Recalculate cached statistics and aggregated counters',
-    color: '#7c3aed',
-    jobType: 'manual',
-    handler: async () => {
-      return { affected: 0, details: 'Stats recomputed (placeholder — wire up your stats logic)' };
-    },
-  });
+  // The generic template maintenance jobs (db-vacuum, cleanup-expired-sessions,
+  // recompute-stats) were no-op placeholders that reported success without doing
+  // anything, so they were removed to avoid misleading the admin. The real hiring
+  // jobs are registered by hiring-scheduler (registerHiringJobs). Re-add real
+  // maintenance jobs here when they're actually implemented.
 }

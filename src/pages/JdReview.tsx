@@ -98,7 +98,7 @@ export default function JdReview() {
 
       <div style={{ marginTop: 20, borderTop: '1px solid #eef2f7', paddingTop: 16 }}>
         <label style={{ ...lbl, marginTop: 0 }}>Your name (optional)</label>
-        <input style={inp} value={approverName} onChange={(e) => setApproverName(e.target.value)} placeholder="e.g. Wes Anderson" />
+        <input style={inp} value={approverName} onChange={(e) => setApproverName(e.target.value)} placeholder="e.g. Jade Friedman" />
         {approve.error && <p style={{ color: '#b91c1c', fontSize: 13, margin: '10px 0 0' }}>{approve.error.message}</p>}
         <div style={{ marginTop: 14 }}>
           <button

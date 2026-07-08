@@ -335,7 +335,7 @@ export default function Intake() {
               </div>
               <div>
                 <label className={lbl}>Hiring Manager *</label>
-                <input type="text" value={form.hiringManager} onChange={(e) => setForm({ ...form, hiringManager: e.target.value })} placeholder="e.g. Wes Anderson" className={inp} />
+                <input type="text" value={form.hiringManager} onChange={(e) => setForm({ ...form, hiringManager: e.target.value })} placeholder="e.g. Jade Friedman" className={inp} />
               </div>
               <div>
                 <label className={lbl}>Number of Openings</label>

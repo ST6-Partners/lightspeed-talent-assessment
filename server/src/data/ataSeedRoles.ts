@@ -15,7 +15,7 @@
  *       Engineering → Priya Nair, Product → Sofia Reyes,
  *       Sales → Marcus Bell, Customer Success → Dana Liu.
  *     Departments with no manager on file (Operations, Legal, HR, Marketing)
- *     use placeholder "Wes Anderson" — FINALIZE LATER.
+ *     use placeholder "Jade Friedman" — FINALIZE LATER.
  *   • Department values use the app's existing dropdown set:
  *       Engineering, Product, Sales, Marketing, Operations, Finance, HR,
  *       Customer Success, Legal, Other.
@@ -252,7 +252,7 @@ export const ataSeedRoles: SeedRole[] = [
     key: 'director-strategic-programs',
     sourceFile: 'DSP_JD_20260504.docx',
     requisition: {
-      department: 'Operations', hiringManager: 'Wes Anderson', openings: 1,
+      department: 'Operations', hiringManager: 'Jade Friedman', openings: 1,
       employmentType: FT, location: 'Austin, TX', priority: 'High',
       remoteEligible: false, status: 'draft',
     },
@@ -289,7 +289,7 @@ export const ataSeedRoles: SeedRole[] = [
     key: 'director-privacy-compliance',
     sourceFile: 'Director, Privacy Compliance _JD_20230116.docx',
     requisition: {
-      department: 'Legal', hiringManager: 'Wes Anderson', openings: 1,
+      department: 'Legal', hiringManager: 'Jade Friedman', openings: 1,
       employmentType: FT, location: 'Austin, TX', priority: 'High',
       remoteEligible: false, status: 'draft',
     },
@@ -395,7 +395,7 @@ export const ataSeedRoles: SeedRole[] = [
     key: 'hr-generalist',
     sourceFile: 'HR Generalist_JD_20230616.docx',
     requisition: {
-      department: 'HR', hiringManager: 'Wes Anderson', openings: 1,
+      department: 'HR', hiringManager: 'Jade Friedman', openings: 1,
       employmentType: FT, location: 'Austin, TX', priority: 'Medium',
       remoteEligible: false, status: 'draft',
     },
@@ -429,7 +429,7 @@ export const ataSeedRoles: SeedRole[] = [
     key: 'marketing-events-coordinator',
     sourceFile: 'Marketing Events Coordinator_JD_20230616.docx',
     requisition: {
-      department: 'Marketing', hiringManager: 'Wes Anderson', openings: 1,
+      department: 'Marketing', hiringManager: 'Jade Friedman', openings: 1,
       employmentType: FT, location: 'Austin, TX', priority: 'Medium',
       remoteEligible: false, status: 'draft',
     },
@@ -637,7 +637,7 @@ export const ataSeedRoles: SeedRole[] = [
     key: 'systems-administrator',
     sourceFile: 'Systems Administrator_JD_202203.docx',
     requisition: {
-      department: 'Operations', hiringManager: 'Wes Anderson', openings: 1,
+      department: 'Operations', hiringManager: 'Jade Friedman', openings: 1,
       employmentType: FT, location: 'Austin, TX', priority: 'Medium',
       remoteEligible: false, reasonForHire: 'IT systems administration',
       status: 'draft',

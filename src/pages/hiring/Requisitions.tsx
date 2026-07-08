@@ -146,7 +146,7 @@ export default function Requisitions() {
                 type="text"
                 value={form.hiringManager}
                 onChange={(e) => setForm({ ...form, hiringManager: e.target.value })}
-                placeholder="e.g. Wes Anderson"
+                placeholder="e.g. Jade Friedman"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
             </div>
