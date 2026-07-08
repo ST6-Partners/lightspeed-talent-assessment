@@ -34,7 +34,7 @@ import { runReferenceCheck } from '../services/ai.js';
 import { draftTransitionPlan } from '../services/ai.js';
 import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, STANDARD_INTERNAL_OFFER_CLAUSES, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
 import { createOfferAgreement } from '../services/adobeSign.js';
-import { composeInternalReport, getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
+import { getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 import { seedCandidateResume, seedAssessmentResults } from '../services/postAssessmentReview.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
@@ -1834,34 +1834,14 @@ export const candidatesRouter = router({
       return out;
     }),
 
-  // Email the "internal candidates in flight" report to leadership (SendGrid + test inbox).
-  emailInternalReport: protectedProcedure
-    .input(z.object({ to: z.array(z.string().email()).min(1) }))
-    .mutation(async ({ ctx, input }) => {
-      const { subject, html, count: active_count } = await composeInternalReport(ctx.db);
-      let sent = 0;
-      for (const to of input.to) {
-        await sendEmail({ to, subject, html, templateId: 'internal_report' }).catch(() => {});
-        try {
-          await ctx.db.insert(inboundEmails).values({
-            fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed HR',
-            toEmail: to, subject, body: html, replyTag: 'internal_report', source: 'simulated', raw: { kind: 'internal_report' },
-          });
-        } catch (e) { console.error('[internal report] inbox record failed', e); }
-        sent++;
-      }
-      trackActivity(ctx.db, ctx.user.id, 'email_internal_report', 'candidates', { count: active_count, recipients: input.to.length }).catch(() => {});
-      return { sent, count: active_count };
-    }),
-
-  // Weekly internal-report schedule config (recipients + enabled).
+  // Leadership notification recipients — auto-emailed on each internal express-interest.
   getReportConfig: protectedProcedure
     .query(async ({ ctx }) => getInternalReportConfig(ctx.db)),
 
   setReportConfig: protectedProcedure
-    .input(z.object({ recipients: z.array(z.string().email()), enabled: z.boolean() }))
+    .input(z.object({ recipients: z.array(z.string().email()), enabled: z.boolean().optional() }))
     .mutation(async ({ ctx, input }) => {
-      await setInternalReportConfig(ctx.db, input, ctx.user.id);
+      await setInternalReportConfig(ctx.db, { recipients: input.recipients, enabled: input.enabled ?? true }, ctx.user.id);
       return { ok: true };
     }),
 });

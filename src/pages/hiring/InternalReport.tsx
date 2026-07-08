@@ -17,15 +17,13 @@ export default function InternalReport() {
   const navigate = useNavigate();
   const { data: rows, isLoading } = trpc.candidates.internalPipeline.useQuery();
 
-  // ── ONE leadership recipient list drives both "send now" and the weekly digest ──
+  // ── Leadership recipients: auto-emailed whenever an employee expresses interest ──
   const cfg = trpc.candidates.getReportConfig.useQuery();
   const saveCfg = trpc.candidates.setReportConfig.useMutation({ onSuccess: () => cfg.refetch() });
-  const emailReport = trpc.candidates.emailInternalReport.useMutation();
 
   const [recipsText, setRecipsText] = useState('');
-  const [weekly, setWeekly] = useState(false);
   useEffect(() => {
-    if (cfg.data) { setRecipsText((cfg.data.recipients ?? []).join(', ')); setWeekly(!!cfg.data.enabled); }
+    if (cfg.data) { setRecipsText((cfg.data.recipients ?? []).join(', ')); }
   }, [cfg.data]);
   const recipients = recipsText.split(/[,;\n]/).map((e) => e.trim()).filter((e) => e.includes('@'));
 
@@ -92,7 +90,7 @@ export default function InternalReport() {
         )}
       </div>
 
-      {/* Leadership notifications — ONE recipient list for send-now + weekly */}
+      {/* Leadership notifications — recipient list, auto-emailed on each internal interest */}
       <div className="bg-white rounded-lg border border-gray-200">
         <button
           onClick={() => setNotifyOpen((v) => !v)}
@@ -103,13 +101,13 @@ export default function InternalReport() {
             Leadership notifications
           </span>
           <span className="text-xs font-normal text-gray-400">
-            {weekly ? `Weekly · ${recipients.length} recipient(s)` : 'Send this pipeline to leadership'}
+            {recipients.length ? `${recipients.length} recipient(s) · auto-notified` : 'Add recipients'}
           </span>
         </button>
 
         {notifyOpen && (
           <div className="px-4 pb-4 border-t border-gray-100 pt-4">
-            <div className="text-xs text-gray-500 mb-1">Leadership recipients (comma-separated) — used for both the weekly digest and Send now</div>
+            <div className="text-xs text-gray-500 mb-1">Leadership recipients (comma-separated). Everyone listed here is emailed automatically whenever an employee expresses interest in an internal role.</div>
             <textarea
               value={recipsText}
               onChange={(e) => setRecipsText(e.target.value)}
@@ -117,27 +115,15 @@ export default function InternalReport() {
               placeholder="leadership@…, elt@…, hr@…"
               className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
             />
-            <label className="flex items-center gap-2 text-xs text-gray-700 mt-2">
-              <input type="checkbox" checked={weekly} onChange={(e) => setWeekly(e.target.checked)} />
-              Send this pipeline automatically every Monday (9am)
-            </label>
             <div className="flex items-center gap-2 mt-3">
               <button
-                onClick={() => saveCfg.mutate({ recipients, enabled: weekly })}
+                onClick={() => saveCfg.mutate({ recipients })}
                 disabled={saveCfg.isLoading}
                 className="text-sm px-4 py-2 border border-ls-primary text-ls-primary rounded-md font-medium disabled:opacity-50"
               >
-                {saveCfg.isLoading ? 'Saving…' : 'Save recipients & schedule'}
+                {saveCfg.isLoading ? 'Saving…' : 'Save recipients'}
               </button>
-              <button
-                onClick={() => emailReport.mutate({ to: recipients })}
-                disabled={recipients.length === 0 || emailReport.isLoading}
-                className="text-sm px-4 py-2 bg-ls-primary text-white rounded-md font-medium hover:bg-ls-primary-600 disabled:opacity-50"
-              >
-                {emailReport.isLoading ? 'Sending…' : 'Send now'}
-              </button>
-              {saveCfg.isSuccess && <span className="text-xs text-green-700">Saved{weekly ? ` · weekly to ${recipients.length}` : ' · weekly off'}.</span>}
-              {emailReport.data && <span className="text-xs text-green-700">Sent to {emailReport.data.sent} — {emailReport.data.count} candidate(s).</span>}
+              {saveCfg.isSuccess && <span className="text-xs text-green-700">Saved · {recipients.length} recipient(s).</span>}
             </div>
             <div className="text-xs text-gray-400 mt-3">Sends via SendGrid and drops a copy in the Email Test inbox. Automatic org-chart routing arrives with HRIS access. (Notifying a single candidate's own manager/leadership chain is done on that candidate's record.)</div>
           </div>

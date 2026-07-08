@@ -15,7 +15,6 @@ import { candidates, candidateStageHistory, emailLog, jobDescriptions, jobRequis
 import { approvals } from '../db/schema/intake.js';
 import { registerJob, type JobResult } from './job-runner.js';
 import { inboundEmails } from '../db/schema/email.js';
-import { getInternalReportConfig, composeInternalReport } from './internalReport.js';
 import { sendEmail, emailBookingReminderCandidate, emailBookingStalledHR } from './email.js';
 import { computeHiringAlerts, renderAlertDigest } from './hiring-alerts.js';
 import { approverEmail, emailApprovalReminder, emailInterviewReminderCandidate, emailInterviewReminderInterviewer, emailPostingOpenedExternal, HIRING_TEAM_INBOX } from './email.js';
@@ -227,27 +226,6 @@ async function runAssessmentAutoReject({ force = false }: { force?: boolean } = 
 }
 
 // ── Register with job-runner ───────────────────────────────
-
-// ── Job: weekly internal candidates report to leadership ──
-async function runInternalReport(): Promise<JobResult> {
-  const cfg = await getInternalReportConfig(db);
-  if (!cfg.enabled || cfg.recipients.length === 0) {
-    return { affected: 0, details: 'Skipped — report disabled or no recipients configured.' };
-  }
-  const { subject, html, count } = await composeInternalReport(db);
-  let sent = 0;
-  for (const to of cfg.recipients) {
-    try {
-      await sendEmail({ to, subject, html, templateId: 'internal_report' });
-      await db.insert(inboundEmails).values({
-        fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed HR',
-        toEmail: to, subject, body: html, replyTag: 'internal_report', source: 'simulated', raw: { kind: 'internal_report_scheduled' },
-      });
-      sent++;
-    } catch (err) { console.error('[internal-report] send failed:', err); }
-  }
-  return { affected: sent, details: `Sent internal report (${count} candidate(s)) to ${sent} recipient(s).` };
-}
 
 // ── Job: interview booking reminder + stall alert ──────────
 // For candidates whose scheduling was opened but who haven't booked:
@@ -469,15 +447,6 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '5 9 * * *',   // 9:05 AM daily (5 min after reminder)
     handler:        runAssessmentAutoReject,
-  });
-  registerJob({
-    name:           'internal-candidates-report',
-    label:          'Internal Candidates Report',
-    description:    'Weekly report of internal candidates in flight, emailed to the configured leadership recipients.',
-    color:          '#8b5cf6',
-    jobType:        'cron',
-    cronExpression: '0 9 * * 1',   // Mondays 9:00 AM (Railway server time)
-    handler:        runInternalReport,
   });
   registerJob({
     name:           'interview-booking-reminder',
