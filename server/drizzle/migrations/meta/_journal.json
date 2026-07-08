@@ -337,6 +337,13 @@
       "when": 1960000018000,
       "tag": "0045_scorecard_interview_link",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1960000019000,
+      "tag": "0046_clear_employees_for_testing",
+      "breakpoints": true
     }
   ]
 }
