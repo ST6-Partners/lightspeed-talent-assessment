@@ -21,6 +21,10 @@ const STATUS_STYLE: Record<string, string> = {
 const FOLLOW_LABEL: Record<string, string> = { avoided: 'Avoided', half_answered: 'Half-answered', suggested: 'Suggested' };
 // Interviews tab only surfaces candidates at the interview stage or beyond.
 const INTERVIEW_STAGES = ['Interview Scheduled', 'Interviewed', 'Offered', 'Hired'];
+// Managers want all of a candidate's rounds held inside a tight window so the
+// panel compares people while they're fresh (manager-meeting decision).
+const INTERVIEW_WINDOW_HOURS = 48;
+const fmtSpan = (h: number) => (h < 48 ? `${h}h` : `${(h / 24).toFixed(1)} days`);
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -236,6 +240,17 @@ export default function Interviews() {
   const nextUp = list.find((r) => r.status !== 'completed');
   const firstIncompleteId = nextUp?.id;
 
+  // 48-hour window check across this candidate's scheduled rounds.
+  const scheduledTimes = list
+    .filter((r) => r.scheduledAt)
+    .map((r) => new Date(r.scheduledAt).getTime())
+    .sort((a, b) => a - b);
+  const windowHrs = scheduledTimes.length >= 2
+    ? Math.round((scheduledTimes[scheduledTimes.length - 1] - scheduledTimes[0]) / 3_600_000)
+    : null;
+  const withinWindow = windowHrs == null ? null : windowHrs <= INTERVIEW_WINDOW_HOURS;
+  const allScheduled = list.length > 0 && scheduledTimes.length === list.length;
+
   const filtered = active.filter((c: any) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
@@ -296,6 +311,24 @@ export default function Interviews() {
               <Stat label="Avg score" value={avg != null ? `${avg}` : '—'} />
               <Stat label="Next up" value={nextUp ? nextUp.roundName : (list.length ? 'Done' : '—')} />
             </div>
+
+            {list.length > 0 && (
+              <div className="mt-2 space-y-1 text-[11px]">
+                {windowHrs != null && !withinWindow && (
+                  <div className="rounded bg-amber-50 border border-amber-200 text-amber-800 px-2 py-1">
+                    ⚠ Rounds span {fmtSpan(windowHrs)} — aim to hold all rounds within a ~48h window so the panel can compare candidates while they're fresh.
+                  </div>
+                )}
+                {windowHrs != null && withinWindow && (
+                  <div className="rounded bg-green-50 border border-green-200 text-green-700 px-2 py-1">
+                    ✓ Scheduled rounds fall within {fmtSpan(windowHrs)} (target ≤ 48h).
+                  </div>
+                )}
+                {!allScheduled && (
+                  <div className="text-gray-500">{scheduledTimes.length} of {list.length} rounds have a time set{scheduledTimes.length === list.length ? '' : ' — set times to check the 48h window'}.</div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Rounds */}
