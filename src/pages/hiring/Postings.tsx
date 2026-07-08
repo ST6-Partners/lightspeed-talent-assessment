@@ -86,7 +86,7 @@ export default function Postings() {
                     <td className="px-4 py-3">
                       {jd ? (
                         <Link to="/hiring/jobs" className="inline-flex items-center gap-1 text-ls-primary hover:underline">
-                          <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${JD_BADGE[jd.status] ?? ''}`}>{jd.status}</span>
+                          <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${JD_BADGE[(jd as any).pendingReview ? 'Draft' : (jd.status === 'Closed' ? 'Closed' : 'Published')] ?? ''}`}>{(jd as any).pendingReview ? 'Draft' : (jd.status === 'Closed' ? 'Closed' : 'Published')}</span>
                         </Link>
                       ) : <span className="text-gray-400 text-xs">—</span>}
                     </td>

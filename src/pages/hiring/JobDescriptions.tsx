@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, Send, Pencil, Trash2 , Megaphone, CheckCircle2 } from 'lucide-react';
+import { Plus, X, Pencil, Trash2 , Megaphone, CheckCircle2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const LIGHTSPEED_VALUES = [
@@ -26,6 +26,13 @@ const EMPTY_FORM = {
   workSampleTaskId: '',
 };
 
+// A JD is "live/Published" once approved; only an intake-generated JD still
+// awaiting approval (pendingReview) reads "Draft". Closed stays Closed.
+function jdStatus(jd: any): 'Draft' | 'Published' | 'Closed' {
+  if (jd.status === 'Closed') return 'Closed';
+  return (jd as any).pendingReview ? 'Draft' : 'Published';
+}
+
 export default function JobDescriptions() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -43,9 +50,6 @@ export default function JobDescriptions() {
   });
   const updateMutation = trpc.jobDescriptions.update.useMutation({
     onSuccess: () => { refetch(); closeForm(); },
-  });
-  const publishMutation = trpc.jobDescriptions.publish.useMutation({
-    onSuccess: () => refetch(),
   });
   const approveReviewMutation = trpc.jobDescriptions.approveReview.useMutation({
     onSuccess: () => refetch(),
@@ -308,8 +312,8 @@ export default function JobDescriptions() {
                       : '—'}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_COLORS[jd.status] ?? ''}`}>
-                      {jd.status}
+                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_COLORS[jdStatus(jd)] ?? ''}`}>
+                      {jdStatus(jd)}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -322,16 +326,6 @@ export default function JobDescriptions() {
                           title="Approve new JD (clears the review flag)"
                         >
                           <CheckCircle2 size={15} />
-                        </button>
-                      )}
-                      {jd.status === 'Draft' && (
-                        <button
-                          onClick={() => publishMutation.mutate({ id: jd.id })}
-                          disabled={publishMutation.isLoading}
-                          className="p-1 text-gray-400 hover:text-green-600 transition-colors"
-                          title="Publish"
-                        >
-                          <Send size={15} />
                         </button>
                       )}
                       <button

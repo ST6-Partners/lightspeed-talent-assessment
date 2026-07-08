@@ -198,7 +198,7 @@ export async function approveJdAndOpenRole(db: DrizzleClient, jdId: string): Pro
   if (!jd) return null;
   if (!(jd as any).pendingReview) return jd;
   const [updated] = await db.update(jobDescriptions)
-    .set({ pendingReview: false, updatedAt: new Date() })
+    .set({ pendingReview: false, status: 'Published', publishedAt: new Date(), updatedAt: new Date() })
     .where(eq(jobDescriptions.id, jdId)).returning();
   const req = jd.reqId ? await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) }) : null;
   if (req && req.status === 'Approved') {

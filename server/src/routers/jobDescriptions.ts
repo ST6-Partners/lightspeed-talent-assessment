@@ -72,7 +72,7 @@ export const jobDescriptionsRouter = router({
   create: protectedProcedure
     .input(JdInput)
     .mutation(async ({ ctx, input }) => {
-      const [jd] = await ctx.db.insert(jobDescriptions).values(input).returning();
+      const [jd] = await ctx.db.insert(jobDescriptions).values({ ...input, status: 'Published', publishedAt: new Date() } as any).returning();
 
       await auditChange(ctx.db, ctx.user.id, jd.id, 'job_descriptions', 'create');
       trackActivity(ctx.db, ctx.user.id, 'create_job_description', 'job_descriptions', { jdId: jd.id }).catch(() => {});
