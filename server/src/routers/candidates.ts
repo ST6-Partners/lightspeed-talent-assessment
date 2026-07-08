@@ -16,6 +16,7 @@ import { valueReviews, candidateValueScores, companyValues } from '../db/schema/
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { analyzeInterviewTranscript } from '../services/ai.js';
+import { processInterviewFeedback } from '../services/interviewFeedback.js';
 import { sendAssessment, getScores } from '../services/criteriaCorp.js';
 import {
   emailApplicationReceived,
@@ -1522,6 +1523,45 @@ export const candidatesRouter = router({
         .where(eq(candidates.id, input.id))
         .returning();
       return candidate;
+    }),
+
+  // Process a finished interview: transcript -> AI feedback (candidate,
+  // hiring-manager, interviewer coaching) -> store -> email HR + interviewer.
+  // Pass a transcript to use it; omit it to reuse a stored transcript, or —
+  // when Zoom isn't connected — auto-generate a realistic sample transcript
+  // so the whole flow works end-to-end.
+  processInterview: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      transcript: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({
+        where: eq(candidates.id, input.id),
+      });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const result = await processInterviewFeedback({
+        candidateId: input.id,
+        transcript: input.transcript ?? null,
+        changedBy: ctx.user.id,
+        sendEmails: true,
+      });
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'process_interview', 'candidates', {
+        candidateId: input.id, transcriptSource: result.transcriptSource,
+      }).catch(() => {});
+
+      return {
+        interviewScore: result.feedback.interviewScore,
+        feedbackHr: result.feedback.feedbackHr,
+        feedbackCandidate: result.feedback.feedbackCandidate,
+        feedbackInterviewer: result.feedback.feedbackInterviewer,
+        transcript: result.transcript,
+        transcriptSource: result.transcriptSource,
+        emailedInterviewer: result.emailedInterviewer,
+      };
     }),
 
   // Send CCAT + EPP assessment invitation via Criteria Corp

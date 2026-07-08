@@ -28,6 +28,7 @@ export interface InterviewFeedback {
   interviewScore: number;          // 0–100
   feedbackHr: string;              // full report for hiring manager
   feedbackCandidate: string;       // candidate-facing summary
+  feedbackInterviewer: string;     // coaching summary for the interviewer
 }
 
 // ── Core Claude caller ─────────────────────────────────────
@@ -168,9 +169,17 @@ export async function analyzeInterviewTranscript(
     ? input.interviewQuestions.map((q, i) => `${i + 1}. [${q.category}] ${q.question}`).join('\n')
     : 'No pre-generated questions available.';
 
-  const system = `You are an expert HR analyst at Lightspeed Systems reviewing a candidate interview.
-You will receive a Zoom transcript and the list of questions that were supposed to be asked.
-Produce two outputs: a detailed hiring manager report and a candidate-facing feedback summary.
+  const system = `You are an expert HR analyst and interview coach at Lightspeed Systems reviewing a candidate interview.
+You will receive a transcript of the interview and the list of questions that were supposed to be asked.
+Produce THREE outputs:
+  1. a detailed hiring manager report about the CANDIDATE,
+  2. a constructive candidate-facing feedback summary, and
+  3. a coaching summary for the INTERVIEWER about how they ran the interview.
+
+Read the transcript closely for coverage and evasion. Determine which of the planned questions were actually
+asked, which were skipped, and — critically — any questions the candidate DODGED or AVOIDED (deflected, gave a
+non-answer, redirected, or answered a different question than the one asked). Note where the interviewer let an
+evasive or incomplete answer go without following up.
 
 Lightspeed's core values: ${LIGHTSPEED_VALUES.join(', ')}.`;
 
@@ -192,8 +201,9 @@ ${input.transcript || 'No transcript available.'}
 Return a JSON object with:
 {
   "interviewScore": <integer 0-100>,
-  "feedbackHr": "<full hiring manager report — include: overall assessment, what went well, what didn't, which questions were asked vs missed, which questions the candidate didn't fully answer, recommendation>",
-  "feedbackCandidate": "<candidate-facing summary — professional, constructive, positive where warranted, specific on growth areas, no internal scoring details>"
+  "feedbackHr": "<full hiring manager report — include: overall assessment; WHAT WENT WELL and WHAT DIDN'T for the candidate; which planned questions were asked vs. missed; which questions the candidate did not fully answer or actively AVOIDED/deflected; values alignment; recommendation>",
+  "feedbackCandidate": "<candidate-facing summary — professional, constructive, positive where warranted, specific on growth areas, no internal scoring details or interviewer critique>",
+  "feedbackInterviewer": "<coaching summary addressed to the interviewer — WHAT THEY DID WELL and WHAT TO IMPROVE in how they conducted the interview; which planned questions they did not get to; where they let the candidate dodge a question without following up; question coverage and time balance; specific, actionable, collegial>"
 }
 
 Return ONLY the JSON object, no other text.`;
@@ -209,6 +219,61 @@ Return ONLY the JSON object, no other text.`;
     console.error('[AI] analyzeInterviewTranscript failed:', err);
     return getMockFeedback(input);
   }
+}
+
+// ── Transcript synthesis (no-Zoom demo path) ───────────────
+// When Zoom credentials aren't configured we still want the full
+// "recording → transcript → feedback → email" flow to work. This
+// produces a realistic interview transcript from the role + planned
+// questions. Uses Claude when a key is present; returns a canned but
+// realistic transcript in SANDBOX. HR can also paste a real transcript
+// instead, in which case this is not called.
+export interface TranscriptSynthInput {
+  firstName: string;
+  lastName: string;
+  jobTitle?: string;
+  interviewerName?: string | null;
+  interviewQuestions?: InterviewQuestion[] | null;
+}
+
+export async function synthesizeInterviewTranscript(input: TranscriptSynthInput): Promise<string> {
+  if (SANDBOX) {
+    console.log(`[AI SANDBOX] synthesizeInterviewTranscript | ${input.firstName} ${input.lastName}`);
+    return getMockTranscript(input);
+  }
+  const qs = (input.interviewQuestions ?? []).map((q, i) => `${i + 1}. [${q.category}] ${q.question}`).join('\n') || 'No pre-generated questions available.';
+  const system = `You are generating a REALISTIC but SYNTHETIC interview transcript for a demo of Lightspeed Systems' hiring tool. It is clearly not a real interview. Make it read like a genuine ~30-minute Zoom transcript: speaker labels ("Interviewer:" / candidate first name + ":"), natural back-and-forth, some strong answers and some weaker/evasive ones. Deliberately (a) skip one or two of the planned questions and (b) have the candidate dodge or give a non-answer to at least one question, so downstream feedback has something to catch. Plain text only, no markdown.`;
+  const user = `Candidate: ${input.firstName} ${input.lastName}\nRole: ${input.jobTitle ?? 'Unknown'}\nInterviewer: ${input.interviewerName ?? 'Interviewer'}\n\nPlanned questions:\n${qs}\n\nWrite the transcript.`;
+  try {
+    return await callClaude(system, user);
+  } catch (err) {
+    console.error('[AI] synthesizeInterviewTranscript failed, using mock:', err);
+    return getMockTranscript(input);
+  }
+}
+
+function getMockTranscript(input: TranscriptSynthInput): string {
+  const iv = input.interviewerName || 'Interviewer';
+  const c = input.firstName;
+  const role = input.jobTitle ?? 'the role';
+  return `[SANDBOX SAMPLE TRANSCRIPT — synthetic, generated for demo because Zoom is not connected]
+
+${iv}: Thanks for joining, ${c}. To start, tell me a bit about your background and what drew you to ${role} at Lightspeed.
+${c}: Thanks for having me. I've spent the last five years in K-12 edtech, most recently leading a small team. Lightspeed's focus on student safety is what really drew me in.
+${iv}: Great. Tell me about a time you had to adapt quickly to a significant change at work.
+${c}: Sure — mid-project our biggest client changed their requirements. I reorganized the roadmap over a weekend, got the team realigned Monday, and we shipped only a week late. I over-communicated the whole way.
+${iv}: Nice, that's a clear example. Describe a time you had to hold yourself accountable for a mistake.
+${c}: I shipped a config change that broke reporting for a day. I owned it in the postmortem, wrote the fix, and added a test so it couldn't happen again.
+${iv}: Good. On the work sample — your score came in a little lower than we'd expect. Walk me through your approach there.
+${c}: Yeah, well, the team dynamic on that kind of thing is always tricky, and honestly the prompt was a bit ambiguous. I think as a group we'd have done better. Anyway, I'm more of a systems thinker.
+${iv}: Okay. How do you stay current in your field?
+${c}: I read a lot, follow a few newsletters, and I did a course on data pipelines last quarter that I've applied at work.
+${iv}: Let's talk collaboration — tell me about a time you disagreed with a team decision.
+${c}: I pushed back on a vendor choice once. I laid out the tradeoffs in a doc, we discussed it, and even though we went the other way I supported it fully.
+${iv}: That's helpful. I think we're about at time — really appreciate you walking me through all this, ${c}. We'll be in touch on next steps.
+${c}: Thank you, appreciate the conversation.
+
+[Note: interviewer did not ask the planned employment-gap question or the competing-priorities question; candidate deflected on the work-sample question.]`;
 }
 
 // ── Sandbox mock data ──────────────────────────────────────
@@ -289,6 +354,25 @@ You did a great job demonstrating your collaborative approach and showed clear a
 As you continue in your career, one area to develop is connecting your contributions to measurable business outcomes — hiring teams love to hear the specific impact you drove, not just the actions you took.
 
 We'll be in touch with next steps shortly.`,
+    feedbackInterviewer: `[SANDBOX] Interview Coaching Summary — for the Interviewer
+
+Thanks for interviewing ${input.firstName} ${input.lastName}. Here's a quick debrief on how the conversation went so we keep raising the bar on our interviews.
+
+WHAT WENT WELL
+- Good rapport early; the candidate was at ease and opened up on behavioral questions.
+- You covered the core values questions (Accountability, Collaboration) and gave the candidate room to give STAR-style answers.
+- Clear structure — the conversation moved logically through background, values, and role fit.
+
+WHAT TO IMPROVE
+- Two planned questions weren't asked: the employment-gap probe (Q4) and the competing-priorities question (Q7). Both were flagged as important going in.
+- The candidate deflected on the work-sample question — answered a slightly different question than the one asked — and it wasn't followed up. A simple "that's helpful, but specifically what was YOUR contribution?" would have closed the loop.
+- Ownership/Drive stayed surface-level; pushing once more for quantifiable impact ("what changed as a result?") would have pulled out stronger signal.
+
+QUESTIONS THE CANDIDATE AVOIDED
+- The work-sample score question (redirected to team context rather than owning the individual result).
+- Partial dodge on the employment-gap question — gave a timeline but not the substance.
+
+Overall a solid, well-run interview; the main opportunity is following up harder when an answer is evasive or incomplete.`,
   };
 }
 

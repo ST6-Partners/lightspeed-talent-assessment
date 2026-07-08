@@ -190,6 +190,7 @@ export const candidates = pgTable('candidates', {
   interviewFeedbackHr: text('interview_feedback_hr'),
   interviewFeedbackCandidate: text('interview_feedback_candidate'),
   interviewScore: integer('interview_score'),
+  interviewFeedbackInterviewer: text('interview_feedback_interviewer'),
   notes: text('notes'),
   // Internal-candidate handling
   isInternal: boolean('is_internal').notNull().default(false),

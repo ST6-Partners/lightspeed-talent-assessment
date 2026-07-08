@@ -135,6 +135,11 @@ function button(text: string, url: string) {
   return `<a href="${url}" style="display: inline-block; background: #1a1a1a; color: #fff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500; margin: 8px 0 24px;">${text}</a>`;
 }
 
+// Escape plain text for safe insertion into an HTML email body.
+function esc(t: string): string {
+  return (t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // ── Candidate data shape ───────────────────────────────────
 
 interface CandidateEmailData {
@@ -491,6 +496,32 @@ export async function emailInterviewerQuestions(data: {
       </table>
       ${p('You don\'t need to ask every question — use these as a guide. Focus on areas where the candidate showed lower scores or where the notes flagged something to probe.')}
       ${p('Questions or concerns? Reply to this email or reach out to the hiring team.')}
+    `),
+  });
+}
+
+// ── Post-interview debrief emails (transcript → feedback) ──
+
+// Interviewer-facing coaching summary (how THEY ran the interview).
+export async function emailInterviewFeedbackInterviewer(data: {
+  to: string;
+  interviewerName?: string | null;
+  firstName: string;
+  lastName: string;
+  jobTitle?: string;
+  feedbackInterviewer: string;
+  appUrl?: string;
+}) {
+  await sendEmail({
+    to: data.to,
+    templateId: 'interview_feedback_interviewer',
+    subject: `Your interview debrief: ${data.firstName} ${data.lastName}`,
+    html: wrap(`
+      ${h1('Interview Coaching Summary')}
+      ${p(`Hi ${data.interviewerName ?? 'there'},`)}
+      ${p(`Here's your debrief from the interview with <strong>${data.firstName} ${data.lastName}</strong>${data.jobTitle ? ` for <strong>${data.jobTitle}</strong>` : ''}. It's auto-generated from the interview transcript \u2014 a quick read on what went well and where to push next time.`)}
+      <pre style="white-space:pre-wrap;font-family:inherit;font-size:14px;line-height:1.6;margin:0;">${esc(data.feedbackInterviewer)}</pre>
+      ${data.appUrl ? p(`Full candidate detail: <a href="${data.appUrl}">${data.appUrl}</a>`) : ''}
     `),
   });
 }

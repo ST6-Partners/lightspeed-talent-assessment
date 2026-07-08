@@ -599,17 +599,8 @@ export default function Candidates() {
             </Section>
           )}
 
-          {/* Post-interview feedback (read-only, AI-generated) */}
-          {(selected as any).interviewFeedbackHr && (
-            <Section title="Interview Feedback — HR">
-              <p className="text-xs text-gray-600 whitespace-pre-wrap">{(selected as any).interviewFeedbackHr}</p>
-            </Section>
-          )}
-          {(selected as any).interviewFeedbackCandidate && (
-            <Section title="Interview Feedback — Candidate">
-              <p className="text-xs text-gray-600 whitespace-pre-wrap">{(selected as any).interviewFeedbackCandidate}</p>
-            </Section>
-          )}
+          {/* Interview transcript -> feedback (candidate, HR, interviewer) + email */}
+          <InterviewFeedbackSection key={`ivf-${selected.id}`} candidate={selected} onChanged={refetch} />
         </div>
       )}
     </div>
@@ -617,6 +608,90 @@ export default function Candidates() {
 }
 
 // ── Sub-components ─────────────────────────────────────────
+
+function InterviewFeedbackSection({ candidate, onChanged }: { candidate: any; onChanged?: () => void }) {
+  const [transcript, setTranscript] = useState('');
+  const [result, setResult] = useState<any>(null);
+  const [showTranscript, setShowTranscript] = useState(false);
+  const run = trpc.candidates.processInterview.useMutation({
+    onSuccess: (r) => { setResult(r); onChanged?.(); },
+  });
+
+  const hr = result?.feedbackHr ?? candidate.interviewFeedbackHr;
+  const cand = result?.feedbackCandidate ?? candidate.interviewFeedbackCandidate;
+  const interviewer = result?.feedbackInterviewer ?? candidate.interviewFeedbackInterviewer;
+  const score = result?.interviewScore ?? candidate.interviewScore;
+  const storedTranscript = result?.transcript ?? candidate.interviewTranscript;
+  const hasAny = hr || cand || interviewer;
+
+  return (
+    <Section title="Interview Transcript & Feedback">
+      <div className="text-xs text-gray-500">
+        When the interview finishes, the recording is turned into a transcript and analyzed into feedback for the
+        candidate, the hiring manager, and the interviewer — then the interviewer is emailed their summary. Zoom
+        isn&apos;t connected yet, so paste a transcript below, or just run it to use a generated sample.
+      </div>
+
+      <textarea
+        value={transcript}
+        onChange={(e) => setTranscript(e.target.value)}
+        placeholder="Paste the interview transcript here (optional — leave blank to use a generated sample)…"
+        rows={4}
+        className="w-full px-2 py-1 border border-gray-300 rounded text-xs font-mono mt-1"
+      />
+
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          onClick={() => run.mutate({ id: candidate.id, transcript: transcript.trim() || undefined })}
+          disabled={run.isLoading}
+          className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+        >
+          {run.isLoading ? 'Processing…' : (hasAny ? 'Re-run feedback + email interviewer' : 'Generate feedback + email interviewer')}
+        </button>
+        {score != null && <span className="text-xs text-gray-600">Score: <strong>{score}/100</strong></span>}
+      </div>
+
+      {run.error && <div className="text-xs text-red-600">{run.error.message}</div>}
+
+      {result && (
+        <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded p-2 mt-1">
+          Done — transcript {result.transcriptSource === 'generated' ? 'generated (sample)' : result.transcriptSource === 'provided' ? 'from your paste' : 'from stored'}.
+          {' '}Interviewer summary {result.emailedInterviewer ? 'emailed' : 'not sent (no interviewer email on file)'}.
+        </div>
+      )}
+
+      {interviewer && (
+        <div>
+          <div className="text-xs font-semibold text-gray-700 mt-2 mb-0.5">Interviewer coaching summary</div>
+          <p className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded p-2">{interviewer}</p>
+        </div>
+      )}
+      {hr && (
+        <div>
+          <div className="text-xs font-semibold text-gray-700 mt-2 mb-0.5">Hiring-manager debrief</div>
+          <p className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded p-2">{hr}</p>
+        </div>
+      )}
+      {cand && (
+        <div>
+          <div className="text-xs font-semibold text-gray-700 mt-2 mb-0.5">Candidate-facing feedback</div>
+          <p className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 rounded p-2">{cand}</p>
+        </div>
+      )}
+      {storedTranscript && (
+        <div className="pt-1">
+          <button onClick={() => setShowTranscript((v) => !v)} className="text-xs text-ls-primary underline">
+            {showTranscript ? 'Hide transcript' : 'View transcript'}
+          </button>
+          {showTranscript && (
+            <pre className="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 rounded p-2 mt-1 max-h-64 overflow-y-auto">{storedTranscript}</pre>
+          )}
+        </div>
+      )}
+    </Section>
+  );
+}
+
 
 function ScoreBar({ label, score, sub }: { label: string; score: number | null; sub?: string }) {
   const pct = score == null ? 0 : Math.max(0, Math.min(100, score));
