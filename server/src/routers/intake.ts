@@ -18,7 +18,7 @@ import { assessmentTasks } from '../db/schema/assessmentTasks.js';
 import { departments } from '../db/schema/departments.js';
 import { generateRoleJD, generateStandardQuestions, standardQuestionSet, generateWorkSampleTask } from '../services/ai.js';
 import { approverEmail, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
-import { emailApprovalRejected } from '../services/email.js';
+import { emailApprovalRejected, emailApprovalSentBack } from '../services/email.js';
 import { users } from '../db/schema/core.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
@@ -73,6 +73,32 @@ async function notifyIntakeRejected(db: DrizzleClient, reqId: string, roleLabel:
       replyTag: 'intake_rejected', source: 'simulated', raw: { kind: 'intake_rejected', reqId },
     });
   } catch (err) { console.error('[intake] rejected-notify inbox record failed:', err); }
+}
+
+// Notify the submitter (+ test inbox) that their intake was SENT BACK FOR EDITS
+// (changes requested), which is distinct from a rejection, so the email reads
+// clearly and nobody deletes it thinking the role was killed.
+async function notifyIntakeSentBack(db: DrizzleClient, reqId: string, roleLabel: string, note: string): Promise<void> {
+  const req = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, reqId) });
+  if (!req) return;
+  let submitterEmail: string | null = null;
+  if ((req as any).createdBy) {
+    const u = await db.query.users.findFirst({ where: eq(users.id, (req as any).createdBy) });
+    submitterEmail = u?.email ?? null;
+  }
+  const to = submitterEmail || approverEmail('hr');
+  const roleTitle = `${req.department}${(req as any).jobTitle ? ' - ' + (req as any).jobTitle : ''}`;
+  try {
+    await emailApprovalSentBack(to, { roleLabel, department: req.department, hiringManager: req.hiringManager, note });
+  } catch (err) { console.error('[intake] sent-back-notify send failed:', err); }
+  try {
+    await db.insert(inboundEmails).values({
+      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
+      toEmail: to, subject: `Intake sent back for edits (${roleLabel}): ${roleTitle}`,
+      body: `The intake for ${roleTitle} was sent back for edits at the ${roleLabel} step. This is not a rejection - please update the intake and re-submit it. What to change: ${note}`,
+      replyTag: 'intake_sent_back', source: 'simulated', raw: { kind: 'intake_sent_back', reqId },
+    });
+  } catch (err) { console.error('[intake] sent-back-notify inbox record failed:', err); }
 }
 
 // Email + test-inbox record for ONE approver (their step's tokenized review link).
@@ -674,7 +700,7 @@ export const intakeRouter = router({
         .set({ status: 'changes_requested', approverRef: ctx.user.id, note: input.note, actedAt: new Date() })
         .where(eq(approvals.id, target.id));
       await ctx.db.update(jobRequisitions).set({ status: 'Changes Requested', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
-      await notifyIntakeRejected(ctx.db, input.reqId, target.approverRole, `Sent back for edits: ${input.note}`);
+      await notifyIntakeSentBack(ctx.db, input.reqId, target.approverRole, input.note);
       await auditChange(ctx.db, ctx.user.id, input.reqId, 'job_requisitions', 'update');
       trackActivity(ctx.db, ctx.user.id, 'send_back_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch(() => {});
       return { id: input.reqId };
@@ -689,7 +715,7 @@ export const intakeRouter = router({
         .set({ status: 'changes_requested', approverRef: 'via approval link', note: input.note, actedAt: new Date() })
         .where(eq(approvals.id, target.id));
       await ctx.db.update(jobRequisitions).set({ status: 'Changes Requested', updatedAt: new Date() }).where(eq(jobRequisitions.id, target.reqId));
-      await notifyIntakeRejected(ctx.db, target.reqId, target.approverRole, `Sent back for edits: ${input.note}`);
+      await notifyIntakeSentBack(ctx.db, target.reqId, target.approverRole, input.note);
       return { ok: true as const, roleLabel: target.approverRole };
     }),
 });

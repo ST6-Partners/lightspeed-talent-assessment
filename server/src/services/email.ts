@@ -844,6 +844,20 @@ export async function emailApprovalRejected(to: string, d: {
   await sendEmail({ to, subject, html, templateId: 'intake_rejected' });
 }
 
+export async function emailApprovalSentBack(to: string, d: {
+  roleLabel: string; department: string; jobTitle?: string; hiringManager: string; note: string;
+}): Promise<void> {
+  const role = `${d.department}${d.jobTitle ? ' - ' + d.jobTitle : ''}`;
+  const subject = `Intake sent back for edits (${d.roleLabel}): ${role}`;
+  const html = wrap(`
+    ${h1('An intake was sent back for edits')}
+    ${p(`The hiring intake for <strong>${role}</strong> (hiring manager ${d.hiringManager}) was <strong>sent back for edits</strong> at the <strong>${d.roleLabel}</strong> approval step. <strong>This is not a rejection</strong>; it just needs some changes before it can move forward.`)}
+    ${p(`<strong>What to change:</strong><br/>${d.note}`)}
+    ${p('Update the intake to address the feedback, then re-submit it to continue the approval chain.')}
+  `);
+  await sendEmail({ to, subject, html, templateId: 'intake_sent_back' });
+}
+
 export async function emailApprovalReminder(to: string, d: {
   roleLabel: string; department: string; jobTitle?: string; hiringManager: string; daysPending: number; approvalUrl?: string;
 }): Promise<void> {
