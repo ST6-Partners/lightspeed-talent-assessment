@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { trpc } from '../../lib/trpc';
+import SearchSelect from '../../components/SearchSelect';
 import { EPP_TRAITS, bandLabel } from '../../lib/epp';
 
 function barColor(p: number): string {
@@ -37,16 +38,12 @@ export default function EppProfiles() {
 
       <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5 mb-5">
         <label className="block text-xs font-medium text-ls-ink-2 mb-1">Candidate</label>
-        <select
+        <SearchSelect
           value={candidateId}
-          onChange={(e) => setCandidateId(e.target.value)}
-          className="w-full px-3 py-2 border border-ls-line rounded-lg text-sm bg-white focus:outline-none focus:border-ls-cyan focus:ring-2 focus:ring-ls-primary-50"
-        >
-          <option value="">Select a candidate…</option>
-          {(candidates ?? []).map((c: any) => (
-            <option key={c.id} value={c.id}>{c.firstName} {c.lastName} · {c.currentStage}</option>
-          ))}
-        </select>
+          onChange={setCandidateId}
+          placeholder="Search candidates…"
+          options={(candidates ?? []).map((c: any) => ({ value: c.id, label: `${c.firstName} ${c.lastName} · ${c.currentStage}` }))}
+        />
       </div>
 
       {!candidateId ? (
