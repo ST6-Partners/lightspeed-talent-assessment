@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, Pencil, Trash2 } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, Send } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -46,6 +46,10 @@ export default function Requisitions() {
   });
   const updateMutation = trpc.requisitions.update.useMutation({
     onSuccess: () => { refetch(); closeForm(); },
+  });
+  const submitMutation = trpc.intake.submit.useMutation({
+    onSuccess: () => refetch(),
+    onError: (e) => window.alert(e.message),
   });
   const deleteMutation = trpc.requisitions.delete.useMutation({
     onSuccess: () => refetch(),
@@ -277,6 +281,16 @@ export default function Requisitions() {
                   <td className="px-4 py-3 text-gray-400">{new Date(r.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
+                      {(r.status === 'Changes Requested' || r.status === 'Draft') && (
+                        <button
+                          onClick={() => { if (window.confirm(`Submit "${r.department}" for approval? This starts the approval chain from the first approver.`)) submitMutation.mutate({ id: r.id }); }}
+                          disabled={submitMutation.isLoading}
+                          className="p-1 text-gray-400 hover:text-green-600 transition-colors"
+                          title="Submit for approval"
+                        >
+                          <Send size={15} />
+                        </button>
+                      )}
                       <button
                         onClick={() => startEdit(r)}
                         className="p-1 text-gray-400 hover:text-ls-primary transition-colors"
