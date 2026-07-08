@@ -8,6 +8,7 @@ import { createExpressMiddleware } from '@trpc/server/adapters/express';
 import { fileURLToPath } from 'url';
 import { appRouter } from './server/src/router.js';
 import { feedbackApiRouter } from './server/src/http/feedbackApi.js';
+import { valuesApiRouter } from './server/src/http/valuesApi.js';
 import { createContext } from './server/src/trpc.js';
 import { db } from './server/src/db.js';
 import { inboundEmails } from './server/src/db/schema/email.js';
@@ -143,6 +144,7 @@ async function main() {
   app.use(getSessionMiddleware());
 
   app.use('/api/feedback', feedbackApiRouter);
+  app.use('/api/values', valuesApiRouter);
 
   app.get('/api/health', (_req, res) => {
     res.json({
