@@ -66,7 +66,9 @@ export const requisitionsRouter = router({
   update: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
-      status: z.enum(['Draft', 'Pending Approval', 'Approved', 'Open', 'On Hold', 'Closed']).optional(),
+      // Manual status is limited to On Hold / Closed. Draft -> Pending Approval ->
+      // Approved -> Open is owned by the approval flow only (no manual publish).
+      status: z.enum(['On Hold', 'Closed']).optional(),
     }).merge(RequisitionInput.partial()))
     .mutation(async ({ ctx, input }) => {
       const existing = await ctx.db.query.jobRequisitions.findFirst({

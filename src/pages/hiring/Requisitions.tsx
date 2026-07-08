@@ -38,6 +38,7 @@ export default function Requisitions() {
 
   const { data: requisitions, refetch } = trpc.requisitions.list.useQuery();
   const changeNote = trpc.intake.changesRequestedNote.useQuery({ reqId: editingId! }, { enabled: !!editingId });
+  const editingReq = (requisitions ?? []).find((r: any) => r.id === editingId);
 
   const closeForm = () => { setShowForm(false); setEditingId(null); resetForm(); };
 
@@ -241,6 +242,15 @@ export default function Requisitions() {
             >
               {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Requisition'}
             </button>
+            {editingId && editingReq && (editingReq.status === 'Changes Requested' || editingReq.status === 'Draft') && (
+              <button
+                onClick={() => { if (window.confirm('Submit this requisition for approval? This starts the approval chain from the first approver.')) submitMutation.mutate({ id: editingId }); }}
+                disabled={submitMutation.isLoading}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+              >
+                <Send size={15} /> {submitMutation.isLoading ? 'Submitting...' : 'Submit for approval'}
+              </button>
+            )}
             <button onClick={closeForm} className="px-4 py-2 text-gray-600 text-sm">
               Cancel
             </button>
