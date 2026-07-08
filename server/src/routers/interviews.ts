@@ -81,6 +81,26 @@ export const interviewsRouter = router({
       status: roundStatus.optional(),
     }))
     .mutation(async ({ input }) => {
+      // Enforce the 48-hour window: setting a round time can't spread this
+      // candidate's scheduled rounds more than 48h apart.
+      if (input.scheduledAt) {
+        const current = await loadRound(input.id);
+        const siblings = await db.select().from(candidateInterviews)
+          .where(eq(candidateInterviews.candidateId, current.candidateId));
+        const times = siblings
+          .filter((r: any) => r.id !== input.id && r.scheduledAt)
+          .map((r: any) => new Date(r.scheduledAt).getTime());
+        times.push(new Date(input.scheduledAt).getTime());
+        if (times.length > 1) {
+          const spreadH = (Math.max(...times) - Math.min(...times)) / 3_600_000;
+          if (spreadH > 48) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `That time would spread this candidate's interview rounds across ${Math.round(spreadH)} hours. Keep all rounds within 48 hours of each other.`,
+            });
+          }
+        }
+      }
       const patch: Record<string, unknown> = { updatedAt: new Date() };
       if (input.roundName !== undefined) patch.roundName = input.roundName;
       if (input.interviewerName !== undefined) patch.interviewerName = input.interviewerName;

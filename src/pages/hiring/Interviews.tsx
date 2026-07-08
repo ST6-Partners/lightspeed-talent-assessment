@@ -40,7 +40,7 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName }: { roun
   const [transcript, setTranscript] = useState('');
   const [showBriefing, setShowBriefing] = useState(false);
 
-  const update = trpc.interviews.updateRound.useMutation({ onSuccess: onChanged });
+  const update = trpc.interviews.updateRound.useMutation({ onSuccess: onChanged, onError: (err) => { alert(err.message); onChanged?.(); } });
   const remove = trpc.interviews.removeRound.useMutation({ onSuccess: onChanged });
   const record = trpc.interviews.recordFeedback.useMutation({ onSuccess: onChanged });
   const sendPrep = trpc.interviews.sendPrep.useMutation({ onSuccess: onChanged });
@@ -316,12 +316,12 @@ export default function Interviews() {
               <div className="mt-2 space-y-1 text-[11px]">
                 {windowHrs != null && !withinWindow && (
                   <div className="rounded bg-amber-50 border border-amber-200 text-amber-800 px-2 py-1">
-                    ⚠ Rounds span {fmtSpan(windowHrs)} — aim to hold all rounds within a ~48h window so the panel can compare candidates while they're fresh.
+                    ⚠ Rounds span {fmtSpan(windowHrs)} — rounds must be within 48h of each other; scheduling a time outside that window will be blocked.
                   </div>
                 )}
                 {windowHrs != null && withinWindow && (
                   <div className="rounded bg-green-50 border border-green-200 text-green-700 px-2 py-1">
-                    ✓ Scheduled rounds fall within {fmtSpan(windowHrs)} (target ≤ 48h).
+                    ✓ Scheduled rounds fall within {fmtSpan(windowHrs)} (rule: ≤ 48h).
                   </div>
                 )}
                 {!allScheduled && (
