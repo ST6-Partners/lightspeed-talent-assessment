@@ -981,3 +981,19 @@ export async function emailInternalApplicantHR(data: { firstName: string; lastNa
     `),
   });
 }
+
+export async function emailInternalInterestAlert(to: string, d: { applicantName: string; currentRole?: string | null; jobTitle?: string; forManager?: boolean }) {
+  const who = d.applicantName;
+  await sendEmail({
+    to,
+    templateId: 'internal_interest_alert',
+    subject: `Internal interest: ${who} — ${d.jobTitle ?? 'a role'}`,
+    html: wrap(`
+      ${h1('An internal employee just expressed interest')}
+      ${p(`<strong>${who}</strong>${d.currentRole ? ` (currently ${d.currentRole})` : ''} expressed interest in <strong>${d.jobTitle ?? 'an open role'}</strong>.`)}
+      ${p(d.forManager
+        ? 'You are getting this as their manager so you know right away. Nothing is required here — this is just to keep you in the loop.'
+        : 'You are on the leadership-awareness list for internal moves. This is sent the moment someone applies so no one is caught off guard.')}
+    `),
+  });
+}

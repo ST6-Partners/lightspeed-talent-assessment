@@ -28,6 +28,7 @@ export default function ApplyInternal() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [currentRole, setCurrentRole] = useState('');
+  const [managerEmail, setManagerEmail] = useState('');
   const [done, setDone] = useState(false);
 
   const { data, isLoading, error } = trpc.internalOpenings.getRoleForInternal.useQuery(
@@ -57,7 +58,7 @@ export default function ApplyInternal() {
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
           <CheckCircle2 className="mx-auto mb-3 text-green-600" size={28} />
           <h1 className="font-semibold text-gray-900 mb-1">Interest submitted</h1>
-          <p className="text-sm text-gray-500">Thanks — HR has your interest in {data.jobTitle}. Please make sure your manager is aware you applied.</p>
+          <p className="text-sm text-gray-500">Thanks — HR has your interest in {data.jobTitle}, and your manager and the leadership team have been notified so everyone's in the loop.</p>
         </div>
       </Shell>
     );
@@ -83,14 +84,18 @@ export default function ApplyInternal() {
             <label className="block text-xs font-medium text-gray-600 mb-1">Your current role / team</label>
             <input value={currentRole} onChange={(e) => setCurrentRole(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
           </div>
-          <p className="text-xs text-gray-400">By expressing interest you confirm you'll keep your manager informed.</p>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Your manager's email</label>
+            <input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} placeholder="so we can loop them in right away" className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+          </div>
+          <p className="text-xs text-gray-400">We keep this transparent: your manager and the leadership team are notified as soon as you apply, so nothing catches anyone off guard.</p>
         </div>
 
         {apply.error && <p className="mt-3 text-sm text-red-600">{apply.error.message}</p>}
 
         <div className="mt-5">
           <button
-            onClick={() => apply.mutate({ jdId, name, email, currentRole: currentRole || undefined })}
+            onClick={() => apply.mutate({ jdId, name, email, currentRole: currentRole || undefined, managerEmail: managerEmail || undefined })}
             disabled={!name.trim() || !email.trim() || apply.isLoading}
             className="px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50"
           >

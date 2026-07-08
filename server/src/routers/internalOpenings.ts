@@ -12,7 +12,8 @@ import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { employees } from '../db/schema/employees.js';
 import { inboundEmails } from '../db/schema/email.js';
-import { sendEmail, emailPostingOpenedExternal, emailApplicationReceived, emailInternalApplicantHR, HIRING_TEAM_INBOX } from '../services/email.js';
+import { sendEmail, emailPostingOpenedExternal, emailApplicationReceived, emailInternalApplicantHR, emailInternalInterestAlert, HIRING_TEAM_INBOX } from '../services/email.js';
+import { getInternalReportConfig } from '../services/internalReport.js';
 import { getPostingWindows, writeExternalOpenMarker } from '../services/posting.js';
 import { trackActivity } from '../services/telemetry.js';
 
@@ -107,6 +108,7 @@ export const internalOpeningsRouter = router({
       name: z.string().min(1).max(200),
       email: z.string().email().max(300),
       currentRole: z.string().max(200).optional(),
+      managerEmail: z.string().email().max(300).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const jd = await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, input.jdId) });
@@ -134,6 +136,30 @@ export const internalOpeningsRouter = router({
       await emailApplicationReceived({ firstName, lastName, email: input.email, jobTitle }).catch(() => {});
       await emailInternalApplicantHR({ firstName, lastName, email: input.email, jobTitle, currentRole: input.currentRole ?? null }).catch(() => {});
 
+      // Immediately alert the applicant's manager + the standing leadership-awareness list
+      // (overcommunicate, no blindside). Manual org-chart entry until HRIS lands.
+      const applicantName = `${firstName} ${lastName}`;
+      const cfg = await getInternalReportConfig(ctx.db).catch(() => ({ recipients: [] as string[], enabled: false }));
+      const leadershipList = (cfg.recipients ?? []).filter((e: string) => e && e.includes('@'));
+      const notified: string[] = [];
+      if (input.managerEmail) {
+        await emailInternalInterestAlert(input.managerEmail, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: true }).catch(() => {});
+        notified.push(input.managerEmail);
+      }
+      for (const to of leadershipList) {
+        if (notified.includes(to)) continue;
+        await emailInternalInterestAlert(to, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: false }).catch(() => {});
+        notified.push(to);
+      }
+      // Reflect awareness on the candidate record: manager notified => manager aware; store who was looped in.
+      try {
+        await ctx.db.update(candidates).set({
+          managerAware: input.managerEmail ? true : (candidate as any).managerAware,
+          leadershipAwareness: notified.length ? Array.from(new Set(notified)).join(', ') : (candidate as any).leadershipAwareness,
+          updatedAt: new Date(),
+        }).where(eq(candidates.id, candidate.id));
+      } catch (err) { console.error('[applyInternal] awareness update failed:', err); }
+
       // Test-inbox copies so the sequence is verifiable.
       try {
         await ctx.db.insert(inboundEmails).values([
@@ -151,10 +177,17 @@ export const internalOpeningsRouter = router({
             replyTag: 'internal_applicant_hr', source: 'simulated',
             raw: { kind: 'internal_applicant_hr', candidateId: candidate.id },
           },
+          ...(notified.length ? [{
+            fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
+            toEmail: notified.join(', '), subject: `Internal interest alert sent — ${firstName} ${lastName} (${jobTitle})`,
+            body: `Immediate awareness alert sent to ${notified.length} recipient(s): ${notified.join(', ')}. ${input.managerEmail ? 'Includes their manager.' : ''}`,
+            replyTag: 'internal_interest_alert', source: 'simulated',
+            raw: { kind: 'internal_interest_alert', candidateId: candidate.id, notified },
+          }] : []),
         ] as any);
       } catch (err) { console.error('[applyInternal] inbox record failed:', err); }
 
-      trackActivity(ctx.db, null as any, 'express_interest_internal', 'candidates', { candidateId: candidate.id, jdId: input.jdId }).catch(() => {});
-      return { ok: true };
+      trackActivity(ctx.db, null as any, 'express_interest_internal', 'candidates', { candidateId: candidate.id, jdId: input.jdId, notified: notified.length }).catch(() => {});
+      return { ok: true, notified: notified.length };
     }),
 });
