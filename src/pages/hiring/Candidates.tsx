@@ -667,6 +667,8 @@ export function InterviewRoundsSection({ candidateId, onChanged }: { candidateId
   const [transcripts, setTranscripts] = useState<Record<string, string>>({});
   const [briefingFor, setBriefingFor] = useState<string | null>(null);
   const [newRound, setNewRound] = useState('');
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const isOpen = (id: string) => expanded[id] ?? false;
 
   const refresh = () => { rounds.refetch(); onChanged?.(); };
   const seed = trpc.interviews.seedFromPlan.useMutation({ onSuccess: refresh });
@@ -726,13 +728,17 @@ export function InterviewRoundsSection({ candidateId, onChanged }: { candidateId
           return (
             <div key={r.id} className="border border-gray-200 rounded p-2">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-gray-800">{r.roundName}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusStyle[r.status] ?? 'bg-gray-100 text-gray-600'}`}>{r.status}</span>
-                  {r.score != null && <span className="text-[11px] text-gray-500">score {r.score}/100</span>}
-                </div>
-                <button onClick={() => remove.mutate({ id: r.id })} className="text-[11px] text-gray-400 hover:text-red-600">Remove</button>
+                <button type="button" onClick={() => setExpanded((e) => ({ ...e, [r.id]: !(e[r.id] ?? false) }))} className="flex items-center gap-2 flex-1 text-left min-w-0">
+                  <ChevronDown size={12} className={`text-gray-400 shrink-0 transition-transform ${isOpen(r.id) ? '' : '-rotate-90'}`} />
+                  <span className="text-xs font-semibold text-gray-800 truncate">{r.roundName}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${statusStyle[r.status] ?? 'bg-gray-100 text-gray-600'}`}>{r.status}</span>
+                  {r.score != null && <span className="text-[11px] text-gray-500 shrink-0">score {r.score}/100</span>}
+                  {!isOpen(r.id) && r.interviewerName && <span className="text-[11px] text-gray-400 truncate">· {r.interviewerName}</span>}
+                  {!isOpen(r.id) && r.prepSentAt && <span className="text-[11px] text-green-600 shrink-0">· prep emailed</span>}
+                </button>
+                <button onClick={() => remove.mutate({ id: r.id })} className="text-[11px] text-gray-400 hover:text-red-600 shrink-0">Remove</button>
               </div>
+              {isOpen(r.id) && (<div className="mt-1.5">
 
               <div className="flex flex-wrap gap-2 mt-1.5">
                 <input
@@ -827,6 +833,7 @@ export function InterviewRoundsSection({ candidateId, onChanged }: { candidateId
                   )}
                 </div>
               )}
+              </div>)}
             </div>
           );
         })}

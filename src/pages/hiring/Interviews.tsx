@@ -31,6 +31,8 @@ export default function Interviews() {
   const [params, setParams] = useSearchParams();
   const initialId = params.get('id');
   const [candidateId, setCandidateId] = useState<string | null>(initialId);
+  const [search, setSearch] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(undefined);
   const { data: jobDescriptions } = trpc.jobDescriptions.list.useQuery();
@@ -73,16 +75,43 @@ export default function Interviews() {
           <h1 className="text-xl font-bold text-gray-900">Interviews</h1>
           <p className="text-xs text-gray-500">Rounds, briefings, scheduling, questions, transcript and feedback — all in one place.</p>
         </div>
-        <select
-          value={candidateId ?? ''}
-          onChange={(e) => { setCandidateId(e.target.value || null); setParams(e.target.value ? { id: e.target.value } : {}); }}
-          className="px-3 py-2 border border-gray-300 rounded text-sm min-w-[220px]"
-        >
-          <option value="">Select a candidate…</option>
-          {active.map((c: any) => (
-            <option key={c.id} value={c.id}>{c.firstName} {c.lastName} — {c.currentStage}</option>
-          ))}
-        </select>
+        <div className="relative w-[280px]">
+          <input
+            value={pickerOpen ? search : (selected ? `${selected.firstName} ${selected.lastName}` : '')}
+            onChange={(e) => { setSearch(e.target.value); setPickerOpen(true); }}
+            onFocus={() => { setSearch(''); setPickerOpen(true); }}
+            onBlur={() => setTimeout(() => setPickerOpen(false), 150)}
+            placeholder="Search candidates by name, email, stage…"
+            className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+          />
+          {pickerOpen && (
+            <div className="absolute z-20 mt-1 w-full max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+              {active
+                .filter((c: any) => {
+                  const q = search.trim().toLowerCase();
+                  if (!q) return true;
+                  return `${c.firstName} ${c.lastName} ${c.email ?? ''} ${c.currentStage}`.toLowerCase().includes(q);
+                })
+                .map((c: any) => (
+                  <button
+                    key={c.id}
+                    onMouseDown={(e) => { e.preventDefault(); setCandidateId(c.id); setParams({ id: c.id }); setPickerOpen(false); setSearch(''); }}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between gap-2 ${c.id === candidateId ? 'bg-gray-50' : ''}`}
+                  >
+                    <span className="truncate">{c.firstName} {c.lastName}{c.email ? <span className="text-gray-400"> · {c.email}</span> : null}</span>
+                    <span className="text-[11px] text-gray-500 shrink-0">{c.currentStage}</span>
+                  </button>
+                ))}
+              {active.filter((c: any) => {
+                const q = search.trim().toLowerCase();
+                if (!q) return true;
+                return `${c.firstName} ${c.lastName} ${c.email ?? ''} ${c.currentStage}`.toLowerCase().includes(q);
+              }).length === 0 && (
+                <div className="px-3 py-2 text-xs text-gray-400">No matches.</div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {!selected && (
