@@ -46,7 +46,17 @@ export const authRouter = router({
       const countRes = await ctx.db.select({ c: sql<number>`count(*)` }).from(users);
       const isFirstUser = Number(countRes[0]?.c ?? 0) === 0;
       const seedEmail = env.SEED_SUPER_ADMIN_EMAIL;
-      const role = (isFirstUser || (!!seedEmail && email === seedEmail)) ? 'sysadmin' : 'user';
+
+      // SECURITY: public self-service sign-up is disabled. Registration is only
+      // allowed to bootstrap the very first account (or the configured seed
+      // super-admin). Everyone else must be provisioned by an admin via
+      // auth.createUser. This closes the "anyone on the internet can register
+      // and see candidate data" hole.
+      const allowed = isFirstUser || (!!seedEmail && email === seedEmail);
+      if (!allowed) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Public sign-up is disabled. An administrator must create your account.' });
+      }
+      const role = 'sysadmin';
 
       const passwordHash = await hashPassword(input.password);
       const [u] = await ctx.db.insert(users).values({
@@ -157,5 +167,33 @@ export const authRouter = router({
         .set({ passwordHash: await hashPassword(input.newPassword), updatedAt: new Date() })
         .where(eq(users.id, input.userId));
       return { success: true };
+    }),
+
+  // Admin: provision a new staff account (replaces public sign-up). The admin
+  // sets an initial password and hands it to the user; there is no public
+  // self-registration. Admin/sysadmin only (requireAdmin).
+  createUser: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({
+      email: z.string().email(),
+      password: z.string().min(8, 'Password must be at least 8 characters'),
+      name: z.string().optional(),
+      title: z.string().optional(),
+      role: z.enum(['user', 'manager', 'admin', 'sysadmin']).default('user'),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase();
+      const existing = await ctx.db.query.users.findFirst({ where: eq(users.email, email) });
+      if (existing) throw new TRPCError({ code: 'CONFLICT', message: 'An account with that email already exists.' });
+      const passwordHash = await hashPassword(input.password);
+      const [u] = await ctx.db.insert(users).values({
+        sub: `local:${email}`,
+        email,
+        name: input.name ?? null,
+        title: input.title ?? null,
+        role: input.role,
+        passwordHash,
+      }).returning();
+      return { success: true, id: u.id, role: u.role };
     }),
 });

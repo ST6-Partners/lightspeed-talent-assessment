@@ -216,6 +216,10 @@ async function main() {
   // ── Serve files from Object Storage ────────────────────────
   app.get('/api/files/*', async (req, res) => {
     try {
+      // Auth gate: candidate files (resumes, videos, uploads) are staff-only.
+      const user = await resolveSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+
       const key = req.params[0];
       if (!key) return res.status(400).json({ error: 'Missing key' });
 
@@ -235,7 +239,7 @@ async function main() {
 
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', result.buffer.length);
-      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.setHeader('Cache-Control', 'private, no-store');
       res.send(result.buffer);
     } catch (err: any) {
       console.error('File serve error:', err);
