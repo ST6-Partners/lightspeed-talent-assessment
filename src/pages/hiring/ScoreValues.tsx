@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Check, Sparkles, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import SearchSelect from '../../components/SearchSelect';
 import { suggestedValueScore, percentileToScore, bandLabel } from '../../lib/epp';
 
 const PILLARS = ['Mission-Driven', 'Customer-Obsessed', 'Results-Focused'] as const;
@@ -108,23 +109,22 @@ export default function ScoreValues() {
         <div className="grid grid-cols-3 gap-4">
           <div className="col-span-1">
             <label className="block text-xs font-medium text-ls-ink-2 mb-1">Candidate</label>
-            <select value={candidateId} onChange={(e) => selectCandidate(e.target.value)}
-              className="w-full px-3 py-2 border border-ls-line rounded-lg text-sm bg-white focus:outline-none focus:border-ls-cyan focus:ring-2 focus:ring-ls-primary-50">
-              <option value="">Select…</option>
-              {(candidates ?? []).map((c: any) => (
-                <option key={c.id} value={c.id}>{c.firstName} {c.lastName} · {c.currentStage}</option>
-              ))}
-            </select>
+            <SearchSelect
+              value={candidateId}
+              onChange={selectCandidate}
+              placeholder="Search candidates…"
+              options={(candidates ?? []).map((c: any) => ({ value: c.id, label: `${c.firstName} ${c.lastName} · ${c.currentStage}` }))}
+            />
           </div>
           <div className="col-span-1">
             <label className="block text-xs font-medium text-ls-ink-2 mb-1">Reviewer</label>
-            <select value={reviewerId} onChange={(e) => setReviewerId(e.target.value)} disabled={!candidateId}
-              className="w-full px-3 py-2 border border-ls-line rounded-lg text-sm bg-white focus:outline-none focus:border-ls-cyan focus:ring-2 focus:ring-ls-primary-50 disabled:bg-ls-bg-2">
-              <option value="">Select reviewer…</option>
-              {(reviewers ?? []).map((e: any) => (
-                <option key={e.id} value={e.id}>{e.name}{e.title ? ` · ${e.title}` : ''}</option>
-              ))}
-            </select>
+            <SearchSelect
+              value={reviewerId}
+              onChange={setReviewerId}
+              disabled={!candidateId}
+              placeholder="Search reviewers…"
+              options={(reviewers ?? []).map((e: any) => ({ value: e.id, label: `${e.name}${e.title ? ` · ${e.title}` : ''}` }))}
+            />
           </div>
           <div className="col-span-1">
             <label className="block text-xs font-medium text-ls-ink-2 mb-1">Review date</label>
