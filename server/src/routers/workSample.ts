@@ -19,6 +19,8 @@ import { emailInvitedToWorkSample } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { scoreAndStoreWorkSample } from '../services/workSampleScoring.js';
+import { getWorkSampleScoringConfig, setWorkSampleScoringConfig } from '../services/workSampleConfig.js';
+import { requireAdmin } from '../services/permissions.js';
 
 function appBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -161,5 +163,20 @@ export const workSampleRouter = router({
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'score_work_sample', 'candidates', { candidateId: input.id }).catch(() => {});
       return result;
+    }),
+
+  // ── Scoring config: pass mark + auto-reject toggle ──
+  getScoringConfig: protectedProcedure
+    .query(async ({ ctx }) => getWorkSampleScoringConfig(ctx.db)),
+
+  setScoringConfig: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({
+      passThreshold: z.number().int().min(0).max(100),
+      autoRejectEnabled: z.boolean(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await setWorkSampleScoringConfig(ctx.db, input, ctx.user.id);
+      return { ok: true };
     }),
 });

@@ -2,27 +2,45 @@
 // WORK-SAMPLE SCORING ORCHESTRATION
 //
 // Loads a candidate + the resolved work-sample task (with its
-// current rubric), runs the rubric-driven scorer, and writes the
-// overall score + a human-readable rationale onto the candidate.
+// current rubric), runs the rubric-driven scorer, writes the
+// overall score + a per-criterion rationale, and applies the
+// pass mark. When auto-reject is enabled (app_settings), a
+// failing candidate in an early stage is moved to Rejected.
 //
-// Advisory: it fills in workSampleScore + workSampleNotes for a
-// human to review. It does NOT change the candidate's stage.
 // Used by: workSample.submit (auto, fire-and-forget) and
 // workSample.rescore (manual re-run after a rubric changes).
 // ============================================================
 import { eq } from 'drizzle-orm';
-import { candidates, jobDescriptions } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { resolveDeptWorkSample } from './workSampleResolver.js';
 import { scoreWorkSample, type WorkSampleScoreResult } from './ai.js';
+import { getWorkSampleScoringConfig } from './workSampleConfig.js';
 
-function formatNotes(r: WorkSampleScoreResult): string {
+// Stages early enough that an auto-reject is appropriate (never touch someone
+// already advanced to interviews or beyond, or already Hired/Rejected).
+const AUTO_REJECT_STAGES = ['Applied', 'Assessment', 'Work Sample'];
+
+function formatNotes(
+  r: WorkSampleScoreResult,
+  meta: { pass: boolean; threshold: number; autoRejected: boolean },
+): string {
   const lines: string[] = [];
   lines.push(
     `AI work-sample score: ${r.overallScore}/100 (work quality ${r.workQualityScore}, AI skill ${r.aiSkillScore})` +
     `${r.rubricUsed ? '' : ' — no rubric configured; scored from brief'} · ` +
     `${r.mode === 'placeholder' ? 'sandbox draft' : 'AI draft — verify before relying on it'}`,
   );
+  lines.push(
+    `RESULT: ${meta.pass ? 'PASS' : 'FAIL'} (pass mark ${meta.threshold})` +
+    `${meta.autoRejected ? ' — candidate auto-rejected' : ''}`,
+  );
   if (r.summary) lines.push('', r.summary);
+  if (r.criteria && r.criteria.length) {
+    lines.push('', 'Breakdown:');
+    for (const c of r.criteria) {
+      lines.push(`- [${c.dimension === 'ai' ? 'AI use' : 'work'}] ${c.criterion} — ${c.score}/100: ${c.reason}`);
+    }
+  }
   if (r.strengths.length) lines.push('', 'Strengths:', ...r.strengths.map((x) => `- ${x}`));
   if (r.concerns.length) lines.push('', 'Concerns:', ...r.concerns.map((x) => `- ${x}`));
   lines.push('', `[Scored ${new Date().toISOString().slice(0, 10)}]`);
@@ -50,9 +68,34 @@ export async function scoreAndStoreWorkSample(db: any, candidateId: string): Pro
     link: candidate.workSampleLink ?? null,
   });
 
+  const cfg = await getWorkSampleScoringConfig(db);
+  const pass = result.overallScore >= cfg.passThreshold;
+  const autoRejected = cfg.autoRejectEnabled && !pass && AUTO_REJECT_STAGES.includes(candidate.currentStage);
+
   await db.update(candidates)
-    .set({ workSampleScore: result.overallScore, workSampleNotes: formatNotes(result), updatedAt: new Date() })
+    .set({
+      workSampleScore: result.overallScore,
+      workSampleNotes: formatNotes(result, { pass, threshold: cfg.passThreshold, autoRejected }),
+      updatedAt: new Date(),
+    })
     .where(eq(candidates.id, candidateId));
+
+  if (autoRejected) {
+    await db.update(candidates)
+      .set({
+        currentStage: 'Rejected',
+        rejectionReason: `Work sample below pass mark (${result.overallScore} < ${cfg.passThreshold})`,
+        updatedAt: new Date(),
+      })
+      .where(eq(candidates.id, candidateId));
+    await db.insert(candidateStageHistory).values({
+      candidateId,
+      fromStage: candidate.currentStage,
+      toStage: 'Rejected',
+      changedBy: null,
+      reason: `Auto-rejected: work sample ${result.overallScore} below pass mark ${cfg.passThreshold} (automated)`,
+    });
+  }
 
   return result;
 }

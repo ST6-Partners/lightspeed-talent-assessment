@@ -692,7 +692,15 @@ export interface WorkSampleScoreResult {
   strengths: string[];
   concerns: string[];
   rubricUsed: boolean;       // false when no scoring guide was configured
+  criteria: WorkSampleCriterion[]; // per-rubric-point breakdown
   mode: 'ai' | 'placeholder';
+}
+
+export interface WorkSampleCriterion {
+  dimension: 'work' | 'ai'; // which scoring guide it came from
+  criterion: string;        // the specific thing the rubric asks for
+  score: number;            // 0-100 on this point
+  reason: string;           // one line, grounded in the submission
 }
 
 function placeholderWorkSampleScore(input: WorkSampleScoreInput): WorkSampleScoreResult {
@@ -708,6 +716,9 @@ function placeholderWorkSampleScore(input: WorkSampleScoreInput): WorkSampleScor
     strengths: ['Submission received and readable.'],
     concerns: ['Sandbox draft — not a real evaluation.'],
     rubricUsed: hasRubric,
+    criteria: [
+      { dimension: 'work', criterion: 'Sandbox placeholder — connect a model for a real per-criterion breakdown', score: 72, reason: 'No scoring model connected.' },
+    ],
     mode: 'placeholder',
   };
 }
@@ -726,6 +737,8 @@ work quality AND AI skill (the candidate does real role work and shows the promp
 Be fair and evidence-based, cite what you saw in the submission, and do NOT speculate about protected characteristics.
 This is an AI draft to inform a human reviewer — never a final decision.
 If a scoring guide is missing, score that dimension from the brief and general professional quality, and lower your confidence.
+Break the score down criterion by criterion: for EACH distinct thing the scoring guides ask for,
+give the specific criterion, a 0-100 score for it, and a one-line reason citing the submission.
 Return ONLY JSON:
 {
   "workQualityScore": 0-100,
@@ -733,7 +746,8 @@ Return ONLY JSON:
   "overallScore": 0-100,
   "summary": "2-3 sentences grounded in the submission",
   "strengths": ["..."],
-  "concerns": ["..."]
+  "concerns": ["..."],
+  "criteria": [ { "dimension": "work" | "ai", "criterion": "the specific rubric point", "score": 0-100, "reason": "one line, grounded in the submission" } ]
 }`;
 
   const user = `Candidate: ${input.firstName} ${input.lastName}
@@ -771,6 +785,14 @@ ${input.link || 'none'}`;
       strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],
       concerns: Array.isArray(parsed.concerns) ? parsed.concerns.map(String) : [],
       rubricUsed: hasRubric,
+      criteria: Array.isArray(parsed.criteria)
+        ? parsed.criteria.map((c: any) => ({
+            dimension: c.dimension === 'ai' ? 'ai' : 'work',
+            criterion: String(c.criterion ?? ''),
+            score: clamp(c.score),
+            reason: String(c.reason ?? ''),
+          })).filter((c: any) => c.criterion)
+        : [],
       mode: 'ai',
     };
   } catch (err) {
