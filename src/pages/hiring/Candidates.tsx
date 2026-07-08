@@ -668,10 +668,19 @@ export function InterviewRoundsSection({ candidateId, onChanged }: { candidateId
   const [briefingFor, setBriefingFor] = useState<string | null>(null);
   const [newRound, setNewRound] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [seedMsg, setSeedMsg] = useState<string | null>(null);
   const isOpen = (id: string) => expanded[id] ?? false;
 
   const refresh = () => { rounds.refetch(); onChanged?.(); };
-  const seed = trpc.interviews.seedFromPlan.useMutation({ onSuccess: refresh });
+  const seed = trpc.interviews.seedFromPlan.useMutation({
+    onSuccess: (result: any) => {
+      const n = Array.isArray(result) ? result.length : 0;
+      setSeedMsg(n === 0
+        ? "No rounds are defined on this role's intake (or this candidate isn't linked to a role yet), so there was nothing to pull. Add rounds manually below."
+        : null);
+      refresh();
+    },
+  });
   const add = trpc.interviews.addRound.useMutation({ onSuccess: () => { setNewRound(''); refresh(); } });
   const update = trpc.interviews.updateRound.useMutation({ onSuccess: () => rounds.refetch() });
   const remove = trpc.interviews.removeRound.useMutation({ onSuccess: refresh });
@@ -717,6 +726,10 @@ export function InterviewRoundsSection({ candidateId, onChanged }: { candidateId
           Add round
         </button>
       </div>
+
+      {seedMsg && (
+        <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-2">{seedMsg}</div>
+      )}
 
       {list.length === 0 && (
         <div className="text-xs text-gray-400 pt-2">No rounds yet. Seed from the interview plan or add one.</div>
