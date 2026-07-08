@@ -524,27 +524,13 @@ export default function Candidates() {
             </div>
           </Section>
 
-          {/* Interviewer */}
-          <Section title="Interviewer">
-            <EditableField
-              label="Name"
-              value={(selected as any).interviewerName ?? ''}
-              onSave={(v) => saveNotes(selected.id, 'interviewerName', v)}
-            />
-            <EditableField
-              label="Email"
-              value={(selected as any).interviewerEmail ?? ''}
-              onSave={(v) => saveNotes(selected.id, 'interviewerEmail', v)}
-            />
-            <EditableField
-              label="Zoom Meeting ID"
-              value={(selected as any).zoomMeetingId ?? ''}
-              onSave={(v) => saveNotes(selected.id, 'zoomMeetingId', v)}
-            />
+          {/* Interview management moved to the Interviews tab */}
+          <Section title="Interviews">
+            <div className="text-xs text-gray-600">
+              Interviewer, scheduling, rounds, questions, transcript and feedback are managed on the{' '}
+              <a href={`/hiring/interviews?id=${selected.id}`} className="text-ls-primary underline">Interviews tab</a>.
+            </div>
           </Section>
-
-          {/* Interview scheduling — availability request + candidate self-booking */}
-          <SchedulingSection key={`sched-${selected.id}`} candidate={selected} onChanged={refetch} />
 
           {/* Resume screen — checks resume vs REQUIRED qualifications only */}
           {/* Internal candidate handling */}
@@ -584,26 +570,6 @@ export default function Candidates() {
             />
           </Section>
 
-          {/* Interview questions (read-only, AI-generated) */}
-          {(selected as any).interviewQuestions && (
-            <Section title="Interview Questions (AI-generated)">
-              <div className="space-y-2">
-                {((selected as any).interviewQuestions as any[]).map((q: any, i: number) => (
-                  <div key={i} className="bg-gray-50 rounded p-2 text-xs">
-                    <div className="font-medium text-gray-700">{q.category}</div>
-                    <div className="text-gray-600 mt-0.5">{q.question}</div>
-                    {q.rationale && <div className="text-gray-400 mt-0.5 italic">{q.rationale}</div>}
-                  </div>
-                ))}
-              </div>
-            </Section>
-          )}
-
-          {/* Per-round interviews + cross-round briefing */}
-          <InterviewRoundsSection key={`ivr-${selected.id}`} candidateId={selected.id} onChanged={refetch} />
-
-          {/* Interview transcript -> feedback (candidate, HR, interviewer) + email */}
-          <InterviewFeedbackSection key={`ivf-${selected.id}`} candidate={selected} onChanged={refetch} />
         </div>
       )}
     </div>
@@ -612,7 +578,7 @@ export default function Candidates() {
 
 // ── Sub-components ─────────────────────────────────────────
 
-function InterviewFeedbackSection({ candidate, onChanged }: { candidate: any; onChanged?: () => void }) {
+export function InterviewFeedbackSection({ candidate, onChanged }: { candidate: any; onChanged?: () => void }) {
   const [transcript, setTranscript] = useState('');
   const [result, setResult] = useState<any>(null);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -696,7 +662,7 @@ function InterviewFeedbackSection({ candidate, onChanged }: { candidate: any; on
 }
 
 
-function InterviewRoundsSection({ candidateId, onChanged }: { candidateId: string; onChanged?: () => void }) {
+export function InterviewRoundsSection({ candidateId, onChanged }: { candidateId: string; onChanged?: () => void }) {
   const rounds = trpc.interviews.list.useQuery({ candidateId });
   const [transcripts, setTranscripts] = useState<Record<string, string>>({});
   const [briefingFor, setBriefingFor] = useState<string | null>(null);
@@ -1542,7 +1508,7 @@ function InternalSection({ candidate, onChanged }: { candidate: any; onChanged?:
   );
 }
 
-function SchedulingSection({ candidate, onChanged }: { candidate: any; onChanged?: () => void }) {
+export function SchedulingSection({ candidate, onChanged }: { candidate: any; onChanged?: () => void }) {
   const status = trpc.scheduling.statusFor.useQuery({ candidateId: candidate.id });
   const open = trpc.scheduling.open.useMutation({ onSuccess: () => { status.refetch(); onChanged?.(); } });
   const [calendlyUrl, setCalendlyUrl] = useState('');
@@ -1592,7 +1558,7 @@ function SchedulingSection({ candidate, onChanged }: { candidate: any; onChanged
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
   return (
     <div className="mb-4 border-t border-gray-100 pt-3">
@@ -1608,7 +1574,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function EditableField({ label, value, onSave }: { label: string; value: string; onSave: (v: string) => void }) {
+export function EditableField({ label, value, onSave }: { label: string; value: string; onSave: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(value);
   return (
