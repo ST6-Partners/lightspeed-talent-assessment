@@ -659,6 +659,127 @@ External reference material: ${external || 'none gathered (no compliant referenc
 
 
 // ============================================================
+// WORK-SAMPLE SCORING (rubric-driven)
+//
+// Scores a candidate's work-sample submission AGAINST the task's own
+// scoring guides, read at scoring time. Nothing about any specific work
+// sample is hardcoded here, so when the work samples / rubrics change,
+// this scorer keeps working with the new rubric — no code change.
+//
+// Advisory only: it returns a score + rationale to inform a human. It
+// does NOT advance or reject a candidate. If no rubric is configured
+// yet, it scores against the brief and says so, with lower confidence.
+// ============================================================
+const WORK_SAMPLE_MODEL = 'claude-sonnet-4-6';
+
+export interface WorkSampleScoreInput {
+  firstName: string;
+  lastName: string;
+  jobTitle?: string | null;
+  taskTitle?: string | null;
+  brief?: string | null;
+  scoringGuideWork?: string | null; // rubric — work quality (may be null)
+  scoringGuideAi?: string | null;   // rubric — AI skill (may be null)
+  submission: string;               // candidate's written response
+  link?: string | null;             // optional deliverable link
+}
+
+export interface WorkSampleScoreResult {
+  overallScore: number;      // 0-100
+  workQualityScore: number;  // 0-100
+  aiSkillScore: number;      // 0-100
+  summary: string;
+  strengths: string[];
+  concerns: string[];
+  rubricUsed: boolean;       // false when no scoring guide was configured
+  mode: 'ai' | 'placeholder';
+}
+
+function placeholderWorkSampleScore(input: WorkSampleScoreInput): WorkSampleScoreResult {
+  const hasRubric = !!(input.scoringGuideWork || input.scoringGuideAi);
+  return {
+    overallScore: 72,
+    workQualityScore: 72,
+    aiSkillScore: 70,
+    summary:
+      'Draft work-sample score generated in sandbox mode (no scoring model connected). ' +
+      (hasRubric ? 'Rubric was on file. ' : 'No rubric was configured for this task. ') +
+      'Numbers are placeholders — connect a model and re-score before relying on this.',
+    strengths: ['Submission received and readable.'],
+    concerns: ['Sandbox draft — not a real evaluation.'],
+    rubricUsed: hasRubric,
+    mode: 'placeholder',
+  };
+}
+
+export async function scoreWorkSample(input: WorkSampleScoreInput): Promise<WorkSampleScoreResult> {
+  const hasRubric = !!(input.scoringGuideWork || input.scoringGuideAi);
+
+  if (SANDBOX) {
+    console.log('[AI SANDBOX] scoreWorkSample | placeholder draft (no ANTHROPIC_API_KEY)');
+    return placeholderWorkSampleScore(input);
+  }
+
+  const system = `You are scoring a candidate's work-sample submission for a hiring team at Lightspeed Systems (K-12 edtech).
+Score STRICTLY against the provided scoring guides — do not invent your own criteria. A work sample measures BOTH
+work quality AND AI skill (the candidate does real role work and shows the prompts/iterations they used).
+Be fair and evidence-based, cite what you saw in the submission, and do NOT speculate about protected characteristics.
+This is an AI draft to inform a human reviewer — never a final decision.
+If a scoring guide is missing, score that dimension from the brief and general professional quality, and lower your confidence.
+Return ONLY JSON:
+{
+  "workQualityScore": 0-100,
+  "aiSkillScore": 0-100,
+  "overallScore": 0-100,
+  "summary": "2-3 sentences grounded in the submission",
+  "strengths": ["..."],
+  "concerns": ["..."]
+}`;
+
+  const user = `Candidate: ${input.firstName} ${input.lastName}
+Role: ${input.jobTitle ?? 'Unknown'}
+Task: ${input.taskTitle ?? 'Unknown'}
+
+--- TASK BRIEF ---
+${input.brief || 'not provided'}
+
+--- SCORING GUIDE: WORK QUALITY ---
+${input.scoringGuideWork || 'not configured'}
+
+--- SCORING GUIDE: AI SKILL ---
+${input.scoringGuideAi || 'not configured'}
+
+--- CANDIDATE SUBMISSION ---
+${input.submission || '(empty)'}
+
+--- DELIVERABLE LINK ---
+${input.link || 'none'}`;
+
+  try {
+    const raw = await callClaude(system, user, WORK_SAMPLE_MODEL);
+    const fenced = raw.replace(/```json|```/g, '');
+    const parsed = JSON.parse(fenced.slice(fenced.indexOf('{'), fenced.lastIndexOf('}') + 1));
+    const clamp = (n: any) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+    const work = clamp(parsed.workQualityScore);
+    const ai = clamp(parsed.aiSkillScore);
+    const overall = parsed.overallScore != null ? clamp(parsed.overallScore) : Math.round((work + ai) / 2);
+    return {
+      overallScore: overall,
+      workQualityScore: work,
+      aiSkillScore: ai,
+      summary: String(parsed.summary ?? ''),
+      strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],
+      concerns: Array.isArray(parsed.concerns) ? parsed.concerns.map(String) : [],
+      rubricUsed: hasRubric,
+      mode: 'ai',
+    };
+  } catch (err) {
+    console.error('[AI] scoreWorkSample failed — returning placeholder:', err);
+    return placeholderWorkSampleScore(input);
+  }
+}
+
+// ============================================================
 // ROLE-LEVEL GENERATION (fires when an intake is approved)
 // ============================================================
 

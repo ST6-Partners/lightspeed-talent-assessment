@@ -16,6 +16,10 @@ import { assessmentTasks } from '../db/schema/assessmentTasks.js';
 export interface ResolvedWorkSample {
   title: string;
   instructions: string; // plain text with newlines (brief + show-your-work)
+  taskId: string | null;
+  brief: string | null;
+  scoringGuideWork: string | null; // rubric — work quality (may be null until finalized)
+  scoringGuideAi: string | null;   // rubric — AI skill (may be null until finalized)
 }
 
 export async function resolveDeptWorkSample(
@@ -60,5 +64,12 @@ function compose(task: any): ResolvedWorkSample {
   const brief = task.brief ?? '';
   const syw = task.showYourWorkInstructions ?? '';
   const instructions = syw ? `${brief}\n\n— Show your work —\n${syw}` : brief;
-  return { title: task.title, instructions };
+  return {
+    title: task.title,
+    instructions,
+    taskId: task.id ?? null,
+    brief: task.brief ?? null,
+    scoringGuideWork: task.scoringGuideWork ?? null,
+    scoringGuideAi: task.scoringGuideAi ?? null,
+  };
 }

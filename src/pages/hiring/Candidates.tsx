@@ -69,6 +69,9 @@ export default function Candidates() {
   const workSampleReviewMutation = trpc.workSample.setReview.useMutation({
     onSuccess: () => refetch(),
   });
+  const rescoreWorkSampleMutation = trpc.workSample.rescore.useMutation({
+    onSuccess: () => refetch(),
+  });
   const deleteMutation = trpc.candidates.delete.useMutation({
     onSuccess: () => { refetch(); setSelectedId(null); },
   });
@@ -471,6 +474,18 @@ export default function Candidates() {
                     {(selected as any).workSampleLink}
                   </a>
                 )}
+                <div className="pt-1">
+                  <button
+                    onClick={() => rescoreWorkSampleMutation.mutate({ id: selected.id })}
+                    disabled={rescoreWorkSampleMutation.isLoading}
+                    className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50"
+                  >
+                    {rescoreWorkSampleMutation.isLoading
+                      ? 'Scoring…'
+                      : (selected as any).workSampleScore != null ? 'Re-score with AI' : 'Score with AI'}
+                  </button>
+                  <div className="text-[11px] text-gray-400 mt-1">AI draft against the task rubric — advisory, never auto-rejects. Re-run after a work sample changes.</div>
+                </div>
               </div>
             ) : (
               <div className="text-xs text-gray-400 italic">No submission yet.</div>

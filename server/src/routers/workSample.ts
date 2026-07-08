@@ -18,6 +18,7 @@ import { resolveDeptWorkSample } from '../services/workSampleResolver.js';
 import { emailInvitedToWorkSample } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
+import { scoreAndStoreWorkSample } from '../services/workSampleScoring.js';
 
 function appBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -72,6 +73,11 @@ export const workSampleRouter = router({
         workSampleSubmittedAt: new Date(),
         updatedAt: new Date(),
       }).where(eq(candidates.id, candidate.id));
+
+      // Auto-score against the task's rubric (advisory). Fire-and-forget so the
+      // candidate's submit isn't blocked on the model call; errors are logged.
+      void scoreAndStoreWorkSample(ctx.db, candidate.id)
+        .catch((e) => console.error('[work-sample] auto-score failed:', e));
 
       return { ok: true };
     }),
@@ -139,5 +145,21 @@ export const workSampleRouter = router({
       await auditChange(ctx.db, ctx.user.id, id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'review_work_sample', 'candidates', { candidateId: id }).catch(() => {});
       return candidate;
+    }),
+
+  // ── PROTECTED: (re)run AI scoring against the task's current rubric ──
+  // Handy after a work sample / rubric is finalized or changed.
+  rescore: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (!candidate.workSampleSubmission) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'No work-sample submission to score yet.' });
+      }
+      const result = await scoreAndStoreWorkSample(ctx.db, input.id);
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'score_work_sample', 'candidates', { candidateId: input.id }).catch(() => {});
+      return result;
     }),
 });
