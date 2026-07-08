@@ -24,7 +24,7 @@ const COMP_BASIS = [{ v: 'budget', l: 'Budget' }, { v: 'market', l: 'Market data
 const ROLE_LABEL: Record<string, string> = { hiring_manager: 'Hiring Manager', elt: 'ELT Leader', finance: 'Finance', hr: 'HR' };
 const APPROVAL_BADGE: Record<string, string> = { pending: 'bg-gray-100 text-gray-500', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700', changes_requested: 'bg-amber-100 text-amber-700' };
 
-interface Round { roundName: string; lengthMin?: number; format?: string; }
+interface Round { roundName: string; lengthMin?: number; interviewer?: string; }
 interface Person { personRef: string; roleInProcess?: string; roundRef?: string; }
 interface Aware { personRef: string; source: 'auto' | 'manual'; }
 
@@ -99,7 +99,7 @@ export default function Intake() {
         knownConstraints: f.knownConstraints ?? '', constraintsAck: !!f.constraintsAck,
         approvalPlan: Array.isArray(f.approvalPlan) && f.approvalPlan.length ? f.approvalPlan : EMPTY.approvalPlan,
       });
-      setRounds(f.rounds?.map((r: any) => ({ roundName: r.roundName, lengthMin: r.lengthMin ?? undefined, format: r.format ?? undefined })) ?? []);
+      setRounds(f.rounds?.map((r: any) => ({ roundName: r.roundName, lengthMin: r.lengthMin ?? undefined, interviewer: r.interviewer ?? undefined })) ?? []);
       setTeam(f.team?.map((p: any) => ({ personRef: p.personRef, roleInProcess: p.roleInProcess ?? undefined, roundRef: p.roundRef ?? undefined })) ?? []);
       setAwareness(f.awareness?.map((a: any) => ({ personRef: a.personRef, source: a.source })) ?? []);
     }
@@ -512,7 +512,7 @@ export default function Intake() {
               <div key={i} className="flex gap-2 mb-2">
                 <input value={r.roundName} onChange={(e) => setRounds(rounds.map((x, j) => j === i ? { ...x, roundName: e.target.value } : x))} placeholder="Round name (e.g. Phone screen)" className={inp} />
                 <input type="number" value={r.lengthMin ?? ''} onChange={(e) => setRounds(rounds.map((x, j) => j === i ? { ...x, lengthMin: e.target.value ? parseInt(e.target.value) : undefined } : x))} placeholder="min" className="w-24 px-3 py-2 border border-gray-300 rounded-md text-sm" />
-                <input value={r.format ?? ''} onChange={(e) => setRounds(rounds.map((x, j) => j === i ? { ...x, format: e.target.value } : x))} placeholder="format (HR / panel)" className={inp} />
+                <input value={r.interviewer ?? ''} onChange={(e) => setRounds(rounds.map((x, j) => j === i ? { ...x, interviewer: e.target.value } : x))} placeholder="Interviewer" className={inp} />
                 <button onClick={() => setRounds(rounds.filter((_, j) => j !== i))} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>
               </div>
             ))}

@@ -318,6 +318,7 @@ const RoundInput = z.object({
   roundName: z.string().min(1).max(120),
   lengthMin: z.number().int().optional(),
   format: z.string().max(60).optional(),
+  interviewer: z.string().max(200).optional(),
 });
 const PersonInput = z.object({
   personRef: z.string().min(1).max(200),
@@ -588,7 +589,7 @@ export const intakeRouter = router({
       await ctx.db.delete(interviewPlan).where(eq(interviewPlan.reqId, reqId));
       if (rounds.length) {
         await ctx.db.insert(interviewPlan).values(
-          rounds.map((r, i) => ({ reqId, roundName: r.roundName, lengthMin: r.lengthMin, format: r.format, sortOrder: i })),
+          rounds.map((r, i) => ({ reqId, roundName: r.roundName, lengthMin: r.lengthMin, format: r.format, interviewer: r.interviewer, sortOrder: i })),
         );
       }
       await ctx.db.delete(hiringTeam).where(eq(hiringTeam.reqId, reqId));

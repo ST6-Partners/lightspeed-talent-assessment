@@ -13,6 +13,7 @@ export const interviewPlan = pgTable('interview_plan', {
   roundName: varchar('round_name', { length: 120 }).notNull(),
   lengthMin: integer('length_min'),
   format: varchar('format', { length: 60 }),
+  interviewer: varchar('interviewer', { length: 200 }),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

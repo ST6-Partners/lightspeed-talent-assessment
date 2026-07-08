@@ -54,7 +54,7 @@ export async function seedRoundsFromPlan(candidateId: string) {
   if (!plan.length) return existing;
 
   await db.insert(candidateInterviews).values(
-    plan.map((r, i) => ({ candidateId, roundName: r.roundName, sortOrder: r.sortOrder ?? i })),
+    plan.map((r, i) => ({ candidateId, roundName: r.roundName, interviewerName: (r as any).interviewer ?? null, sortOrder: r.sortOrder ?? i })),
   );
   return db.select().from(candidateInterviews)
     .where(eq(candidateInterviews.candidateId, candidateId))
