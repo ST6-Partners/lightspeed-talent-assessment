@@ -27,6 +27,19 @@ export function isCalendlyConfigured(): boolean {
   return Boolean(process.env.CALENDLY_WEBHOOK_SIGNING_KEY);
 }
 
+/**
+ * Pull the numeric Zoom meeting ID out of a join URL so the Zoom
+ * recording webhook can match the recording back to this candidate.
+ * Handles zoom.us / *.zoom.us join links, e.g.
+ *   https://us02web.zoom.us/j/12345678901?pwd=... -> "12345678901"
+ * Returns null for non-Zoom links (Google Meet, Teams, etc.).
+ */
+export function extractZoomMeetingId(joinUrl: string | null | undefined): string | null {
+  if (!joinUrl) return null;
+  const m = joinUrl.match(/zoom\.us\/(?:j|w|s|my)\/([0-9]{9,})/i);
+  return m ? m[1] : null;
+}
+
 export function defaultSchedulingUrl(): string {
   return (process.env.CALENDLY_SCHEDULING_URL ?? '').trim();
 }
@@ -96,14 +109,20 @@ export async function applyCalendlyEvent(event: string, payload: any): Promise<{
 
   if (event === 'invitee.created') {
     const start = inv.startTime ? new Date(inv.startTime) : null;
+    // Auto-capture the Zoom meeting ID from the booked join URL so the Zoom
+    // recording webhook can match the recording back to this candidate with no
+    // manual entry. Only overwrite when we actually parse one out.
+    const zoomMeetingId = extractZoomMeetingId(inv.joinUrl);
     await db.update(candidates).set({
       interviewScheduledAt: start,
       interviewJoinUrl: inv.joinUrl ?? null,
       calendlyEventUri: inv.eventUri ?? null,
       calendlyCancelUrl: inv.cancelUrl ?? null,
+      ...(zoomMeetingId ? { zoomMeetingId } : {}),
       ...(candidate.currentStage !== 'Interview Scheduled' ? { currentStage: 'Interview Scheduled' as const } : {}),
       updatedAt: new Date(),
     }).where(eq(candidates.id, candidate.id));
+    if (zoomMeetingId) console.log(`[Calendly] captured Zoom meeting ID ${zoomMeetingId} for ${candidate.email}`);
 
     if (candidate.currentStage !== 'Interview Scheduled') {
       await db.insert(candidateStageHistory).values({
