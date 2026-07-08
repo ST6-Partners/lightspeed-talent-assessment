@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Megaphone } from 'lucide-react';
+import { Megaphone, Trash2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const JD_BADGE: Record<string, string> = {
@@ -18,6 +18,10 @@ export default function Postings() {
     onSuccess: () => utils.internalOpenings.postingWindows.invalidate(),
   });
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const deleteReq = trpc.requisitions.delete.useMutation({
+    onSuccess: () => { setConfirmId(null); utils.requisitions.list.invalidate(); utils.internalOpenings.postingWindows.invalidate(); },
+  });
   const fmtDate = (iso: string | null) => iso ? new Date(iso).toISOString().slice(0, 10) : '—';
 
   const open = (reqs ?? []).filter((r: any) => r.status === 'Open');
@@ -46,6 +50,7 @@ export default function Postings() {
                 <th className="px-4 py-3">Posting</th>
                 <th className="px-4 py-3">Job Description</th>
                 <th className="px-4 py-3">Posted</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
@@ -91,6 +96,23 @@ export default function Postings() {
                       ) : <span className="text-gray-400 text-xs">—</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-400">{new Date(r.updatedAt).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-right">
+                      {confirmId === r.id ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Delete role?</span>
+                          <button onClick={() => deleteReq.mutate({ id: r.id })} disabled={deleteReq.isLoading}
+                            className="text-xs px-2 py-1 rounded bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50">
+                            {deleteReq.isLoading ? 'Deleting…' : 'Confirm'}
+                          </button>
+                          <button onClick={() => setConfirmId(null)} className="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50">Cancel</button>
+                        </span>
+                      ) : (
+                        <button onClick={() => setConfirmId(r.id)} title="Delete role"
+                          className="p-1 text-gray-400 hover:text-red-600">
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
