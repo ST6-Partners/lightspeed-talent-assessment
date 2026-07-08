@@ -394,6 +394,15 @@ async function main() {
   // SendGrid multipart Inbound Parse adds a multipart parser in the receiving
   // phase, once the reply subdomain + MX record are live.
   app.post('/api/webhooks/inbound-email', express.urlencoded({ extended: true, limit: '15mb' }), async (req, res) => {
+    // Auth: require a shared secret (query ?key= or x-inbound-key header). Fail
+    // closed when INBOUND_EMAIL_SECRET is unset, so this endpoint cannot be used
+    // to inject messages into the inbox. Set the secret and include it in the
+    // SendGrid Inbound Parse POST URL when the reply subdomain goes live.
+    const inboundSecret = process.env.INBOUND_EMAIL_SECRET;
+    const providedKey = (typeof req.query.key === 'string' ? req.query.key : undefined) ?? req.header('x-inbound-key') ?? undefined;
+    if (!inboundSecret || providedKey !== inboundSecret) {
+      return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
     try {
       const b: any = req.body || {};
       const to: string | null = b.to || b.envelope_to || null;
