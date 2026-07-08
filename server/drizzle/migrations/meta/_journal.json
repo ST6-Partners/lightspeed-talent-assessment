@@ -330,6 +330,13 @@
       "when": 1960000017000,
       "tag": "0044_interview_plan_interviewer",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1960000018000,
+      "tag": "0045_scorecard_interview_link",
+      "breakpoints": true
     }
   ]
 }

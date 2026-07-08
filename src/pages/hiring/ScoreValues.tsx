@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Check, Sparkles, ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import SearchSelect from '../../components/SearchSelect';
@@ -20,12 +21,15 @@ export default function ScoreValues() {
   const [scores, setScores] = useState<Record<string, number>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
+  const [interviewId, setInterviewId] = useState('');
+  const [params] = useSearchParams();
 
   const { data: candidates } = trpc.candidates.list.useQuery();
   const { data: values } = trpc.values.list.useQuery();
   const { data: reviewers } = trpc.values.listReviewers.useQuery();
   const eppQuery = trpc.values.getCandidateEpp.useQuery({ candidateId }, { enabled: !!candidateId });
   const reviewsQuery = trpc.values.getCandidateReviews.useQuery({ candidateId }, { enabled: !!candidateId });
+  const roundsQuery = trpc.interviews.list.useQuery({ candidateId }, { enabled: !!candidateId });
   const saveMutation = trpc.values.saveReview.useMutation({
     onSuccess: (r) => { setSaved(true); setCurrentReviewId(r.reviewId); reviewsQuery.refetch(); setTimeout(() => setSaved(false), 2500); },
   });
@@ -54,13 +58,24 @@ export default function ScoreValues() {
     setScores(m);
   }, [candidateId, currentReviewId, values, eppQuery.isLoading, suggestions]);
 
+  // Preselect candidate + round when arrived at via a deep link from the Interviews tab.
+  useEffect(() => {
+    const cid = params.get('id');
+    const rid = params.get('round');
+    if (cid) {
+      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({});
+      setInterviewId(rid ?? '');
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const selectCandidate = (id: string) => {
-    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({});
+    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setInterviewId('');
   };
   const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); };
   const loadReview = (r: any) => {
     setCurrentReviewId(r.id);
     setReviewerId(r.reviewerId ?? '');
+    setInterviewId(r.interviewId ?? '');
     setReviewedAt(new Date(r.reviewedAt).toISOString().slice(0, 10));
     const m: Record<string, number> = {};
     r.scores.forEach((s: any) => { m[s.valueId] = s.score; });
@@ -94,6 +109,7 @@ export default function ScoreValues() {
     saveMutation.mutate({
       reviewId: currentReviewId ?? undefined,
       candidateId, reviewerId, reviewedAt,
+      interviewId: interviewId || null,
       scores: Object.entries(scores).map(([valueId, score]) => ({ valueId, score })),
     });
   };
@@ -133,6 +149,21 @@ export default function ScoreValues() {
           </div>
         </div>
 
+        {candidateId && (roundsQuery.data ?? []).length > 0 && (
+          <div className="mt-4">
+            <label className="block text-xs font-medium text-ls-ink-2 mb-1">
+              Interview round <span className="text-ls-ink-3 font-normal">(optional — ties this scorecard to a round in the Interviews tab)</span>
+            </label>
+            <select value={interviewId} onChange={(e) => setInterviewId(e.target.value)}
+              className="w-full px-3 py-2 border border-ls-line rounded-lg text-sm bg-white focus:outline-none focus:border-ls-cyan focus:ring-2 focus:ring-ls-primary-50">
+              <option value="">General — not tied to a specific round</option>
+              {(roundsQuery.data ?? []).map((r: any) => (
+                <option key={r.id} value={r.id}>{r.roundName}{r.status ? ` · ${r.status}` : ''}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {candidateId && (
           <div className="mt-4 flex items-center justify-between gap-3 border-t border-ls-line pt-3">
             <div className="flex items-center gap-2 flex-wrap">
@@ -156,6 +187,37 @@ export default function ScoreValues() {
           </div>
         )}
       </div>
+
+      {candidateId && (
+        <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5 mb-5">
+          <div className="flex items-center gap-2 mb-1">
+            <Sparkles size={14} className="text-ls-primary" />
+            <h3 className="text-sm font-bold text-ls-ink">AI interview summary</h3>
+            <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-ls-primary-50 text-ls-primary border border-ls-cyan font-semibold">AI-generated</span>
+          </div>
+          <p className="text-[11px] text-ls-ink-3 mb-3">Auto-generated from the interview transcript(s) to inform your scoring. Review it — it is not a decision, and it never goes to the candidate.</p>
+          {(() => {
+            const fbRounds = (roundsQuery.data ?? []).filter((r: any) => r.feedbackHr);
+            const legacy = (candidates ?? []).find((c: any) => c.id === candidateId)?.interviewFeedbackHr;
+            if (!fbRounds.length && !legacy) {
+              return <div className="text-xs text-ls-ink-3">No AI interview feedback yet — add a transcript on the Interviews tab and it will appear here.</div>;
+            }
+            return (
+              <div className="space-y-3">
+                {fbRounds.map((r: any) => (
+                  <div key={r.id}>
+                    <div className="text-xs font-semibold text-ls-ink">{r.roundName}{r.score != null ? ` · AI score ${r.score}/100` : ''}</div>
+                    <p className="text-[11px] text-ls-ink-2 whitespace-pre-wrap bg-ls-bg-2 rounded p-2 mt-1 max-h-48 overflow-y-auto">{r.feedbackHr}</p>
+                  </div>
+                ))}
+                {!fbRounds.length && legacy && (
+                  <p className="text-[11px] text-ls-ink-2 whitespace-pre-wrap bg-ls-bg-2 rounded p-2 max-h-48 overflow-y-auto">{legacy}</p>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {!candidateId ? (
         <div className="bg-white rounded-xl border border-ls-line p-8 text-center text-ls-ink-3 text-sm">Pick a candidate to begin.</div>

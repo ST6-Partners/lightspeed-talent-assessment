@@ -38,6 +38,8 @@ export const valueReviews = pgTable('value_reviews', {
     .references(() => candidates.id, { onDelete: 'cascade' })
     .notNull(),
   reviewerId: uuid('reviewer_id').references(() => employees.id, { onDelete: 'set null' }),
+  // Optional link to the specific interview round this scorecard was filled out for.
+  interviewId: uuid('interview_id'),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

@@ -80,6 +80,7 @@ export const valuesRouter = router({
         id: r.id,
         reviewerId: r.reviewerId,
         reviewerName: r.reviewerId ? (empName[r.reviewerId] ?? 'Unknown') : 'Unassigned',
+        interviewId: r.interviewId ?? null,
         reviewedAt: r.reviewedAt,
         scores: scoreRows.filter((s: any) => s.reviewId === r.id).map((s: any) => ({ valueId: s.valueId, score: s.score, notes: s.notes })),
       }));
@@ -90,6 +91,7 @@ export const valuesRouter = router({
       reviewId: z.string().uuid().optional(),
       candidateId: z.string().uuid(),
       reviewerId: z.string().uuid().optional(),
+      interviewId: z.string().uuid().nullable().optional(),
       reviewedAt: z.string().optional(),
       scores: z.array(z.object({
         valueId: z.string().uuid(),
@@ -103,12 +105,12 @@ export const valuesRouter = router({
         let rid = input.reviewId;
         if (rid) {
           await tx.update(valueReviews)
-            .set({ reviewerId: input.reviewerId ?? null, reviewedAt, updatedAt: new Date() })
+            .set({ reviewerId: input.reviewerId ?? null, interviewId: input.interviewId ?? null, reviewedAt, updatedAt: new Date() })
             .where(eq(valueReviews.id, rid));
           await tx.delete(candidateValueScores).where(eq(candidateValueScores.reviewId, rid));
         } else {
           const [r] = await tx.insert(valueReviews).values({
-            candidateId: input.candidateId, reviewerId: input.reviewerId ?? null, reviewedAt,
+            candidateId: input.candidateId, reviewerId: input.reviewerId ?? null, interviewId: input.interviewId ?? null, reviewedAt,
           }).returning({ id: valueReviews.id });
           rid = r.id;
         }

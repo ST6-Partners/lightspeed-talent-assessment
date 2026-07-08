@@ -8,7 +8,7 @@
 // ============================================================
 
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Search, Plus, Trash2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { SchedulingSection } from './Candidates';
@@ -31,7 +31,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RoundCard({ round, defaultOpen, onChanged }: { round: any; defaultOpen: boolean; onChanged: () => void }) {
+function RoundCard({ round, defaultOpen, onChanged, reviews, valueName }: { round: any; defaultOpen: boolean; onChanged: () => void; reviews: any[]; valueName: Record<string, string> }) {
   const [open, setOpen] = useState(defaultOpen);
   const [transcript, setTranscript] = useState('');
   const [showBriefing, setShowBriefing] = useState(false);
@@ -44,6 +44,7 @@ function RoundCard({ round, defaultOpen, onChanged }: { round: any; defaultOpen:
 
   const fus = Array.isArray(round.followUps) ? round.followUps : [];
   const accent = round.status !== 'completed';
+  const roundReviews = (reviews ?? []).filter((rv: any) => rv.interviewId === round.id);
 
   return (
     <div className={`border rounded-xl overflow-hidden ${accent ? 'border-blue-200' : 'border-gray-200'}`}>
@@ -126,6 +127,34 @@ function RoundCard({ round, defaultOpen, onChanged }: { round: any; defaultOpen:
             </div>
           )}
 
+          {/* Scorecards filled out for this round */}
+          <div className="border-t border-gray-100 pt-2">
+            <div className="text-[11px] font-semibold text-gray-700 mb-1">Scorecards</div>
+            {roundReviews.length === 0 && <div className="text-[11px] text-gray-400 mb-1">No scorecard filled out for this round yet.</div>}
+            <div className="space-y-1.5">
+              {roundReviews.map((rv: any) => {
+                const avg = rv.scores.length ? (rv.scores.reduce((a: number, b: any) => a + b.score, 0) / rv.scores.length).toFixed(1) : '—';
+                return (
+                  <div key={rv.id} className="bg-gray-50 rounded p-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-medium text-gray-800">{rv.reviewerName}</span>
+                      <span className="text-[11px] text-gray-500">{avg} / 5 · {new Date(rv.reviewedAt).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {rv.scores.map((sc: any, i: number) => (
+                        <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-gray-200 text-gray-600">{valueName[sc.valueId] ?? 'Value'}: {sc.score}</span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <Link to={`/hiring/scorecards?id=${round.candidateId}&round=${round.id}`}
+              className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-ls-primary hover:underline">
+              <Plus size={11} /> Fill scorecard for this round
+            </Link>
+          </div>
+
           {showBriefing && (
             <div className="border-t border-gray-100 pt-2">
               <div className="text-[11px] font-semibold text-gray-700 mb-1">Briefing this interviewer receives</div>
@@ -173,7 +202,11 @@ export default function Interviews() {
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(undefined);
   const { data: jobDescriptions } = trpc.jobDescriptions.list.useQuery();
   const rounds = trpc.interviews.list.useQuery({ candidateId: candidateId ?? '' }, { enabled: !!candidateId });
-  const refreshAll = () => { rounds.refetch(); refetch(); };
+  const reviewsQuery = trpc.values.getCandidateReviews.useQuery({ candidateId: candidateId ?? '' }, { enabled: !!candidateId });
+  const { data: valuesList } = trpc.values.list.useQuery();
+  const valueName: Record<string, string> = {};
+  (valuesList ?? []).forEach((v: any) => { valueName[v.id] = v.name; });
+  const refreshAll = () => { rounds.refetch(); reviewsQuery.refetch(); refetch(); };
 
   const seed = trpc.interviews.seedFromPlan.useMutation({ onSuccess: () => refreshAll() });
   const add = trpc.interviews.addRound.useMutation({ onSuccess: () => { setNewRound(''); refreshAll(); } });
@@ -270,7 +303,7 @@ export default function Interviews() {
             <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Rounds</div>
             <div className="space-y-2">
               {list.map((r) => (
-                <RoundCard key={r.id} round={r} defaultOpen={r.id === firstIncompleteId} onChanged={refreshAll} />
+                <RoundCard key={r.id} round={r} defaultOpen={r.id === firstIncompleteId} onChanged={refreshAll} reviews={reviewsQuery.data ?? []} valueName={valueName} />
               ))}
               {list.length === 0 && <div className="text-xs text-gray-400 pb-1">No rounds yet. They appear automatically from the role plan when a candidate reaches the interview stage, or add one below.</div>}
             </div>
