@@ -85,7 +85,7 @@ export default function ApplyInternal() {
             <input value={currentRole} onChange={(e) => setCurrentRole(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Your manager's email</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Your manager's email *</label>
             <input type="email" value={managerEmail} onChange={(e) => setManagerEmail(e.target.value)} placeholder="so we can loop them in right away" className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
           </div>
           <p className="text-xs text-gray-400">We keep this transparent: your manager and the leadership team are notified as soon as you apply, so nothing catches anyone off guard.</p>
@@ -95,8 +95,8 @@ export default function ApplyInternal() {
 
         <div className="mt-5">
           <button
-            onClick={() => apply.mutate({ jdId, name, email, currentRole: currentRole || undefined, managerEmail: managerEmail || undefined })}
-            disabled={!name.trim() || !email.trim() || apply.isLoading}
+            onClick={() => apply.mutate({ jdId, name, email, currentRole: currentRole || undefined, managerEmail })}
+            disabled={!name.trim() || !email.trim() || !managerEmail.trim() || apply.isLoading}
             className="px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50"
           >
             {apply.isLoading ? 'Submitting…' : 'Express interest'}

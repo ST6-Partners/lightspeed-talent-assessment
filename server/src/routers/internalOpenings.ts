@@ -66,7 +66,9 @@ export const internalOpeningsRouter = router({
       name: z.string().min(1).max(200),
       email: z.string().email().max(300),
       currentRole: z.string().max(200).optional(),
-      managerEmail: z.string().email().max(300).optional(),
+      // Required: internal applicants must name their manager so we can loop them in
+      // immediately (no-blindside rule). Until HRIS lands, this is how we know the manager.
+      managerEmail: z.string().email().max(300),
     }))
     .mutation(async ({ ctx, input }) => {
       const jd = await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, input.jdId) });
@@ -100,10 +102,9 @@ export const internalOpeningsRouter = router({
       const cfg = await getInternalReportConfig(ctx.db).catch(() => ({ recipients: [] as string[], enabled: false }));
       const leadershipList = (cfg.recipients ?? []).filter((e: string) => e && e.includes('@'));
       const notified: string[] = [];
-      if (input.managerEmail) {
-        await emailInternalInterestAlert(input.managerEmail, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: true }).catch(() => {});
-        notified.push(input.managerEmail);
-      }
+      // Manager email is required, so their manager is always alerted on submit.
+      await emailInternalInterestAlert(input.managerEmail, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: true }).catch(() => {});
+      notified.push(input.managerEmail);
       for (const to of leadershipList) {
         if (notified.includes(to)) continue;
         await emailInternalInterestAlert(to, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: false }).catch(() => {});
@@ -112,7 +113,7 @@ export const internalOpeningsRouter = router({
       // Reflect awareness on the candidate record: manager notified => manager aware; store who was looped in.
       try {
         await ctx.db.update(candidates).set({
-          managerAware: input.managerEmail ? true : (candidate as any).managerAware,
+          managerAware: true,
           leadershipAwareness: notified.length ? Array.from(new Set(notified)).join(', ') : (candidate as any).leadershipAwareness,
           updatedAt: new Date(),
         }).where(eq(candidates.id, candidate.id));
@@ -138,7 +139,7 @@ export const internalOpeningsRouter = router({
           ...(notified.length ? [{
             fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
             toEmail: notified.join(', '), subject: `Internal interest alert sent — ${firstName} ${lastName} (${jobTitle})`,
-            body: `Immediate awareness alert sent to ${notified.length} recipient(s): ${notified.join(', ')}. ${input.managerEmail ? 'Includes their manager.' : ''}`,
+            body: `Immediate awareness alert sent to ${notified.length} recipient(s): ${notified.join(', ')}. Includes their manager.`,
             replyTag: 'internal_interest_alert', source: 'simulated',
             raw: { kind: 'internal_interest_alert', candidateId: candidate.id, notified },
           }] : []),
