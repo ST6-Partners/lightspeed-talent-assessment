@@ -10,6 +10,26 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
+const Shell = ({ children }: { children: React.ReactNode }) => (
+  <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
+    <div style={{ width: '100%', maxWidth: 760, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+        <span style={{ fontWeight: 700, color: '#1f2733' }}>Lightspeed</span>
+        <span style={{ color: '#5b6675', fontSize: 13 }}>Talent Assessment</span>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+const card: React.CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '22px 24px', boxShadow: '0 4px 16px rgba(20,40,80,.05)' };
+const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', margin: '10px 0 3px' };
+const inp: React.CSSProperties = { width: '100%', padding: '7px 9px', fontSize: 13, border: '1px solid #d1d5db', borderRadius: 6, boxSizing: 'border-box' };
+const btn = (bg: string): React.CSSProperties => ({ padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 7, border: 'none', background: bg, color: '#fff', cursor: 'pointer' });
+const btnGhost: React.CSSProperties = { padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 7, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer' };
+const F = ({ label, val, on }: { label: string; val: any; on: (v: string) => void }) => (
+  <div><label style={lbl}>{label}</label><input style={inp} value={val ?? ''} onChange={(e) => on(e.target.value)} /></div>
+);
+
 export default function OfferApproval() {
   const { token = '' } = useParams();
   const view = trpc.candidates.offerApprovalView.useQuery({ token }, { enabled: !!token, retry: false });
@@ -43,25 +63,6 @@ export default function OfferApproval() {
   const approve = () => { save.mutate({ token, payload: p }); decide.mutate({ token, action: 'approve', managerName: managerName || undefined }); };
   const sendBack = () => decide.mutate({ token, action: 'send_back', managerName: managerName || undefined, note: note || undefined });
 
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 760, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-          <span style={{ fontWeight: 700, color: '#1f2733' }}>Lightspeed</span>
-          <span style={{ color: '#5b6675', fontSize: 13 }}>Talent Assessment</span>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-  const card: React.CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '22px 24px', boxShadow: '0 4px 16px rgba(20,40,80,.05)' };
-  const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', margin: '10px 0 3px' };
-  const inp: React.CSSProperties = { width: '100%', padding: '7px 9px', fontSize: 13, border: '1px solid #d1d5db', borderRadius: 6, boxSizing: 'border-box' };
-  const btn = (bg: string): React.CSSProperties => ({ padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 7, border: 'none', background: bg, color: '#fff', cursor: 'pointer' });
-  const btnGhost: React.CSSProperties = { padding: '9px 16px', fontSize: 13, fontWeight: 600, borderRadius: 7, border: '1px solid #d1d5db', background: '#fff', color: '#374151', cursor: 'pointer' };
-  const F = ({ label, val, on }: { label: string; val: any; on: (v: string) => void }) => (
-    <div><label style={lbl}>{label}</label><input style={inp} value={val ?? ''} onChange={(e) => on(e.target.value)} /></div>
-  );
 
   if (view.isLoading) return <Shell><div style={card}>Loading…</div></Shell>;
   if (view.error || !view.data || !p) return <Shell><div style={card}><div style={{ display: 'flex', gap: 8, color: '#b91c1c' }}><AlertCircle size={18} /> This approval link is invalid or has expired.</div></div></Shell>;

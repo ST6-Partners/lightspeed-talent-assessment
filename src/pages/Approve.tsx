@@ -10,6 +10,19 @@ const BADGE: Record<string, string> = {
 };
 const money = (n: any) => (n != null ? `$${Number(n).toLocaleString()}` : '—');
 
+const Shell = ({ children }: { children: React.ReactNode }) => (
+  <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
+    <div style={{ width: '100%', maxWidth: 640, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+        <span style={{ fontWeight: 700, color: '#1f2733' }}>Lightspeed</span>
+        <span style={{ color: '#5b6675', fontSize: 13 }}>Talent Assessment</span>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+const card: React.CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '22px 24px', boxShadow: '0 4px 16px rgba(20,40,80,.05)' };
+
 export default function Approve() {
   const { token = '' } = useParams();
   const [note, setNote] = useState('');
@@ -27,18 +40,6 @@ export default function Approve() {
   });
   const err = approve.error?.message || reject.error?.message || sendBack.error?.message;
 
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 640, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-          <span style={{ fontWeight: 700, color: '#1f2733' }}>Lightspeed</span>
-          <span style={{ color: '#5b6675', fontSize: 13 }}>Talent Assessment</span>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-  const card: React.CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '22px 24px', boxShadow: '0 4px 16px rgba(20,40,80,.05)' };
 
   if (isLoading) return <Shell><div style={card}>Loading…</div></Shell>;
   if (error || !data) return <Shell><div style={card}><div style={{ display: 'flex', gap: 8, color: '#b91c1c' }}><AlertCircle size={18} /> This approval link is invalid or has expired.</div></div></Shell>;

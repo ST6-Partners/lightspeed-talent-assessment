@@ -3,6 +3,26 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
+const Shell = ({ children }: { children: React.ReactNode }) => (
+  <div className="min-h-screen bg-ls-bg flex items-center justify-center p-4">
+    <div className="w-full max-w-2xl">
+      <div className="flex items-center gap-3 mb-5">
+        <svg width="30" height="30" viewBox="0 0 40 40" fill="none" stroke="#4FA9D6" strokeWidth="3.6" strokeLinecap="round">
+          <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5" />
+          <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5" />
+          <line x1="5" y1="14" x2="11.5" y2="14" />
+          <line x1="28.5" y1="26" x2="35" y2="26" />
+        </svg>
+        <div className="leading-tight">
+          <div className="font-bold text-[15px] text-gray-900">Lightspeed</div>
+          <div className="text-[11px] text-gray-500">Internal Opening</div>
+        </div>
+      </div>
+      {children}
+    </div>
+  </div>
+);
+
 export default function ApplyInternal() {
   const { jdId = '' } = useParams();
   const [name, setName] = useState('');
@@ -16,25 +36,6 @@ export default function ApplyInternal() {
   );
   const apply = trpc.internalOpenings.applyInternal.useMutation({ onSuccess: () => setDone(true) });
 
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className="min-h-screen bg-ls-bg flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        <div className="flex items-center gap-3 mb-5">
-          <svg width="30" height="30" viewBox="0 0 40 40" fill="none" stroke="#4FA9D6" strokeWidth="3.6" strokeLinecap="round">
-            <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5" />
-            <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5" />
-            <line x1="5" y1="14" x2="11.5" y2="14" />
-            <line x1="28.5" y1="26" x2="35" y2="26" />
-          </svg>
-          <div className="leading-tight">
-            <div className="font-bold text-[15px] text-gray-900">Lightspeed</div>
-            <div className="text-[11px] text-gray-500">Internal Opening</div>
-          </div>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
 
   if (isLoading) return <Shell><div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400 text-sm">Loading…</div></Shell>;
 
