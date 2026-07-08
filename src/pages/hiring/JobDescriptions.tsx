@@ -287,7 +287,6 @@ export default function JobDescriptions() {
                 <th className="px-4 py-3">Requisition</th>
                 <th className="px-4 py-3">EPP Values</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Published</th>
                 <th className="px-4 py-3 w-28"></th>
               </tr>
             </thead>
@@ -312,9 +311,6 @@ export default function JobDescriptions() {
                     <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_COLORS[jd.status] ?? ''}`}>
                       {jd.status}
                     </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-400">
-                    {jd.publishedAt ? new Date(jd.publishedAt).toLocaleDateString() : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
