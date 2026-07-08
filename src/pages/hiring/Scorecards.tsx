@@ -1,19 +1,12 @@
-import { useState } from 'react';
-import SubTabs from '../../components/SubTabs';
-import ComingSoon from '../../components/ComingSoon';
 import ScoreValues from './ScoreValues';
 
-const TABS = ['Interview', 'Values Scoring'];
-
+// The Scorecards page is the human, in-person candidate scorecard: a named
+// reviewer scores the candidate on each company value (1–5), seeded from the
+// candidate's EPP and adjusted with interview judgment. Multiple reviewers can
+// each save their own dated pass, so this doubles as the interview scorecard.
+// (The former "Interview" tab was an unused "coming soon" stub — interview
+// evaluation is captured here, plus the automated Zoom-transcript feedback on
+// the candidate record.)
 export default function Scorecards() {
-  const [tab, setTab] = useState('Values Scoring');
-  return (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Scorecards</h1>
-      <p className="text-gray-500 text-sm mb-5">Structured candidate evaluations</p>
-      <SubTabs tabs={TABS} active={tab} onChange={setTab} />
-      {tab === 'Interview' && <ComingSoon title="Interview Scorecard" note="Structured interview scoring — coming soon." />}
-      {tab === 'Values Scoring' && <ScoreValues />}
-    </div>
-  );
+  return <ScoreValues />;
 }
