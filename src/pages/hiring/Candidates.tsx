@@ -539,7 +539,7 @@ export default function Candidates() {
           <CombinedScreenSection key={selected.id} candidateId={selected.id} existingSummary={(selected as any).screenSummary ?? null} onChanged={refetch} />
 
           {/* Reference check — agent report (after interview, before offer) */}
-          <ReferenceCheckSection key={`ref-${selected.id}`} candidateId={selected.id} existingNotes={(selected as any).referenceCheckNotes ?? null} onChanged={refetch} />
+          <ReferenceCheckSection key={`ref-${selected.id}`} candidateId={selected.id} existingNotes={(selected as any).referenceCheckNotes ?? null} onChanged={refetch} stage={selected.currentStage} />
 
           {/* Offer letter — internal moves get a before/now comparison; external gets the standard letter */}
           {(selected as any).isInternal
@@ -991,7 +991,8 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged }: { ca
   );
 }
 
-function ReferenceCheckSection({ candidateId, existingNotes, onChanged }: { candidateId: string; existingNotes: string | null; onChanged?: () => void }) {
+function ReferenceCheckSection({ candidateId, existingNotes, onChanged, stage }: { candidateId: string; existingNotes: string | null; onChanged?: () => void; stage?: string }) {
+  const isFinalist = stage === 'Interviewed' || stage === 'Offered';
   const [result, setResult] = useState<any>(null);
   const [form, setForm] = useState({ name: '', email: '', relationship: '' });
 
@@ -1063,19 +1064,20 @@ function ReferenceCheckSection({ candidateId, existingNotes, onChanged }: { cand
       <div className="flex gap-2 pt-1">
         <button
           onClick={() => sendReqs.mutate({ candidateId })}
-          disabled={refs.length === 0 || sendReqs.isLoading}
+          disabled={refs.length === 0 || sendReqs.isLoading || !isFinalist}
           className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50"
         >
           {sendReqs.isLoading ? 'Sending…' : 'Email reference requests'}
         </button>
         <button
           onClick={() => run.mutate({ id: candidateId })}
-          disabled={run.isLoading}
+          disabled={run.isLoading || !isFinalist}
           className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
         >
           {run.isLoading ? 'Summarizing…' : 'Summarize references'}
         </button>
       </div>
+      {!isFinalist && <div className="text-xs text-amber-600">Reference checks unlock at the finalist stage (after interviews). Current stage: {stage ?? '—'}.</div>}
       {sendReqs.data && <div className="text-xs text-gray-500">Sent {sendReqs.data.sent} request(s).</div>}
       <div className="text-xs text-gray-400">{responded}/{refs.length} references responded.</div>
 

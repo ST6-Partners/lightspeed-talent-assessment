@@ -909,6 +909,11 @@ export const candidatesRouter = router({
       });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
 
+      // Gate to finalists: reference checks run after interviews, before/at offer.
+      if (!['Interviewed', 'Offered'].includes(candidate.currentStage as string)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: `Reference checks run at the finalist stage (after interviews). ${candidate.firstName} ${candidate.lastName} is at "${candidate.currentStage}".` });
+      }
+
       const jobTitle = await getJobTitle(ctx.db, candidate.jdId);
 
       // Pull the candidate-provided references that have responded.

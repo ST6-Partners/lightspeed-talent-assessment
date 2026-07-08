@@ -76,6 +76,10 @@ export const referencesRouter = router({
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      // Gate to finalists: only email reference requests once a candidate reaches the finalist stage.
+      if (!['Interviewed', 'Offered'].includes(candidate.currentStage as string)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: `Reference requests go out at the finalist stage (after interviews). ${candidate.firstName} ${candidate.lastName} is at "${candidate.currentStage}".` });
+      }
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
       const refs = await ctx.db.query.candidateReferences.findMany({
         where: eq(candidateReferences.candidateId, input.candidateId),
