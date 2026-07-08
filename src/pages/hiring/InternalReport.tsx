@@ -13,9 +13,35 @@ const STAGE_COLORS: Record<string, string> = {
   Offered: 'bg-green-100 text-green-700',
 };
 
+
+function NotifyManagerCell({ candidateId, onDone }: { candidateId: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState('');
+  const notify = trpc.candidates.notifyManager.useMutation({ onSuccess: () => { setOpen(false); setEmail(''); onDone(); } });
+  if (!open) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className="text-red-600 text-xs">No</span>
+        <button onClick={() => setOpen(true)} className="text-[11px] px-1.5 py-0.5 border border-ls-primary text-ls-primary rounded hover:bg-ls-primary-50">Notify manager</button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <input type="email" autoFocus value={email} onChange={(e) => setEmail(e.target.value)}
+        placeholder="manager@company.com"
+        onKeyDown={(e) => { if (e.key === 'Enter' && email.includes('@')) notify.mutate({ id: candidateId, managerEmail: email.trim() }); if (e.key === 'Escape') setOpen(false); }}
+        className="px-1.5 py-0.5 border border-gray-300 rounded text-[11px] w-40" />
+      <button onClick={() => notify.mutate({ id: candidateId, managerEmail: email.trim() })} disabled={!email.includes('@') || notify.isLoading}
+        className="text-[11px] px-1.5 py-0.5 bg-ls-primary text-white rounded disabled:opacity-50">{notify.isLoading ? '…' : 'Send'}</button>
+      <button onClick={() => { setOpen(false); setEmail(''); }} className="text-[11px] px-1 text-gray-400 hover:text-gray-600">✕</button>
+    </div>
+  );
+}
+
 export default function InternalReport() {
   const navigate = useNavigate();
-  const { data: rows, isLoading } = trpc.candidates.internalPipeline.useQuery();
+  const { data: rows, isLoading, refetch } = trpc.candidates.internalPipeline.useQuery();
 
   // ── Leadership recipients: auto-emailed whenever an employee expresses interest ──
   const cfg = trpc.candidates.getReportConfig.useQuery();
@@ -80,7 +106,7 @@ export default function InternalReport() {
                   <td className="px-4 py-3 text-gray-600">{r.jobTitle ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-600">{r.department ?? '—'}</td>
                   <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STAGE_COLORS[r.stage] ?? 'bg-gray-100 text-gray-600'}`}>{r.stage}</span></td>
-                  <td className="px-4 py-3">{r.managerAware ? <span className="text-green-700 text-xs">Yes</span> : <span className="text-red-600 text-xs">No</span>}</td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>{r.managerAware ? <span className="text-green-700 text-xs">Yes</span> : <NotifyManagerCell candidateId={r.id} onDone={() => refetch()} />}</td>
                   <td className="px-4 py-3">{r.leadershipListed ? <span className="text-green-700 text-xs">Yes</span> : <span className="text-gray-400 text-xs">—</span>}</td>
                   <td className="px-4 py-3 text-right"><ChevronRight size={15} className="text-gray-300" /></td>
                 </tr>

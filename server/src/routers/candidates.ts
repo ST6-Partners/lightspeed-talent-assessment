@@ -22,6 +22,7 @@ import { sendAssessment, getScores } from '../services/criteriaCorp.js';
 import {
   emailApplicationReceived,
   emailNewApplicationHR,
+  emailInternalInterestAlert,
   dispatchStageEmail,
   emailInterviewerQuestions,
   sendEmail,
@@ -1521,6 +1522,54 @@ export const candidatesRouter = router({
       }
       trackActivity(ctx.db, ctx.user.id, 'notify_leadership', 'candidates', { candidateId: input.id, sent }).catch(() => {});
       return { sent };
+    }),
+
+  // Notify a single internal candidate's manager (backfill for candidates whose
+  // manager wasn't captured at express-interest). Emails the manager, records the
+  // awareness, and flips managerAware = true. Internal candidates only.
+  notifyManager: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), managerEmail: z.string().email().max(300) }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (!(candidate as any).isInternal) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Not an internal candidate.' });
+      }
+      const jobTitle = await getJobTitle(ctx.db, candidate.jdId);
+      const applicantName = `${candidate.firstName} ${candidate.lastName}`;
+
+      await emailInternalInterestAlert(input.managerEmail, {
+        applicantName,
+        currentRole: (candidate as any).internalEmployee ?? null,
+        jobTitle: jobTitle ?? 'an open role',
+        forManager: true,
+      }).catch((err) => console.error('[notifyManager] email failed:', err));
+
+      // Merge the manager into the awareness list + mark manager aware.
+      const existing = (((candidate as any).leadershipAwareness ?? '') as string)
+        .split(/[,;\n]/).map((e) => e.trim()).filter((e) => e.includes('@'));
+      const merged = Array.from(new Set([...existing, input.managerEmail]));
+      await ctx.db.update(candidates).set({
+        managerAware: true,
+        leadershipAwareness: merged.join(', '),
+        updatedAt: new Date(),
+      } as any).where(eq(candidates.id, input.id));
+
+      try {
+        await ctx.db.insert(inboundEmails).values({
+          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+          fromName: 'Lightspeed Hiring',
+          toEmail: input.managerEmail,
+          subject: `Internal interest alert \u2014 ${applicantName}${jobTitle ? ` \u2014 ${jobTitle}` : ''}`,
+          body: `${applicantName}${(candidate as any).internalEmployee ? ` (currently ${(candidate as any).internalEmployee})` : ''} has expressed interest in ${jobTitle ?? 'an open role'}. As their manager you're being looped in so nothing catches you off guard.`,
+          replyTag: 'internal_interest_alert', source: 'simulated',
+          raw: { kind: 'internal_manager_alert', candidateId: input.id },
+        } as any);
+      } catch (err) { console.error('[notifyManager] inbox record failed:', err); }
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'notify_manager', 'candidates', { candidateId: input.id }).catch(() => {});
+      return { ok: true };
     }),
 
   // Store AI-generated interview questions
