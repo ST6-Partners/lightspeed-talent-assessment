@@ -97,6 +97,8 @@ export const jobRequisitions = pgTable('job_requisitions', {
   // Internal-first posting window anchor (set when the role goes Open) + external-open stamp.
   postedAt: timestamp('posted_at', { withTimezone: true }),
   externalOpenedAt: timestamp('external_opened_at', { withTimezone: true }),
+  // Auto internal-announce stamp: set the first time the role opens so it announces once (replaces manual megaphone).
+  internalAnnouncedAt: timestamp('internal_announced_at', { withTimezone: true }),
   createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

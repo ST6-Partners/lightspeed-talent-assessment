@@ -22,6 +22,7 @@ import { emailApprovalRejected, emailApprovalSentBack } from '../services/email.
 import { users } from '../db/schema/core.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
+import { announceRoleInternally } from '../services/internalAnnounce.js';
 
 function appBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -187,6 +188,17 @@ async function openRoleAndSendKickoff(db: DrizzleClient, req: any, jdTitle?: str
   try {
     await db.update(jobRequisitions).set({ status: 'Open', postedAt: new Date(), updatedAt: new Date() }).where(eq(jobRequisitions.id, req.id));
   } catch (err) { console.error('[intake] posting (status Open) failed:', err); }
+  // Auto-announce the role to all employees on open, exactly once (replaces the manual megaphone).
+  try {
+    const freshReq: any = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, req.id) });
+    if (freshReq && !freshReq.internalAnnouncedAt) {
+      const jdRow: any = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.reqId, req.id) });
+      if (jdRow) {
+        await announceRoleInternally(db, { id: jdRow.id, jobTitle: jdRow.jobTitle }, (req as any).department ?? '');
+        await db.update(jobRequisitions).set({ internalAnnouncedAt: new Date(), updatedAt: new Date() }).where(eq(jobRequisitions.id, req.id));
+      }
+    }
+  } catch (err) { console.error('[intake] auto internal-announce failed:', err); }
   await sendKickoff(db, req, { jdTitle, questions, externalPostDate });
 }
 
