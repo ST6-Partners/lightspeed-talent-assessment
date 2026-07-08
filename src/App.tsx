@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
 import OfferApproval from './pages/OfferApproval';
 import JdReview from './pages/JdReview';
+import IntakeEdit from './pages/IntakeEdit';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import WorkSample from './pages/WorkSample';
@@ -38,6 +39,7 @@ export default function App() {
       <Route path="/approve/:token" element={<Approve />} />
       <Route path="/offer-approval/:token" element={<OfferApproval />} />
       <Route path="/jd-review/:token" element={<JdReview />} />
+      <Route path="/intake-edit/:token" element={<IntakeEdit />} />
       <Route element={<Layout />}>
         {/* Landing → hiring overview */}
         <Route path="/" element={<HiringDashboard />} />

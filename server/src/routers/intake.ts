@@ -88,15 +88,16 @@ async function notifyIntakeSentBack(db: DrizzleClient, reqId: string, roleLabel:
   }
   const to = submitterEmail || approverEmail('hr');
   const roleTitle = `${req.department}${(req as any).jobTitle ? ' - ' + (req as any).jobTitle : ''}`;
+  const editUrl = `${appBaseUrl()}/intake-edit/${reqId}`;
   try {
-    await emailApprovalSentBack(to, { roleLabel, department: req.department, hiringManager: req.hiringManager, note });
+    await emailApprovalSentBack(to, { roleLabel, department: req.department, hiringManager: req.hiringManager, note, editUrl });
   } catch (err) { console.error('[intake] sent-back-notify send failed:', err); }
   try {
     await db.insert(inboundEmails).values({
       fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
       toEmail: to, subject: `Intake sent back for edits (${roleLabel}): ${roleTitle}`,
-      body: `The intake for ${roleTitle} was sent back for edits at the ${roleLabel} step. This is not a rejection - please update the intake and re-submit it. What to change: ${note}`,
-      replyTag: 'intake_sent_back', source: 'simulated', raw: { kind: 'intake_sent_back', reqId },
+      body: `The intake for ${roleTitle} was sent back for edits at the ${roleLabel} step. This is not a rejection - please update the intake and re-submit it. What to change: ${note}  Open, review & edit: ${editUrl}`,
+      replyTag: 'intake_sent_back', source: 'simulated', raw: { kind: 'intake_sent_back', reqId, editUrl, approvalUrl: editUrl },
     });
   } catch (err) { console.error('[intake] sent-back-notify inbox record failed:', err); }
 }
@@ -370,7 +371,111 @@ const APPROVAL_STEPS = [
   { step: 4, approverRole: 'hr' },
 ];
 
+// Fields the submitter may edit from the tokenized "sent back for edits" link.
+const IntakeEditPatch = z.object({
+  reasonType: z.enum(['backfill', 'new_headcount', 'replacement_diff', 'termination_diff']).optional(),
+  roleChangeNote: z.string().optional(),
+  department: z.string().min(1).max(200).optional(),
+  hiringManager: z.string().min(1).max(200).optional(),
+  numOpenings: z.number().int().min(1).optional(),
+  priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
+  employmentType: z.enum(['Full-Time', 'Part-Time', 'Contract', 'Internship']).optional(),
+  location: z.string().max(200).optional(),
+  workArrangement: z.enum(['On-site', 'Hybrid', 'Remote']).optional(),
+  hybridDays: z.number().int().min(0).max(5).optional(),
+  salaryMin: z.number().int().optional(),
+  salaryMax: z.number().int().optional(),
+  variableComp: z.string().optional(),
+  mustHaves: z.string().optional(),
+  niceToHaves: z.string().optional(),
+  standoutSignals: z.string().optional(),
+  dealbreakers: z.string().optional(),
+  knownConstraints: z.string().optional(),
+  timelineTemplate: z.enum(['standard', 'senior', 'custom']).optional(),
+  targetPostDate: z.string().optional(),
+  targetOfferDate: z.string().optional(),
+  teamAvailabilityConfirmed: z.boolean().optional(),
+});
+
+// Save submitter edits from the tokenized link. Only allowed while the intake is
+// still editable (Changes Requested or Draft).
+async function saveIntakeEdits(db: DrizzleClient, token: string, fields: Record<string, any>): Promise<{ ok: true }> {
+  const req = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, token) });
+  if (!req) throw new TRPCError({ code: 'NOT_FOUND', message: 'This edit link is invalid or has expired.' });
+  if (!(req.status === 'Changes Requested' || req.status === 'Draft')) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'This intake can no longer be edited from this link (it is already back in approval).' });
+  }
+  const clean: Record<string, any> = { ...fields };
+  if ('targetPostDate' in clean) clean.targetPostDate = clean.targetPostDate || null;
+  if ('targetOfferDate' in clean) clean.targetOfferDate = clean.targetOfferDate || null;
+  if (Object.keys(clean).length) {
+    await db.update(jobRequisitions).set({ ...clean, updatedAt: new Date() }).where(eq(jobRequisitions.id, token));
+  }
+  return { ok: true };
+}
+
 export const intakeRouter = router({
+  // ── Submitter self-service edit via a tokenized link (token = requisition id) ──
+  // Reached from the "sent back for edits" email so the hiring team can review and
+  // fix the intake inline, then re-submit — no need to find the original form.
+  editView: publicProcedure
+    .input(z.object({ token: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const req = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, input.token) });
+      if (!req) throw new TRPCError({ code: 'NOT_FOUND', message: 'This edit link is invalid or has expired.' });
+      const [rounds, team, awareness, approvalRows] = await Promise.all([
+        ctx.db.select().from(interviewPlan).where(eq(interviewPlan.reqId, input.token)).orderBy(asc(interviewPlan.sortOrder)),
+        ctx.db.select().from(hiringTeam).where(eq(hiringTeam.reqId, input.token)),
+        ctx.db.select().from(awarenessList).where(eq(awarenessList.reqId, input.token)),
+        ctx.db.select().from(approvals).where(eq(approvals.reqId, input.token)).orderBy(asc(approvals.step)),
+      ]);
+      const sentBack = approvalRows
+        .filter((r) => r.status === 'changes_requested')
+        .sort((a, b) => (b.actedAt ? b.actedAt.getTime() : 0) - (a.actedAt ? a.actedAt.getTime() : 0))[0];
+      return {
+        requisition: req, rounds, team, awareness,
+        reviewNote: sentBack?.note ?? null,
+        reviewedBy: sentBack?.approverRole ?? null,
+        status: req.status,
+        canEdit: req.status === 'Changes Requested' || req.status === 'Draft',
+      };
+    }),
+
+  editSave: publicProcedure
+    .input(z.object({ token: z.string().uuid() }).merge(IntakeEditPatch))
+    .mutation(async ({ ctx, input }) => {
+      const { token, ...fields } = input;
+      return saveIntakeEdits(ctx.db, token, fields);
+    }),
+
+  editResubmit: publicProcedure
+    .input(z.object({ token: z.string().uuid() }).merge(IntakeEditPatch))
+    .mutation(async ({ ctx, input }) => {
+      const { token, ...fields } = input;
+      await saveIntakeEdits(ctx.db, token, fields);
+      const req = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, token) });
+      if (!req) throw new TRPCError({ code: 'NOT_FOUND' });
+      const missing: string[] = [];
+      if (!req.department) missing.push('department');
+      if (!req.hiringManager) missing.push('hiring manager');
+      if (req.salaryMin == null || req.salaryMax == null) missing.push('salary range');
+      if (req.salaryMin != null && req.salaryMax != null && req.salaryMax < req.salaryMin) missing.push('salary range (max below min)');
+      if (!req.teamAvailabilityConfirmed) missing.push('team availability confirmation');
+      if (missing.length) throw new TRPCError({ code: 'BAD_REQUEST', message: `Cannot re-submit — still missing: ${missing.join(', ')}.` });
+      await ctx.db.update(jobRequisitions).set({ status: 'Pending Approval', updatedAt: new Date() }).where(eq(jobRequisitions.id, token));
+      const rawPlan: Array<{ role: string; concurrent?: boolean }> =
+        Array.isArray(req.approvalPlan) && (req.approvalPlan as any[]).length
+          ? (req.approvalPlan as any[])
+          : [ { role: 'Hiring Manager', concurrent: false }, { role: 'ELT Leader', concurrent: false }, { role: 'Finance', concurrent: false }, { role: 'HR', concurrent: false } ];
+      let g = 0;
+      const seedRows = rawPlan.map((p, i) => { if (i > 0 && !p.concurrent) g++; return { reqId: token, step: i + 1, approverRole: p.role, status: 'pending', groupIdx: g }; });
+      await ctx.db.delete(approvals).where(eq(approvals.reqId, token));
+      const inserted = await ctx.db.insert(approvals).values(seedRows).returning();
+      const firstGroup = Math.min(...inserted.map((r: any) => r.groupIdx));
+      for (const r of inserted.filter((r: any) => r.groupIdx === firstGroup)) { await notifyApprover(ctx.db, req, r); }
+      return { ok: true as const, status: 'Pending Approval' as const };
+    }),
+
   jdReviewView: publicProcedure
     .input(z.object({ token: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
