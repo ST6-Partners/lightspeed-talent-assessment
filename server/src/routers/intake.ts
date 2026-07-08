@@ -179,7 +179,7 @@ async function notifyJdReview(db: DrizzleClient, req: any, jdTitle: string | und
 // Shared: open the role (status -> Open) and send the hiring kickoff. Fires
 // immediately for backfill (same JD); for new-JD reasons it fires only after the
 // hiring manager signs off on the JD.
-async function openRoleAndSendKickoff(db: DrizzleClient, req: any, jdTitle?: string): Promise<void> {
+async function openRoleAndSendKickoff(db: DrizzleClient, req: any, jdTitle?: string, jdId?: string): Promise<void> {
   const qRow = (await db.select().from(interviewQuestions)
     .where(eq(interviewQuestions.reqId, req.id))
     .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0];
@@ -189,10 +189,14 @@ async function openRoleAndSendKickoff(db: DrizzleClient, req: any, jdTitle?: str
     await db.update(jobRequisitions).set({ status: 'Open', postedAt: new Date(), updatedAt: new Date() }).where(eq(jobRequisitions.id, req.id));
   } catch (err) { console.error('[intake] posting (status Open) failed:', err); }
   // Auto-announce the role to all employees on open, exactly once (replaces the manual megaphone).
+  // Prefer the JD passed by the caller (handles backfill, where the role opens against an
+  // existing base JD whose reqId points at the ORIGINAL req, not this one); fall back to a
+  // reqId lookup for JDs created for this req (new headcount / replacement).
   try {
     const freshReq: any = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, req.id) });
     if (freshReq && !freshReq.internalAnnouncedAt) {
-      const jdRow: any = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.reqId, req.id) });
+      let jdRow: any = jdId ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, jdId) }) : null;
+      if (!jdRow) jdRow = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.reqId, req.id) });
       if (jdRow) {
         await announceRoleInternally(db, { id: jdRow.id, jobTitle: jdRow.jobTitle }, (req as any).department ?? '');
         await db.update(jobRequisitions).set({ internalAnnouncedAt: new Date(), updatedAt: new Date() }).where(eq(jobRequisitions.id, req.id));
@@ -215,7 +219,7 @@ export async function approveJdAndOpenRole(db: DrizzleClient, jdId: string): Pro
     .where(eq(jobDescriptions.id, jdId)).returning();
   const req = jd.reqId ? await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) }) : null;
   if (req && req.status === 'Approved') {
-    await openRoleAndSendKickoff(db, req, jd.jobTitle);
+    await openRoleAndSendKickoff(db, req, jd.jobTitle, jd.id);
   }
   return updated;
 }
@@ -253,7 +257,7 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
       await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'reused' });
     } catch (err) { console.error('[intake] backfill question copy failed:', err); }
     // Same JD is already approved -> open the role + send the kickoff immediately.
-    await openRoleAndSendKickoff(db, req, jdTitle);
+    await openRoleAndSendKickoff(db, req, jdTitle, baseJd?.id);
   } else {
     // Different JD (replacement/termination) or brand-new role (new_headcount).
     // generateRoleJD never throws (internal fallback), so a JD is always produced;
