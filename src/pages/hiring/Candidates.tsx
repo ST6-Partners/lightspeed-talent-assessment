@@ -45,11 +45,19 @@ export default function Candidates() {
     isInternal: false,
     internalEmployee: '',
   });
+  const [deptFilter, setDeptFilter] = useState('');
 
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(
     stageFilter ? { stage: stageFilter } : undefined
   );
   const { data: jobDescriptions } = trpc.jobDescriptions.list.useQuery();
+  const { data: requisitions } = trpc.requisitions.list.useQuery();
+  const deptByReq: Record<string, string> = {};
+  for (const r of (requisitions ?? []) as any[]) deptByReq[r.id] = r.department;
+  const jdDepartments = Array.from(new Set(((jobDescriptions ?? []) as any[]).map((j) => deptByReq[j.reqId]).filter(Boolean))).sort();
+  const jdOptions = deptFilter
+    ? ((jobDescriptions ?? []) as any[]).filter((j) => deptByReq[j.reqId] === deptFilter)
+    : ((jobDescriptions ?? []) as any[]);
 
   const createMutation = trpc.candidates.create.useMutation({
     onSuccess: () => { refetch(); setShowForm(false); resetForm(); },
@@ -193,11 +201,26 @@ export default function Candidates() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Department</label>
+                <select value={deptFilter} onChange={(e) => {
+                    const dept = e.target.value;
+                    setDeptFilter(dept);
+                    const cur = ((jobDescriptions ?? []) as any[]).find((j) => j.id === form.jdId);
+                    if (dept && cur && deptByReq[cur.reqId] !== dept) setForm({ ...form, jdId: '' });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan">
+                  <option value="">— All departments —</option>
+                  {jdDepartments.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Job Description</label>
                 <select value={form.jdId} onChange={(e) => setForm({ ...form, jdId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan">
                   <option value="">— Not linked yet —</option>
-                  {(jobDescriptions ?? []).map((j) => (
+                  {jdOptions.map((j) => (
                     <option key={j.id} value={j.id}>{j.jobTitle}</option>
                   ))}
                 </select>
