@@ -70,6 +70,44 @@ export async function seedRoundsFromPlan(candidateId: string) {
     .orderBy(asc(candidateInterviews.sortOrder));
 }
 
+/**
+ * Testing helper: whether to auto-populate sample interview transcripts.
+ * Explicit override via SAMPLE_INTERVIEW_TRANSCRIPTS (1/0, true/false, on/off).
+ * Default: ON while there's no ANTHROPIC_API_KEY (i.e. the demo/testing posture),
+ * and OFF once real AI is configured — so production with real Zoom transcripts
+ * is never seeded with fake data.
+ */
+export function sampleTranscriptsEnabled(): boolean {
+  const v = (process.env.SAMPLE_INTERVIEW_TRANSCRIPTS ?? '').trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(v)) return true;
+  if (['0', 'false', 'no', 'off'].includes(v)) return false;
+  return !process.env.ANTHROPIC_API_KEY;
+}
+
+/**
+ * Auto-fill sample interview data for a candidate (testing only). Seeds the
+ * per-round records (falling back to a single generic round if the role has no
+ * plan), then generates a sample transcript + feedback for any round that
+ * doesn't have feedback yet. No-op unless sampleTranscriptsEnabled().
+ */
+export async function autofillSampleRounds(candidateId: string): Promise<void> {
+  if (!sampleTranscriptsEnabled()) return;
+  await seedRoundsFromPlan(candidateId).catch((err) => console.error('[autofill] seed rounds failed:', err));
+  let rounds = await db.select().from(candidateInterviews)
+    .where(eq(candidateInterviews.candidateId, candidateId))
+    .orderBy(asc(candidateInterviews.sortOrder));
+  if (rounds.length === 0) {
+    await db.insert(candidateInterviews).values({ candidateId, roundName: 'Interview', sortOrder: 0 });
+    rounds = await db.select().from(candidateInterviews)
+      .where(eq(candidateInterviews.candidateId, candidateId))
+      .orderBy(asc(candidateInterviews.sortOrder));
+  }
+  for (const r of rounds) {
+    if (((r.feedbackHr as string | null) ?? '').trim()) continue; // already has feedback — leave it
+    await generateRoundFeedback(r.id).catch((err) => console.error('[autofill] round feedback failed', r.id, err));
+  }
+}
+
 /** Run AI feedback for a single round and store it on that round. */
 export async function generateRoundFeedback(roundId: string, transcriptIn?: string | null) {
   const round = (await db.select().from(candidateInterviews)

@@ -17,7 +17,7 @@ import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { analyzeInterviewTranscript } from '../services/ai.js';
 import { processInterviewFeedback } from '../services/interviewFeedback.js';
-import { seedRoundsFromPlan } from '../services/interviewRounds.js';
+import { seedRoundsFromPlan, autofillSampleRounds } from '../services/interviewRounds.js';
 import { sendAssessment, getScores } from '../services/criteriaCorp.js';
 import {
   emailApplicationReceived,
@@ -493,6 +493,13 @@ export const candidatesRouter = router({
       // When advancing to Interview Scheduled:
       // 1. Generate tailored interview questions (AI)
       // 2. Email questions to the interviewer
+      // Testing helper: when a candidate reaches Interviewed, auto-populate sample
+      // interview transcripts + feedback so the app can be exercised without pasting
+      // a transcript per candidate. No-op once real AI (ANTHROPIC_API_KEY) is set.
+      if (input.toStage === 'Interviewed') {
+        autofillSampleRounds(input.id).catch((err) => console.error('[advance] autofill sample rounds failed:', err));
+      }
+
       if (input.toStage === 'Interview Scheduled') {
         // Auto-create the per-round interview records from the role's plan
         // (idempotent — no-op if rounds already exist or no plan is defined).
