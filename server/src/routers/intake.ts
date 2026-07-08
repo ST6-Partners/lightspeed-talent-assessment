@@ -415,6 +415,18 @@ async function saveIntakeEdits(db: DrizzleClient, token: string, fields: Record<
 }
 
 export const intakeRouter = router({
+  // Latest reviewer note for a requisition that was sent back for edits (or
+  // rejected), so the Intake + Requisitions edit views can surface "what to change".
+  changesRequestedNote: protectedProcedure
+    .input(z.object({ reqId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.db.select().from(approvals).where(eq(approvals.reqId, input.reqId)).orderBy(desc(approvals.actedAt));
+      const cr = rows.find((r) => r.status === 'changes_requested');
+      const rej = rows.find((r) => r.status === 'rejected');
+      const hit = cr ?? rej;
+      return { note: hit?.note ?? null, reviewedBy: hit?.approverRole ?? null, kind: cr ? ('changes_requested' as const) : (rej ? ('rejected' as const) : null) };
+    }),
+
   // ── Submitter self-service edit via a tokenized link (token = requisition id) ──
   // Reached from the "sent back for edits" email so the hiring team can review and
   // fix the intake inline, then re-submit — no need to find the original form.

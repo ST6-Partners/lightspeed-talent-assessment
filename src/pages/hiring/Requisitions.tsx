@@ -37,6 +37,7 @@ export default function Requisitions() {
   const [form, setForm] = useState<typeof EMPTY_FORM>({ ...EMPTY_FORM });
 
   const { data: requisitions, refetch } = trpc.requisitions.list.useQuery();
+  const changeNote = trpc.intake.changesRequestedNote.useQuery({ reqId: editingId! }, { enabled: !!editingId });
 
   const closeForm = () => { setShowForm(false); setEditingId(null); resetForm(); };
 
@@ -116,6 +117,12 @@ export default function Requisitions() {
               <X size={18} />
             </button>
           </div>
+          {editingId && changeNote.data?.kind === 'changes_requested' && changeNote.data?.note && (
+            <div className="border border-amber-200 bg-amber-50 rounded-md p-3 mb-4">
+              <div className="text-amber-800 font-semibold text-sm">Changes requested{changeNote.data.reviewedBy ? ` by ${changeNote.data.reviewedBy}` : ''}: what to change</div>
+              <p className="text-amber-900 text-sm mt-1 whitespace-pre-wrap">{changeNote.data.note}</p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Department *</label>

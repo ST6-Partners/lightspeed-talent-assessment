@@ -207,6 +207,18 @@ export default function Intake() {
             <button onClick={close} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
           </div>
 
+          {editingId && (() => {
+            const rows = ((full as any)?.approvals as any[]) ?? [];
+            const cr = rows.filter((r) => r.status === 'changes_requested').sort((a, b) => new Date(b.actedAt ?? 0).getTime() - new Date(a.actedAt ?? 0).getTime())[0];
+            if (!cr?.note) return null;
+            return (
+              <div className="border border-amber-200 bg-amber-50 rounded-lg p-4">
+                <div className="text-amber-800 font-semibold text-sm">Changes requested{cr.approverRole ? ` by ${ROLE_LABEL[cr.approverRole] ?? cr.approverRole}` : ''}: what to change</div>
+                <p className="text-amber-900 text-sm mt-1 whitespace-pre-wrap">{cr.note}</p>
+              </div>
+            );
+          })()}
+
           {editingId && Array.isArray((full as any)?.approvals) && (full as any).approvals.length > 0 && (() => {
             const rows = (full as any).approvals as any[];
             const pendingRows = rows.filter((r) => r.status === 'pending');
