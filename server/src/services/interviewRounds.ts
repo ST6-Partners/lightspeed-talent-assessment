@@ -1,0 +1,144 @@
+// ============================================================
+// INTERVIEW ROUNDS SERVICE (per-candidate, multi-round)
+//
+//  • seedRoundsFromPlan  — create per-round records from the req's
+//    interview plan (best-effort; no-op if a plan can't be resolved).
+//  • generateRoundFeedback — transcript → AI feedback for ONE round,
+//    stored on that round (incl. structured follow-ups).
+//  • buildPriorRoundsBriefing — compile what the NEXT interviewer sees:
+//    each earlier completed round's written read on the candidate
+//    (numeric score HIDDEN) + a consolidated follow-up list. The
+//    interviewer-coaching notes are deliberately excluded.
+// ============================================================
+
+import { eq, and, lt, asc } from 'drizzle-orm';
+import { db } from '../db.js';
+import { candidateInterviews } from '../db/schema/interviews.js';
+import { candidates, jobDescriptions } from '../db/schema/hiring.js';
+import { interviewPlan } from '../db/schema/intake.js';
+import {
+  analyzeInterviewTranscript,
+  synthesizeInterviewTranscript,
+  type InterviewFollowUp,
+} from './ai.js';
+
+export interface BriefingRound {
+  roundName: string;
+  interviewerName: string | null;
+  writtenRead: string; // feedbackHr — the read on the CANDIDATE. Score omitted on purpose.
+}
+export interface BriefingFollowUp extends InterviewFollowUp {
+  roundName: string;
+}
+export interface PriorRoundsBriefing {
+  rounds: BriefingRound[];
+  followUps: BriefingFollowUp[];
+}
+
+/** Create per-round records from the requisition's interview plan.
+ *  Idempotent: if the candidate already has rounds, returns them. */
+export async function seedRoundsFromPlan(candidateId: string) {
+  const existing = await db.select().from(candidateInterviews)
+    .where(eq(candidateInterviews.candidateId, candidateId))
+    .orderBy(asc(candidateInterviews.sortOrder));
+  if (existing.length) return existing;
+
+  const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
+  if (!candidate?.jdId) return existing;
+  const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) });
+  if (!jd?.reqId) return existing;
+
+  const plan = await db.select().from(interviewPlan)
+    .where(eq(interviewPlan.reqId, jd.reqId))
+    .orderBy(asc(interviewPlan.sortOrder));
+  if (!plan.length) return existing;
+
+  await db.insert(candidateInterviews).values(
+    plan.map((r, i) => ({ candidateId, roundName: r.roundName, sortOrder: r.sortOrder ?? i })),
+  );
+  return db.select().from(candidateInterviews)
+    .where(eq(candidateInterviews.candidateId, candidateId))
+    .orderBy(asc(candidateInterviews.sortOrder));
+}
+
+/** Run AI feedback for a single round and store it on that round. */
+export async function generateRoundFeedback(roundId: string, transcriptIn?: string | null) {
+  const round = (await db.select().from(candidateInterviews)
+    .where(eq(candidateInterviews.id, roundId)).limit(1))[0];
+  if (!round) throw new Error(`Interview round not found: ${roundId}`);
+
+  const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, round.candidateId) });
+  if (!candidate) throw new Error(`Candidate not found: ${round.candidateId}`);
+  const jd = candidate.jdId
+    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+    : null;
+  const jobTitle = jd?.jobTitle ?? undefined;
+
+  const provided = (transcriptIn ?? '').trim();
+  const stored = ((round.transcript as string | null) ?? '').trim();
+  let transcript: string;
+  if (provided) transcript = provided;
+  else if (stored) transcript = stored;
+  else transcript = await synthesizeInterviewTranscript({
+    firstName: candidate.firstName,
+    lastName: candidate.lastName,
+    jobTitle,
+    interviewerName: round.interviewerName,
+    interviewQuestions: (candidate as any).interviewQuestions ?? null,
+  });
+
+  const feedback = await analyzeInterviewTranscript({
+    firstName: candidate.firstName,
+    lastName: candidate.lastName,
+    jobTitle,
+    transcript,
+    interviewQuestions: (candidate as any).interviewQuestions ?? null,
+    ccatScore: candidate.ccatScore,
+    eppValuesMatchScore: candidate.eppValuesMatchScore,
+    workSampleScore: candidate.workSampleScore,
+    resumeReviewScore: candidate.resumeReviewScore,
+    referenceCheckScore: (candidate as any).referenceCheckScore,
+  });
+
+  await db.update(candidateInterviews).set({
+    transcript,
+    score: feedback.interviewScore,
+    feedbackHr: feedback.feedbackHr,
+    feedbackCandidate: feedback.feedbackCandidate,
+    feedbackInterviewer: feedback.feedbackInterviewer,
+    followUps: feedback.followUps,
+    status: 'completed',
+    updatedAt: new Date(),
+  }).where(eq(candidateInterviews.id, roundId));
+
+  return { roundId, transcript, feedback };
+}
+
+/** Compile the briefing the interviewer for `beforeSortOrder` should get:
+ *  earlier COMPLETED rounds' written read on the candidate (no score) +
+ *  the consolidated follow-up list. Coaching notes are NOT included. */
+export async function buildPriorRoundsBriefing(
+  candidateId: string,
+  beforeSortOrder: number,
+): Promise<PriorRoundsBriefing> {
+  const prior = await db.select().from(candidateInterviews)
+    .where(and(
+      eq(candidateInterviews.candidateId, candidateId),
+      lt(candidateInterviews.sortOrder, beforeSortOrder),
+      eq(candidateInterviews.status, 'completed'),
+    ))
+    .orderBy(asc(candidateInterviews.sortOrder));
+
+  const rounds: BriefingRound[] = [];
+  const followUps: BriefingFollowUp[] = [];
+  for (const r of prior) {
+    if (r.feedbackHr) {
+      rounds.push({ roundName: r.roundName, interviewerName: r.interviewerName ?? null, writtenRead: r.feedbackHr });
+    }
+    const fus = Array.isArray(r.followUps) ? (r.followUps as InterviewFollowUp[]) : [];
+    for (const f of fus) {
+      if (f && f.text) followUps.push({ roundName: r.roundName, type: f.type, text: f.text });
+    }
+  }
+  return { rounds, followUps };
+}

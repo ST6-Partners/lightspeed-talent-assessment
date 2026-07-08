@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import SearchSelect from '../../components/SearchSelect';
 
 // Sample CCAT (Criteria Cognitive Aptitude Test) results — illustrative data
 // showing what a completed CCAT looks like: raw score out of 50, overall
@@ -55,8 +56,8 @@ function Bar({ label, p }: { label: string; p: number }) {
 }
 
 export default function CcatResults() {
-  const [sel, setSel] = useState(0);
-  const c = SAMPLE[sel];
+  const [selName, setSelName] = useState(SAMPLE[0].name);
+  const c = SAMPLE.find((x) => x.name === selName) ?? SAMPLE[0];
   const range = ROLE_RANGE[c.role];
   const inRange = range ? (c.raw >= range[0] ? (c.raw <= range[1] ? 'in range' : 'above range') : 'below range') : null;
   const b = band(c.percentile);
@@ -70,39 +71,19 @@ export default function CcatResults() {
         </p>
       </div>
 
-      <div className="mb-3 inline-block text-[11px] font-medium text-ls-watch bg-ls-watch-bg border border-ls-watch/30 rounded-full px-2.5 py-1">
+      <div className="mb-4 inline-block text-[11px] font-medium text-ls-watch bg-ls-watch-bg border border-ls-watch/30 rounded-full px-2.5 py-1">
         Sample data — illustrative of live CCAT output
       </div>
 
-      <div className="bg-white rounded-xl border border-ls-line shadow-sm overflow-hidden mb-5">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-ls-ink-3 bg-ls-bg-2">
-              <th className="px-4 py-2 font-medium">Candidate</th>
-              <th className="px-4 py-2 font-medium">Role</th>
-              <th className="px-4 py-2 font-medium text-right">Raw</th>
-              <th className="px-4 py-2 font-medium text-right">Percentile</th>
-              <th className="px-4 py-2 font-medium text-right">Band</th>
-            </tr>
-          </thead>
-          <tbody>
-            {SAMPLE.map((row, i) => {
-              const rb = band(row.percentile);
-              return (
-                <tr key={row.name} onClick={() => setSel(i)}
-                  className={`border-t border-ls-line cursor-pointer ${i === sel ? 'bg-ls-primary-50' : 'hover:bg-ls-bg-2'}`}>
-                  <td className="px-4 py-2.5 text-ls-ink font-medium">{row.name}</td>
-                  <td className="px-4 py-2.5 text-ls-ink-2">{row.role}</td>
-                  <td className="px-4 py-2.5 text-right text-ls-ink">{row.raw}/50</td>
-                  <td className="px-4 py-2.5 text-right text-ls-ink font-semibold">{row.percentile}</td>
-                  <td className={`px-4 py-2.5 text-right text-xs font-medium ${rb.text}`}>{rb.label}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5 mb-5">
+        <label className="block text-xs font-medium text-ls-ink-2 mb-1">Candidate</label>
+        <SearchSelect
+          value={selName}
+          onChange={setSelName}
+          placeholder="Search candidates…"
+          options={SAMPLE.map((x) => ({ value: x.name, label: `${x.name} · ${x.role}` }))}
+        />
       </div>
-
       <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5">
         <div className="flex items-start justify-between mb-4">
           <div>

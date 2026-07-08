@@ -314,7 +314,14 @@
       "idx": 42,
       "version": "7",
       "when": 1960000015000,
-      "tag": "0042_req_internal_announced",
+      "tag": "0042_candidate_interviews",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1960000016000,
+      "tag": "0043_req_internal_announced",
       "breakpoints": true
     }
   ]
