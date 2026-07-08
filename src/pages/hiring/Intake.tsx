@@ -494,18 +494,9 @@ export default function Intake() {
           {/* 5 — Interview structure */}
           <section>
             <h3 className="text-sm font-semibold text-ls-primary mb-2">5 · Interview structure</h3>
-            <div className="grid grid-cols-2 gap-4 mb-3">
-              <div>
-                <label className={lbl}>Number of rounds</label>
-                <input type="number" min={1} max={5} value={form.interviewRounds} onChange={(e) => setForm({ ...form, interviewRounds: parseInt(e.target.value) || 1 })} className={inp} />
-              </div>
-              <div>
-                <label className={lbl}>Interview questions</label>
-                <select value={form.questionSource} onChange={(e) => setForm({ ...form, questionSource: e.target.value })} className={inp}>
-                  <option value="standard">Reuse standard set</option>
-                  <option value="ai_generate">AI-generate (changed/new JD)</option>
-                </select>
-              </div>
+            <div className="mb-3 max-w-[240px]">
+              <label className={lbl}>Number of rounds</label>
+              <input type="number" min={1} max={5} value={form.interviewRounds} onChange={(e) => setForm({ ...form, interviewRounds: parseInt(e.target.value) || 1 })} className={inp} />
             </div>
             <label className={lbl}>Rounds</label>
             {rounds.map((r, i) => (
