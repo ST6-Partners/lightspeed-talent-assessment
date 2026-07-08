@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, X, Pencil, Trash2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
-const EMPTY = { name: '', title: '', email: '', active: true };
+const EMPTY = { name: '', title: '', email: '', managerEmail: '', active: true };
 
 export default function Employees() {
   const [showForm, setShowForm] = useState(false);
@@ -15,7 +15,7 @@ export default function Employees() {
   const updateM = trpc.employees.update.useMutation({ onSuccess: () => { refetch(); close(); } });
   const deleteM = trpc.employees.delete.useMutation({ onSuccess: () => refetch() });
 
-  const startEdit = (r: any) => { setEditingId(r.id); setForm({ name: r.name ?? '', title: r.title ?? '', email: r.email ?? '', active: !!r.active }); setShowForm(true); };
+  const startEdit = (r: any) => { setEditingId(r.id); setForm({ name: r.name ?? '', title: r.title ?? '', email: r.email ?? '', managerEmail: r.managerEmail ?? '', active: !!r.active }); setShowForm(true); };
   const save = () => { if (!form.name.trim()) return; editingId ? updateM.mutate({ id: editingId, ...form }) : createM.mutate(form); };
   const saving = createM.isLoading || updateM.isLoading;
 
@@ -54,6 +54,13 @@ export default function Employees() {
               <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
                 placeholder="name@lightspeed.com"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Reports to (manager email)</label>
+              <input type="email" value={form.managerEmail} onChange={(e) => setForm({ ...form, managerEmail: e.target.value })}
+                placeholder="manager@lightspeed.com"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+              <div className="text-[11px] text-gray-400 mt-1">Used to alert the leadership chain when an internal candidate applies.</div>
             </div>
             <div className="flex items-center gap-2 pt-6">
               <input type="checkbox" id="emp-active" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} className="rounded" />

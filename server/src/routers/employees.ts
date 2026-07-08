@@ -10,6 +10,7 @@ const Input = z.object({
   name: z.string().min(1).max(200),
   title: z.string().max(200).optional(),
   email: z.string().email().max(300).optional().or(z.literal('')),
+  managerEmail: z.string().email().max(300).optional().or(z.literal('')),
   active: z.boolean().default(true),
 });
 
@@ -18,7 +19,7 @@ export const employeesRouter = router({
     ctx.db.query.employees.findMany({ orderBy: desc(employees.createdAt) })),
 
   create: protectedProcedure.input(Input).mutation(async ({ ctx, input }) => {
-    const [row] = await ctx.db.insert(employees).values({ ...input, email: input.email || null }).returning();
+    const [row] = await ctx.db.insert(employees).values({ ...input, email: input.email || null, managerEmail: input.managerEmail || null }).returning();
     await auditChange(ctx.db, ctx.user.id, row.id, 'employees', 'create');
     trackActivity(ctx.db, ctx.user.id, 'create_employee', 'employees', { id: row.id }).catch(() => {});
     return row;
@@ -30,7 +31,7 @@ export const employeesRouter = router({
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
       const { id, ...updates } = input;
       const [row] = await ctx.db.update(employees)
-        .set({ ...updates, ...(updates.email !== undefined ? { email: updates.email || null } : {}), updatedAt: new Date() })
+        .set({ ...updates, ...(updates.email !== undefined ? { email: updates.email || null } : {}), ...(updates.managerEmail !== undefined ? { managerEmail: updates.managerEmail || null } : {}), updatedAt: new Date() })
         .where(eq(employees.id, id)).returning();
       await auditChange(ctx.db, ctx.user.id, id, 'employees', 'update');
       return row;

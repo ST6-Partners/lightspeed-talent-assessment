@@ -14,6 +14,7 @@ import { inboundEmails } from '../db/schema/email.js';
 import { emailPostingOpenedExternal, emailApplicationReceived, emailInternalApplicantHR, emailInternalInterestAlert, HIRING_TEAM_INBOX } from '../services/email.js';
 import { announceRoleInternally } from '../services/internalAnnounce.js';
 import { getInternalReportConfig } from '../services/internalReport.js';
+import { walkLeadershipChain } from '../services/orgChain.js';
 import { getPostingWindows, writeExternalOpenMarker } from '../services/posting.js';
 import { trackActivity } from '../services/telemetry.js';
 
@@ -105,6 +106,13 @@ export const internalOpeningsRouter = router({
       // Manager email is required, so their manager is always alerted on submit.
       await emailInternalInterestAlert(input.managerEmail, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: true }).catch(() => {});
       notified.push(input.managerEmail);
+      // Walk the org chart up from the manager to ELT and alert each level (no blindside).
+      const chain = await walkLeadershipChain(ctx.db, input.managerEmail).catch(() => [] as string[]);
+      for (const to of chain) {
+        if (notified.includes(to)) continue;
+        await emailInternalInterestAlert(to, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: false }).catch(() => {});
+        notified.push(to);
+      }
       for (const to of leadershipList) {
         if (notified.includes(to)) continue;
         await emailInternalInterestAlert(to, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: false }).catch(() => {});
