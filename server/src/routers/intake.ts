@@ -160,12 +160,20 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
       raw: { kind: 'kickoff', reqId: req.id },
     });
   } catch (err) { console.error('[intake] kickoff inbox record failed:', err); }
-  // Real send: interviewers get the availability CTA, everyone else gets the base kickoff.
+  // Real send. Interviewers get ONE combined email (all of them on the same message) with the
+  // availability CTA; everyone else (non-interviewing team + awareness list) gets the base kickoff.
   const emailLike = [...team.map((t: any) => t.personRef), ...awareness.map((a: any) => a.personRef)]
     .filter((x: string) => /.+@.+\..+/.test(x));
-  for (const to of Array.from(new Set(emailLike))) {
-    const body = interviewerRefs.has(to) ? withLink : base;
-    try { await sendEmail({ to, subject, html: body.html, templateId: 'intake_kickoff' }); } catch (err) { console.error('[intake] kickoff send failed:', err); }
+  const recipients = Array.from(new Set(emailLike));
+  const interviewerEmails = recipients.filter((to) => interviewerRefs.has(to));
+  const otherEmails = recipients.filter((to) => !interviewerRefs.has(to));
+  if (interviewerEmails.length) {
+    try { await sendEmail({ to: interviewerEmails, subject, html: withLink.html, templateId: 'intake_kickoff' }); }
+    catch (err) { console.error('[intake] kickoff (interviewers) send failed:', err); }
+  }
+  for (const to of otherEmails) {
+    try { await sendEmail({ to, subject, html: base.html, templateId: 'intake_kickoff' }); }
+    catch (err) { console.error('[intake] kickoff send failed:', err); }
   }
 }
 

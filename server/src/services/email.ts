@@ -29,7 +29,8 @@ interface EmailAttachment {
 }
 
 interface EmailPayload {
-  to: string;
+  /** A single address, or several to put on one email. */
+  to: string | string[];
   subject: string;
   html: string;
   templateId: string;
@@ -57,7 +58,7 @@ export function emailConfig() {
 function buildSendGridBody(payload: EmailPayload) {
   const replyTo = payload.replyTo ?? process.env.EMAIL_REPLY_TO;
   const body: Record<string, unknown> = {
-    personalizations: [{ to: [{ email: payload.to }] }],
+    personalizations: [{ to: (Array.isArray(payload.to) ? payload.to : [payload.to]).map((email) => ({ email })) }],
     from: { email: process.env.EMAIL_FROM ?? FROM_ADDRESS, name: process.env.EMAIL_FROM_NAME ?? FROM_NAME },
     subject: payload.subject,
     content: [{ type: 'text/html', value: payload.html }],
