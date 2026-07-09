@@ -39,6 +39,7 @@ export default function Requisitions() {
   const { data: requisitions, refetch } = trpc.requisitions.list.useQuery();
   const changeNote = trpc.intake.changesRequestedNote.useQuery({ reqId: editingId! }, { enabled: !!editingId });
   const editingReq = (requisitions ?? []).find((r: any) => r.id === editingId);
+  const visibleReqs = ((requisitions ?? []) as any[]).filter((r) => !(r.seeded && r.status === 'Draft'));
 
   const closeForm = () => { setShowForm(false); setEditingId(null); resetForm(); };
 
@@ -259,7 +260,7 @@ export default function Requisitions() {
       )}
 
       <div className="bg-white rounded-lg border border-gray-200">
-        {!requisitions || requisitions.length === 0 ? (
+        {visibleReqs.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">No requisitions yet. Create one to get started.</div>
         ) : (
           <table className="w-full">
@@ -276,7 +277,7 @@ export default function Requisitions() {
               </tr>
             </thead>
             <tbody>
-              {requisitions.map((r) => (
+              {visibleReqs.map((r) => (
                 <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50 text-sm">
                   <td className="px-4 py-3 font-medium text-gray-900">{r.department}</td>
                   <td className="px-4 py-3 text-gray-600">{r.hiringManager}</td>

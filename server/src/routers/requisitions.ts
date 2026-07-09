@@ -36,18 +36,17 @@ export const requisitionsRouter = router({
       const rows = await ctx.db.query.jobRequisitions.findMany({
         orderBy: desc(jobRequisitions.createdAt),
       });
-      // Hide the seeded sample roles (their JD title is one of the ataSeedRoles titles)
-      // while they're still Draft, so the list shows only user-created intakes. The
-      // seeded rows remain in the DB as the reusable JD library; a seeded role that's
-      // actually been posted (status !== Draft) is still shown.
+      // Tag the seeded sample roles (JD title in the ataSeedRoles set) so views can hide
+      // them. Do NOT drop them here — the department/role pickers derive from this list
+      // and need the full set. Only the Job Requisitions page filters seeded rows out.
       const seededTitles = new Set(ataSeedRoles.map((r) => r.jobDescription.title));
       const jds = await ctx.db.query.jobDescriptions.findMany({});
-      const seededDraftReqIds = new Set(
+      const seededReqIds = new Set(
         jds.filter((j: any) => seededTitles.has(j.jobTitle)).map((j: any) => j.reqId),
       );
-      const visible = rows.filter((r) => !(seededDraftReqIds.has(r.id) && r.status === 'Draft'));
-      if (input?.status) return visible.filter((r) => r.status === input.status);
-      return visible;
+      const withFlag = rows.map((r) => ({ ...r, seeded: seededReqIds.has(r.id) }));
+      if (input?.status) return withFlag.filter((r) => r.status === input.status);
+      return withFlag;
     }),
 
   getById: protectedProcedure
