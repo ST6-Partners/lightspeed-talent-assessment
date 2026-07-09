@@ -35,11 +35,12 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RoundCard({ round, defaultOpen, onChanged, reviews, valueName }: { round: any; defaultOpen: boolean; onChanged: () => void; reviews: any[]; valueName: Record<string, string> }) {
+function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, questions }: { round: any; defaultOpen: boolean; onChanged: () => void; reviews: any[]; valueName: Record<string, string>; questions: any[] }) {
   const [open, setOpen] = useState(defaultOpen);
   const [transcript, setTranscript] = useState('');
   const [showBriefing, setShowBriefing] = useState(false);
   const [briefOpen, setBriefOpen] = useState<Record<string, boolean>>({});
+  const [fbOpen, setFbOpen] = useState(false);
 
   const update = trpc.interviews.updateRound.useMutation({ onSuccess: onChanged, onError: (err) => { alert(err.message); onChanged?.(); } });
   const remove = trpc.interviews.removeRound.useMutation({ onSuccess: onChanged });
@@ -117,18 +118,31 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName }: { roun
             </button>
           </div>
 
-          {round.feedbackHr && (
-            <div>
-              <div className="text-[11px] font-semibold text-gray-700">Read on the candidate</div>
-              <p className="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 rounded p-2">{round.feedbackHr}</p>
-            </div>
-          )}
-          {fus.length > 0 && (
-            <div>
-              <div className="text-[11px] font-semibold text-gray-700">Follow up in later rounds</div>
-              <ul className="text-[11px] text-gray-600 list-disc pl-4">
-                {fus.map((f: any, i: number) => <li key={i}><strong>{FOLLOW_LABEL[f.type] ?? 'Follow up'}:</strong> {f.text}</li>)}
-              </ul>
+          {(round.feedbackHr || fus.length > 0) && (
+            <div className="border border-gray-200 rounded">
+              <button type="button" onClick={() => setFbOpen((v) => !v)}
+                className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
+                {fbOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
+                <span className="text-[11px] font-semibold text-gray-700">Interview feedback{round.score != null ? ` · score ${round.score}/100` : ''}</span>
+              </button>
+              {fbOpen && (
+                <div className="px-2 pb-2 space-y-2">
+                  {round.feedbackHr && (
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-700">Read on the candidate</div>
+                      <p className="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 rounded p-2">{round.feedbackHr}</p>
+                    </div>
+                  )}
+                  {fus.length > 0 && (
+                    <div>
+                      <div className="text-[11px] font-semibold text-gray-700">Follow up in later rounds</div>
+                      <ul className="text-[11px] text-gray-600 list-disc pl-4">
+                        {fus.map((f: any, i: number) => <li key={i}><strong>{FOLLOW_LABEL[f.type] ?? 'Follow up'}:</strong> {f.text}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -162,9 +176,31 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName }: { roun
             <div className="border-t border-gray-100 pt-2">
               <div className="text-[11px] font-semibold text-gray-700 mb-1.5">What {round.roundName}'s interviewer receives</div>
               {briefing.isLoading && <div className="text-[11px] text-gray-400">Loading…</div>}
-              {briefing.data && briefing.data.rounds.length === 0 && briefing.data.followUps.length === 0 && (
-                <div className="text-[11px] text-gray-400">This is the first round — there's nothing carried forward yet.</div>
+              {briefing.data && briefing.data.rounds.length === 0 && briefing.data.followUps.length === 0 && questions.length === 0 && (
+                <div className="text-[11px] text-gray-400">No interview questions or earlier-round notes on file yet.</div>
               )}
+
+              {/* Interview questions for this round — every interviewer receives these */}
+              {questions.length > 0 && (() => {
+                const key = 'stdq';
+                const isOpen = briefOpen[key] ?? true;
+                return (
+                  <div className="border border-gray-200 rounded mb-1.5">
+                    <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !(st[key] ?? true) }))}
+                      className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
+                      {isOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
+                      <span className="text-[11px] font-semibold text-gray-700">Interview questions for this round ({questions.length})</span>
+                    </button>
+                    {isOpen && (
+                      <ul className="text-[11px] text-gray-600 list-disc pl-6 pr-2 py-2 space-y-1">
+                        {questions.map((qq: any, i: number) => (
+                          <li key={i}>{qq.category ? <strong>{qq.category}: </strong> : null}{qq.question}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* One collapsible section per earlier round's read on the candidate */}
               {briefing.data && briefing.data.rounds.map((b: any, i: number) => {
@@ -361,7 +397,7 @@ export default function Interviews() {
             <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Rounds</div>
             <div className="space-y-2">
               {list.map((r) => (
-                <RoundCard key={r.id} round={r} defaultOpen={r.id === firstIncompleteId} onChanged={refreshAll} reviews={reviewsQuery.data ?? []} valueName={valueName} />
+                <RoundCard key={r.id} round={r} defaultOpen={r.id === firstIncompleteId} onChanged={refreshAll} reviews={reviewsQuery.data ?? []} valueName={valueName} questions={(selected as any).interviewQuestions ?? []} />
               ))}
               {list.length === 0 && <div className="text-xs text-gray-400 pb-1">No rounds yet. They appear automatically from the role plan when a candidate reaches the interview stage, or add one below.</div>}
             </div>

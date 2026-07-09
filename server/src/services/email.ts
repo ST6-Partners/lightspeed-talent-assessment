@@ -1062,6 +1062,7 @@ export async function emailInterviewRoundPrep(data: {
   lastName: string;
   jobTitle?: string;
   roundName: string;
+  questions?: Array<{ category?: string; question: string }>;
   briefing: {
     rounds: { roundName: string; interviewerName: string | null; writtenRead: string }[];
     followUps: { roundName: string; type: 'avoided' | 'half_answered' | 'suggested'; text: string }[];
@@ -1072,6 +1073,13 @@ export async function emailInterviewRoundPrep(data: {
     half_answered: 'Half-answered',
     suggested: 'Suggested',
   };
+
+  const questionsBlock = (data.questions && data.questions.length)
+    ? `<h2 style="font-size:16px;font-weight:600;margin:24px 0 8px;">Interview questions for this round</h2>
+       <ul style="font-size:14px;line-height:1.6;margin:0 0 16px;padding-left:20px;">` +
+       data.questions.map((q) => `<li>${q.category ? `<strong>${esc(q.category)}:</strong> ` : ''}${esc(q.question)}</li>`).join('') +
+       `</ul>`
+    : '';
 
   const contextBlock = data.briefing.rounds.length
     ? `<h2 style="font-size:16px;font-weight:600;margin:24px 0 8px;">Context from earlier rounds</h2>` +
@@ -1102,6 +1110,7 @@ export async function emailInterviewRoundPrep(data: {
       ${h1(`Interview prep — ${esc(data.roundName)}`)}
       ${p(`Hi ${data.interviewerName ? esc(data.interviewerName) : 'there'},`)}
       ${p(`You're up for the <strong>${esc(data.roundName)}</strong> interview with <strong>${esc(data.firstName)} ${esc(data.lastName)}</strong>${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}. Here's what earlier rounds found and what to dig into.`)}
+      ${questionsBlock}
       ${contextBlock}
       ${followBlock}
       ${guard}
