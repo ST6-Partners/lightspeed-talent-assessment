@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
@@ -47,6 +47,7 @@ export default function Candidates() {
     internalEmployee: '',
   });
   const [deptFilter, setDeptFilter] = useState('');
+  const [collapsedRoles, setCollapsedRoles] = useState<Record<string, boolean>>({});
 
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(
     stageFilter ? { stage: stageFilter } : undefined
@@ -117,6 +118,74 @@ export default function Candidates() {
 
   const saveNotes = (id: string, field: string, value: string) => {
     updateMutation.mutate({ id, [field]: value });
+  };
+
+  const FUNNEL_STAGES = ['Applied', 'Assessment', 'Values Review', 'Work Sample', 'Interview Scheduled', 'Interviewed', 'Offered'] as const;
+  const SHORT: Record<string, string> = { 'Applied': 'App', 'Assessment': 'Assess', 'Values Review': 'Values', 'Work Sample': 'Sample', 'Interview Scheduled': 'Sched', 'Interviewed': 'Intv', 'Offered': 'Offer' };
+  const toggleRole = (jdId: string) => setCollapsedRoles((m) => ({ ...m, [jdId]: !m[jdId] }));
+
+  const visibleCandidates = ((candidates ?? []) as any[]).filter((c: any) =>
+    (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal)) &&
+    c.currentStage !== 'Rejected'
+  );
+  const jdById: Record<string, any> = {};
+  for (const j of (jobDescriptions ?? []) as any[]) jdById[j.id] = j;
+  const groupMap = new Map<string, any[]>();
+  for (const c of visibleCandidates) {
+    const key = c.jdId ?? 'none';
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key)!.push(c);
+  }
+  const roleGroups = Array.from(groupMap.entries()).map(([jdId, cands]) => {
+    const counts: Record<string, number> = {};
+    for (const c of cands) counts[c.currentStage] = (counts[c.currentStage] ?? 0) + 1;
+    return {
+      jdId,
+      cands,
+      counts,
+      title: jdId === 'none' ? 'Unassigned role' : getJdTitle(jdId),
+      dept: jdId === 'none' ? '' : (deptByReq[jdById[jdId]?.reqId] ?? ''),
+    };
+  }).sort((a, b) => b.cands.length - a.cands.length);
+
+  const candidateRow = (c: any) => {
+    const nextStage = getNextStage(c.currentStage as Stage);
+    return (
+      <tr key={c.id} onClick={() => setSelectedId(selectedId === c.id ? null : c.id)}
+        className={`border-b border-gray-50 text-sm cursor-pointer transition-colors ${selectedId === c.id ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
+        <td className="px-4 py-3 font-medium text-gray-900">{c.firstName} {c.lastName}{c.isInternal && <span className="ml-2 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-purple-100 text-purple-700 align-middle">Internal</span>}</td>
+        <td className="px-4 py-3 text-gray-500">{c.email}</td>
+        <td className="px-4 py-3">
+          <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STAGE_COLORS[c.currentStage] ?? ''}`}>{c.currentStage}</span>
+        </td>
+        <td className="px-4 py-3 text-gray-500">{c.ccatScore ?? '\u2014'}</td>
+        <td className="px-4 py-3 text-gray-500">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '\u2014'}</td>
+        <td className="px-4 py-3 text-gray-500">{c.companyValuesMatchScore != null ? `${c.companyValuesMatchScore}%` : '\u2014'}</td>
+        <td className="px-4 py-3 text-gray-400">{new Date(c.createdAt).toLocaleDateString()}</td>
+        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+          <div className="flex gap-1">
+            {getPrevStage(c.currentStage as Stage) && (
+              <button onClick={() => advanceMutation.mutate({ id: c.id, toStage: getPrevStage(c.currentStage as Stage)! })} disabled={advanceMutation.isLoading} className="p-1 text-gray-400 hover:text-amber-600 transition-colors" title={`Move back to ${getPrevStage(c.currentStage as Stage)}`}>
+                <ChevronLeft size={16} />
+              </button>
+            )}
+            {nextStage && (
+              <button onClick={() => advanceMutation.mutate({ id: c.id, toStage: nextStage })} disabled={advanceMutation.isLoading} className="p-1 text-gray-400 hover:text-green-600 transition-colors" title={`Advance to ${nextStage}`}>
+                <ChevronRight size={16} />
+              </button>
+            )}
+            {c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && (
+              <button onClick={() => setRejectingId(c.id)} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Reject">
+                <Ban size={15} />
+              </button>
+            )}
+            <button onClick={() => doDelete(c.id)} disabled={deleteMutation.isLoading} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Delete (build tool)">
+              <Trash2 size={15} />
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
   };
 
   return (
@@ -316,7 +385,7 @@ export default function Candidates() {
         )}
 
         <div className="bg-white rounded-lg border border-gray-200">
-          {!candidates || candidates.length === 0 ? (
+          {roleGroups.length === 0 ? (
             <div className="p-8 text-center text-gray-400 text-sm">No candidates found.</div>
           ) : (
             <table className="w-full">
@@ -324,7 +393,6 @@ export default function Candidates() {
                 <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3">Role</th>
                   <th className="px-4 py-3">Stage</th>
                   <th className="px-4 py-3">CCAT</th>
                   <th className="px-4 py-3">EPP Match</th>
@@ -334,72 +402,32 @@ export default function Candidates() {
                 </tr>
               </thead>
               <tbody>
-                {candidates.filter((c: any) => (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal)) && c.currentStage !== 'Rejected').map((c) => {
-                  const nextStage = getNextStage(c.currentStage as Stage);
+                {roleGroups.map((g) => {
+                  const collapsed = collapsedRoles[g.jdId];
                   return (
-                    <tr
-                      key={c.id}
-                      onClick={() => setSelectedId(selectedId === c.id ? null : c.id)}
-                      className={`border-b border-gray-50 text-sm cursor-pointer transition-colors ${selectedId === c.id ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
-                    >
-                      <td className="px-4 py-3 font-medium text-gray-900">{c.firstName} {c.lastName}{(c as any).isInternal && <span className="ml-2 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-purple-100 text-purple-700 align-middle">Internal</span>}</td>
-                      <td className="px-4 py-3 text-gray-500">{c.email}</td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{getJdTitle(c.jdId ?? null)}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STAGE_COLORS[c.currentStage] ?? ''}`}>
-                          {c.currentStage}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-500">{c.ccatScore ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-500">
-                        {c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500">
-                        {(c as any).companyValuesMatchScore != null ? `${(c as any).companyValuesMatchScore}%` : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-400">{new Date(c.createdAt).toLocaleDateString()}</td>
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex gap-1">
-                          {getPrevStage(c.currentStage as Stage) && (
-                            <button
-                              onClick={() => advanceMutation.mutate({ id: c.id, toStage: getPrevStage(c.currentStage as Stage)! })}
-                              disabled={advanceMutation.isLoading}
-                              className="p-1 text-gray-400 hover:text-amber-600 transition-colors"
-                              title={`Move back to ${getPrevStage(c.currentStage as Stage)}`}
-                            >
-                              <ChevronLeft size={16} />
-                            </button>
-                          )}
-                          {nextStage && (
-                            <button
-                              onClick={() => advanceMutation.mutate({ id: c.id, toStage: nextStage })}
-                              disabled={advanceMutation.isLoading}
-                              className="p-1 text-gray-400 hover:text-green-600 transition-colors"
-                              title={`Advance to ${nextStage}`}
-                            >
-                              <ChevronRight size={16} />
-                            </button>
-                          )}
-                          {c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && (
-                            <button
-                              onClick={() => setRejectingId(c.id)}
-                              className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                              title="Reject"
-                            >
-                              <Ban size={15} />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => doDelete(c.id)}
-                            disabled={deleteMutation.isLoading}
-                            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                            title="Delete (build tool)"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                    <Fragment key={g.jdId}>
+                      <tr className="border-b border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100" onClick={() => toggleRole(g.jdId)}>
+                        <td colSpan={8} className="px-4 py-2.5">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <ChevronDown size={15} className={`text-gray-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+                            <span className="font-semibold text-gray-800 text-sm">{g.title}</span>
+                            {g.dept && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{g.dept}</span>}
+                            <span className="text-xs text-gray-500">{g.cands.length} in pipeline</span>
+                            <div className="ml-auto flex items-center gap-1.5">
+                              {FUNNEL_STAGES.map((st) => {
+                                const n = g.counts[st] ?? 0;
+                                return (
+                                  <span key={st} title={st} className={`text-[11px] px-1.5 py-0.5 rounded ${n ? 'bg-white border border-gray-200 text-gray-700' : 'text-gray-300'}`}>
+                                    {SHORT[st]} {n}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                      {!collapsed && g.cands.map((c: any) => candidateRow(c))}
+                    </Fragment>
                   );
                 })}
               </tbody>
