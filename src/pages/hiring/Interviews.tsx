@@ -149,10 +149,12 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName }: { roun
                 );
               })}
             </div>
-            <Link to={`/hiring/scorecards?id=${round.candidateId}&round=${round.id}`}
-              className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-ls-primary hover:underline">
-              <Plus size={11} /> Fill scorecard for this round
-            </Link>
+            {roundReviews.length === 0 && (
+              <Link to={`/hiring/scorecards?id=${round.candidateId}&round=${round.id}`}
+                className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-ls-primary hover:underline">
+                <Plus size={11} /> Fill scorecard for this round
+              </Link>
+            )}
           </div>
 
           {showBriefing && (
