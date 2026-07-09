@@ -139,6 +139,7 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
     department: req.department, hiringManager: req.hiringManager,
     summaryRows: intakeSummaryRows(req), team, awareness, rounds,
     jdTitle: extras?.jdTitle, questions: extras?.questions, externalPostDate: extras?.externalPostDate,
+    schedulingUrl: `${appBaseUrl()}/hiring/interviews`,
   });
   // Record one copy into the test inbox (team inbox) so the kickoff is verifiable.
   try {

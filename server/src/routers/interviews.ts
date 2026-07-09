@@ -156,6 +156,7 @@ export const interviewsRouter = router({
         lastName: candidate.lastName,
         jobTitle: jd?.jobTitle ?? undefined,
         roundName: round.roundName,
+        questions: ((candidate as any).interviewQuestions ?? []) as any,
         briefing,
       });
       await db.update(candidateInterviews).set({ prepSentAt: new Date(), updatedAt: new Date() })

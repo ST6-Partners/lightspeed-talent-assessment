@@ -2,10 +2,13 @@
 // WORK SAMPLE ROUTER
 //   • Public: a candidate opens an emailed link, reads the task,
 //     and submits a response (typed answer + optional link).
-//   • Protected: a recruiter sends the link and records a review.
+//   • Protected: a recruiter sends the link, and can rescore.
 //
-// No AI auto-scoring yet — work-sample definitions + rubric are
-// still TBD. Scoring here is manual (recruiter-entered).
+// On submit, the response is auto-scored against the task's
+// rubric (scoreAndStoreWorkSample, fire-and-forget). Admin
+// scoring config sets a pass mark and an auto-reject toggle, so
+// a failing candidate in an early stage can be rejected with no
+// human review. A recruiter can also re-score or override.
 // ============================================================
 
 import { z } from 'zod';
