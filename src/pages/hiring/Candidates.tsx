@@ -610,24 +610,14 @@ export default function Candidates() {
           {/* HR notes */}
           <Section title="HR Notes">
             <EditableTextarea
-              label="Resume Review Notes"
-              value={(selected as any).resumeReviewNotes ?? ''}
-              onSave={(v) => saveNotes(selected.id, 'resumeReviewNotes', v)}
+              label="Notes"
+              value={selected.notes ?? ''}
+              onSave={(v) => saveNotes(selected.id, 'notes', v)}
             />
             <EditableTextarea
               label="Reference Check Notes"
               value={(selected as any).referenceCheckNotes ?? ''}
               onSave={(v) => saveNotes(selected.id, 'referenceCheckNotes', v)}
-            />
-            <EditableTextarea
-              label="Values Match Notes"
-              value={(selected as any).valuesMatchNotes ?? ''}
-              onSave={(v) => saveNotes(selected.id, 'valuesMatchNotes', v)}
-            />
-            <EditableTextarea
-              label="General Notes"
-              value={selected.notes ?? ''}
-              onSave={(v) => saveNotes(selected.id, 'notes', v)}
             />
           </Section>
 
