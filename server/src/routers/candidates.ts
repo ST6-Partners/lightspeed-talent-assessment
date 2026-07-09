@@ -38,7 +38,7 @@ import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, S
 import { createOfferAgreement } from '../services/adobeSign.js';
 import { getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
-import { seedCandidateResume, seedAssessmentResults } from '../services/postAssessmentReview.js';
+import { seedCandidateResume, seedAssessmentResults, simulateUpstreamScores } from '../services/postAssessmentReview.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
 
 const STAGES = [
@@ -453,8 +453,12 @@ export const candidatesRouter = router({
         return reviewed;
       }
 
+      // On a forward move, backfill simulated scores for the upstream steps the
+      // candidate has passed (test data) so a hand-advanced candidate still shows a
+      // work-sample / resume-review score. Only fills nulls.
+      const backfill = fwd ? simulateUpstreamScores(existing, input.toStage) : {};
       const [candidate] = await ctx.db.update(candidates)
-        .set({ currentStage: input.toStage, updatedAt: new Date() })
+        .set({ currentStage: input.toStage, ...backfill, updatedAt: new Date() })
         .where(eq(candidates.id, input.id))
         .returning();
 

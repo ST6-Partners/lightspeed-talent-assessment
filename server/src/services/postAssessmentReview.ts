@@ -238,3 +238,47 @@ export async function seedAssessmentResults(db: any, candidateId: string, candid
     );
   }
 }
+
+
+// ============================================================
+// TEST-DATA BACKFILL
+// Fills simulated upstream scores (resume review, work sample) for candidates who
+// are already at/past those stages but are missing them — e.g. test candidates
+// advanced by hand. Idempotent: only ever fills nulls, never overwrites. Same
+// spirit as seedAssessmentResults (simulated demo data, not real scoring).
+// ============================================================
+const BACKFILL_STAGE_ORDER = [
+  'Applied', 'Assessment', 'Values Review', 'Work Sample',
+  'Interview Scheduled', 'Interviewed', 'Offered', 'Hired',
+];
+
+export function simulateUpstreamScores(candidate: any, toStage: string): Record<string, any> {
+  const idx = (st: string) => BACKFILL_STAGE_ORDER.indexOf(st);
+  const target = idx(toStage);
+  const patch: Record<string, any> = {};
+  if (target >= idx('Values Review') && candidate.resumeReviewScore == null) {
+    patch.resumeReviewScore = 72 + Math.floor(Math.random() * 27); // 72-98
+    if (candidate.screenRecommendation == null) patch.screenRecommendation = 'advance';
+  }
+  if (target >= idx('Work Sample') && candidate.workSampleScore == null) {
+    patch.workSampleScore = 62 + Math.floor(Math.random() * 34); // 62-95
+    if (candidate.workSampleNotes == null) patch.workSampleNotes = 'Simulated work-sample score (test data).';
+  }
+  return patch;
+}
+
+export async function backfillTestScores(db: any): Promise<number> {
+  const rows = await db.query.candidates.findMany({});
+  let filled = 0;
+  for (const c of rows as any[]) {
+    if (c.currentStage === 'Rejected') continue;
+    const patch = simulateUpstreamScores(c, c.currentStage);
+    if (Object.keys(patch).length) {
+      patch.updatedAt = new Date();
+      await db.update(candidates).set(patch).where(eq(candidates.id, c.id));
+      filled++;
+    }
+  }
+  if (filled) console.log(`  [test-data] backfilled simulated upstream scores for ${filled} candidate(s).`);
+  return filled;
+}
