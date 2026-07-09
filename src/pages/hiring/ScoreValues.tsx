@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Check, Sparkles, ChevronDown, ChevronRight, Plus, Eye, EyeOff } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
@@ -12,6 +12,8 @@ const PILLAR_COLORS: Record<string, string> = {
   'Results-Focused': 'text-ls-primary',
 };
 const today = () => new Date().toISOString().slice(0, 10);
+const snap = (rv: string, dt: string, iv: string, sc: Record<string, number>) =>
+  JSON.stringify([rv, dt, iv, Object.entries(sc).filter(([, v]) => typeof v === 'number').sort((a, b) => (a[0] < b[0] ? -1 : 1))]);
 
 export default function ScoreValues() {
   const [candidateId, setCandidateId] = useState('');
@@ -23,6 +25,8 @@ export default function ScoreValues() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
   const [interviewId, setInterviewId] = useState('');
+  const [baseline, setBaseline] = useState('');
+  const loadedParamRef = useRef(false);
   const [params] = useSearchParams();
 
   const { data: candidates } = trpc.candidates.list.useQuery();
@@ -32,7 +36,13 @@ export default function ScoreValues() {
   const reviewsQuery = trpc.values.getCandidateReviews.useQuery({ candidateId }, { enabled: !!candidateId });
   const roundsQuery = trpc.interviews.list.useQuery({ candidateId }, { enabled: !!candidateId });
   const saveMutation = trpc.values.saveReview.useMutation({
-    onSuccess: (r) => { setSaved(true); setCurrentReviewId(r.reviewId); reviewsQuery.refetch(); setTimeout(() => setSaved(false), 2500); },
+    onSuccess: (r, variables: any) => {
+      setSaved(true); setCurrentReviewId(r.reviewId);
+      const sc: Record<string, number> = {};
+      (variables?.scores ?? []).forEach((x: any) => { sc[x.valueId] = x.score; });
+      setBaseline(snap(variables?.reviewerId ?? '', variables?.reviewedAt ?? '', variables?.interviewId ?? '', sc));
+      reviewsQuery.refetch(); setTimeout(() => setSaved(false), 2500);
+    },
   });
 
   const eppByTrait = useMemo(() => {
@@ -65,14 +75,14 @@ export default function ScoreValues() {
     const rid = params.get('round');
     if (cid) {
       setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setAiShown(false);
-      setInterviewId(rid ?? '');
+      setInterviewId(rid ?? ''); setBaseline(snap('', today(), rid ?? '', {}));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectCandidate = (id: string) => {
-    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setInterviewId(''); setAiShown(false);
+    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setInterviewId(''); setAiShown(false); setBaseline(snap('', today(), '', {}));
   };
-  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setAiShown(false); };
+  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setAiShown(false); setBaseline(snap('', today(), interviewId, {})); };
   const loadReview = (r: any) => {
     setCurrentReviewId(r.id);
     setReviewerId(r.reviewerId ?? '');
@@ -81,7 +91,16 @@ export default function ScoreValues() {
     const m: Record<string, number> = {};
     r.scores.forEach((s: any) => { m[s.valueId] = s.score; });
     setScores(m);
+    setBaseline(snap(r.reviewerId ?? '', new Date(r.reviewedAt).toISOString().slice(0, 10), r.interviewId ?? '', m));
   };
+
+  // Deep link ?review=<id> from a round card: load that specific submitted scorecard.
+  useEffect(() => {
+    const rid = params.get('review');
+    if (!rid || loadedParamRef.current) return;
+    const found = ((reviewsQuery.data ?? []) as any[]).find((x) => x.id === rid);
+    if (found) { loadReview(found); loadedParamRef.current = true; }
+  }, [reviewsQuery.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const byPillar = useMemo(() => {
     const g: Record<string, any[]> = { 'Mission-Driven': [], 'Customer-Obsessed': [], 'Results-Focused': [] };
@@ -114,6 +133,10 @@ export default function ScoreValues() {
       scores: Object.entries(scores).map(([valueId, score]) => ({ valueId, score })),
     });
   };
+
+  const isExisting = currentReviewId != null;
+  const isDirty = snap(reviewerId, reviewedAt, interviewId, scores) !== baseline;
+  const canSave = !!reviewerId && Object.values(scores).some((n) => typeof n === 'number');
 
   return (
     <div className="max-w-3xl">
@@ -308,11 +331,15 @@ export default function ScoreValues() {
           ))}
 
           <div className="flex items-center gap-3 mt-5">
-            <button onClick={handleSave} disabled={saveMutation.isLoading || !reviewerId || Object.keys(scores).length === 0}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-ls-primary text-white rounded-lg text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50">
-              {saveMutation.isLoading ? 'Saving…' : currentReviewId ? 'Update review' : 'Save review'}
-            </button>
-            {!reviewerId && <span className="text-xs text-ls-ink-3">Select a reviewer to save.</span>}
+            {(!isExisting || isDirty) ? (
+              <button onClick={handleSave} disabled={saveMutation.isLoading || !canSave}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-ls-primary text-white rounded-lg text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50">
+                {saveMutation.isLoading ? (isExisting ? 'Re-submitting…' : 'Submitting…') : (isExisting ? 'Resubmit' : 'Submit')}
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-sm text-ls-thrive font-medium"><Check size={16} /> Submitted — edit any score to re-submit.</span>
+            )}
+            {!reviewerId && <span className="text-xs text-ls-ink-3">Select a reviewer to submit.</span>}
             {saved && <span className="inline-flex items-center gap-1.5 text-sm text-ls-thrive font-medium"><Check size={16} /> Saved</span>}
           </div>
         </>

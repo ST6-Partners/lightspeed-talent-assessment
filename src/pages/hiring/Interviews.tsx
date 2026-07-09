@@ -139,7 +139,8 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName }: { roun
               {roundReviews.map((rv: any) => {
                 const avg = rv.scores.length ? (rv.scores.reduce((a: number, b: any) => a + b.score, 0) / rv.scores.length).toFixed(1) : '—';
                 return (
-                  <div key={rv.id} className="bg-gray-50 rounded p-2">
+                  <Link key={rv.id} to={`/hiring/scorecards?id=${round.candidateId}&round=${round.id}&review=${rv.id}`}
+                    className="block bg-gray-50 rounded p-2 border border-transparent hover:bg-gray-100 hover:border-ls-cyan transition-colors">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] font-medium text-gray-800">{rv.reviewerName}</span>
                       <span className="text-[11px] text-gray-500">{avg} / 5 · {new Date(rv.reviewedAt).toLocaleDateString()}</span>
@@ -149,7 +150,8 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName }: { roun
                         <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-gray-200 text-gray-600">{valueName[sc.valueId] ?? 'Value'}: {sc.score}</span>
                       ))}
                     </div>
-                  </div>
+                    <div className="text-[10px] text-ls-primary mt-1">View / edit scorecard →</div>
+                  </Link>
                 );
               })}
             </div>
