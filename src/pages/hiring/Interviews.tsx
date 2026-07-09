@@ -140,17 +140,11 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName }: { roun
                 const avg = rv.scores.length ? (rv.scores.reduce((a: number, b: any) => a + b.score, 0) / rv.scores.length).toFixed(1) : '—';
                 return (
                   <Link key={rv.id} to={`/hiring/scorecards?id=${round.candidateId}&round=${round.id}&review=${rv.id}`}
-                    className="block bg-gray-50 rounded p-2 border border-transparent hover:bg-gray-100 hover:border-ls-cyan transition-colors">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-medium text-gray-800">{rv.reviewerName}</span>
-                      <span className="text-[11px] text-gray-500">{avg} / 5 · {new Date(rv.reviewedAt).toLocaleDateString()}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {rv.scores.map((sc: any, i: number) => (
-                        <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-gray-200 text-gray-600">{valueName[sc.valueId] ?? 'Value'}: {sc.score}</span>
-                      ))}
-                    </div>
-                    <div className="text-[10px] text-ls-primary mt-1">View / edit scorecard →</div>
+                    className="flex items-center justify-between gap-2 bg-gray-50 rounded p-2 border border-transparent hover:bg-gray-100 hover:border-ls-cyan transition-colors">
+                    <span className="text-[11px] font-medium text-gray-800 truncate">
+                      {rv.reviewerName}<span className="text-gray-500 font-normal"> · {avg} / 5 · {new Date(rv.reviewedAt).toLocaleDateString()}</span>
+                    </span>
+                    <span className="text-[11px] text-ls-primary font-medium shrink-0">View / edit scorecard →</span>
                   </Link>
                 );
               })}
