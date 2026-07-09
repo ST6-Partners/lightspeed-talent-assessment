@@ -75,11 +75,12 @@ export default function Intake() {
   const deptByReq: Record<string, string> = {};
   for (const r of (allReqs ?? []) as any[]) deptByReq[r.id] = r.department;
   const jdOptions = ((allJds ?? []) as any[]).filter((jd) => form.department && deptByReq[jd.reqId] === form.department);
+  const [baseline, setBaseline] = useState<string | null>(null);
 
   useEffect(() => {
     if (full && editingId) {
       const f: any = full;
-      setForm({
+      const nextForm = {
         reasonType: f.reasonType ?? '', roleChangeNote: f.roleChangeNote ?? '', baseJdId: f.baseJdId ?? '',
         department: f.department ?? '', hiringManager: f.hiringManager ?? '',
         numOpenings: f.numOpenings ?? 1, priority: f.priority ?? 'Medium',
@@ -98,10 +99,15 @@ export default function Intake() {
         avoidCompanies: f.avoidCompanies ?? '', internalReferrals: f.internalReferrals ?? '',
         knownConstraints: f.knownConstraints ?? '', constraintsAck: !!f.constraintsAck,
         approvalPlan: Array.isArray(f.approvalPlan) && f.approvalPlan.length ? f.approvalPlan : EMPTY.approvalPlan,
-      });
-      setRounds(f.rounds?.map((r: any) => ({ roundName: r.roundName, lengthMin: r.lengthMin ?? undefined, interviewer: r.interviewer ?? undefined })) ?? []);
-      setTeam(f.team?.map((p: any) => ({ personRef: p.personRef, roleInProcess: p.roleInProcess ?? undefined, roundRef: p.roundRef ?? undefined })) ?? []);
-      setAwareness(f.awareness?.map((a: any) => ({ personRef: a.personRef, source: a.source })) ?? []);
+      };
+      const nextRounds = f.rounds?.map((r: any) => ({ roundName: r.roundName, lengthMin: r.lengthMin ?? undefined, interviewer: r.interviewer ?? undefined })) ?? [];
+      const nextTeam = f.team?.map((p: any) => ({ personRef: p.personRef, roleInProcess: p.roleInProcess ?? undefined, roundRef: p.roundRef ?? undefined })) ?? [];
+      const nextAwareness = f.awareness?.map((a: any) => ({ personRef: a.personRef, source: a.source })) ?? [];
+      setForm(nextForm);
+      setRounds(nextRounds);
+      setTeam(nextTeam);
+      setAwareness(nextAwareness);
+      setBaseline(JSON.stringify({ form: nextForm, rounds: nextRounds, team: nextTeam, awareness: nextAwareness }));
     }
   }, [full, editingId]);
 
@@ -187,6 +193,10 @@ export default function Intake() {
   };
   const toggleBasis = (v: string) => setForm({ ...form, compBasis: form.compBasis.includes(v) ? form.compBasis.filter((x) => x !== v) : [...form.compBasis, v] });
   const saving = saveMutation.isLoading || submitMutation.isLoading;
+  const reqStatus = (full as any)?.status as string | undefined;
+  const isApprovedOrOpen = !!editingId && (reqStatus === 'Approved' || reqStatus === 'Open');
+  const isDirty = !!editingId && baseline != null && JSON.stringify({ form, rounds, team, awareness }) !== baseline;
+  const showSubmit = !isApprovedOrOpen || isDirty;
 
   return (
     <div>
@@ -602,9 +612,14 @@ export default function Intake() {
             <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-white border border-ls-primary text-ls-primary rounded-md text-sm font-medium hover:bg-ls-bg-2 disabled:opacity-50">
               {saveMutation.isLoading ? 'Saving...' : 'Save draft'}
             </button>
+            {showSubmit && (
             <button onClick={handleSubmit} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50">
-              <Send size={15} /> {submitMutation.isLoading ? 'Submitting...' : 'Submit for approval'}
+              <Send size={15} /> {submitMutation.isLoading ? 'Submitting...' : (isApprovedOrOpen ? 'Re-submit for approval' : 'Submit for approval')}
             </button>
+            )}
+            {isApprovedOrOpen && !isDirty && (
+              <span className="text-xs text-gray-400 self-center">Approved &amp; open — edit a field to re-submit for approval.</span>
+            )}
             <button onClick={close} className="px-4 py-2 text-gray-600 text-sm">Cancel</button>
           </div>
         </div>
