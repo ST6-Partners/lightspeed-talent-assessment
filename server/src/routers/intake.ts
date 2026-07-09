@@ -151,22 +151,37 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
       ...team.filter((t: any) => t.roundRef || /interview/i.test(t.roleInProcess ?? '')).map((t: any) => t.personRef),
     ].filter((x: any): x is string => typeof x === 'string' && /.+@.+\..+/.test(x)),
   );
-  // Record one copy (interviewer version, so the availability link is verifiable) into the team inbox.
-  try {
-    await db.insert(inboundEmails).values({
-      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
-      fromName: 'Lightspeed Hiring',
-      toEmail: HIRING_TEAM_INBOX, subject, body: withLink.text, replyTag: 'kickoff', source: 'simulated',
-      raw: { kind: 'kickoff', reqId: req.id },
-    });
-  } catch (err) { console.error('[intake] kickoff inbox record failed:', err); }
-  // Real send. Interviewers get ONE combined email (all of them on the same message) with the
-  // availability CTA; everyone else (non-interviewing team + awareness list) gets the base kickoff.
+  // Recipients + interviewer split (used for both the inbox verification copies and the real send).
   const emailLike = [...team.map((t: any) => t.personRef), ...awareness.map((a: any) => a.personRef)]
     .filter((x: string) => /.+@.+\..+/.test(x));
   const recipients = Array.from(new Set(emailLike));
   const interviewerEmails = recipients.filter((to) => interviewerRefs.has(to));
   const otherEmails = recipients.filter((to) => !interviewerRefs.has(to));
+  const hasInterviewers = interviewerRefs.size > 0;
+
+  // Record verification copies into the team inbox: the base hiring kickoff (what the team +
+  // awareness list receive) and, when there are interviewers, a separate interview-team version
+  // carrying the availability link — so both are visible when testing without a live email provider.
+  try {
+    await db.insert(inboundEmails).values({
+      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+      fromName: 'Lightspeed Hiring',
+      toEmail: HIRING_TEAM_INBOX, subject, body: base.text, replyTag: 'kickoff', source: 'simulated',
+      raw: { kind: 'kickoff', reqId: req.id },
+    });
+    if (hasInterviewers) {
+      await db.insert(inboundEmails).values({
+        fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+        fromName: 'Lightspeed Hiring',
+        toEmail: HIRING_TEAM_INBOX, subject: `${subject} \u2014 interview team (availability link)`,
+        body: withLink.text, replyTag: 'kickoff_interviewers', source: 'simulated',
+        raw: { kind: 'kickoff_interviewers', reqId: req.id },
+      });
+    }
+  } catch (err) { console.error('[intake] kickoff inbox record failed:', err); }
+
+  // Real send. Interviewers get ONE combined email (all of them on the same message) with the
+  // availability CTA; everyone else (non-interviewing team + awareness list) gets the base kickoff.
   if (interviewerEmails.length) {
     try { await sendEmail({ to: interviewerEmails, subject, html: withLink.html, templateId: 'intake_kickoff' }); }
     catch (err) { console.error('[intake] kickoff (interviewers) send failed:', err); }

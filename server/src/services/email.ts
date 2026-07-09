@@ -850,13 +850,15 @@ export function buildKickoffEmail(d: KickoffData): { subject: string; html: stri
     </ul>
     ${d.questions && d.questions.length ? `<p style="font-size:13px;font-weight:700;color:#33465c;margin:0 0 2px;">Interview questions</p><ol style="margin:6px 0 16px;padding-left:20px;font-size:13px;color:#333;">${d.questions.map((q) => `<li>${q.question}${q.category ? ` <span style=\"color:#999;\">(${q.category})</span>` : ''}</li>`).join('')}</ol>` : ''}
     ${d.schedulingUrl
-      ? `<p style="font-size:13px;font-weight:700;color:#33465c;margin:14px 0 2px;">Set your interview availability</p>
-    <p style="font-size:14px;color:#333;margin:6px 0 8px;">You're on the interview team for this role. Open the app to connect your calendar and hold time inside the target interview window.</p>
-    <p style="margin:6px 0 4px;"><a href="${d.schedulingUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;">Set my availability</a></p>
-    <p style="font-size:12px;color:#888;">Or paste this link: ${d.schedulingUrl}</p>`
+      ? `<div style="margin:22px 0 4px;padding:18px 20px;background:#eff5ff;border:1px solid #bcd3f7;border-left:4px solid #2563eb;border-radius:10px;">
+      <p style="font-size:15px;font-weight:700;color:#16284a;margin:0 0 6px;">\u23f1 Set your interview availability</p>
+      <p style="font-size:14px;color:#33465c;margin:0 0 14px;">You're on the interview team for this role. Open the app to connect your calendar and hold time inside the target interview window.</p>
+      <a href="${d.schedulingUrl}" style="display:inline-block;padding:12px 22px;background:#2563eb;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:14px;">Set my availability &rarr;</a>
+      <p style="font-size:12px;color:#7a8aa0;margin:14px 0 0;">Or paste this link: ${d.schedulingUrl}</p>
+    </div>`
       : ''}
   `);
-  const text = `Hiring kickoff — ${role} has been fully approved and is open. Hiring manager: ${d.hiringManager}. Team: ${d.team.map((t) => t.personRef).join(', ') || 'none set'}. Rounds: ${d.rounds.map((r) => r.roundName).join(', ') || 'none'}. ${d.schedulingUrl ? `Set your interview availability: ${d.schedulingUrl}` : 'Scheduling link pending the scheduling-tool integration.'}`;
+  const text = `Hiring kickoff — ${role} has been fully approved and is open. Hiring manager: ${d.hiringManager}. Team: ${d.team.map((t) => t.personRef).join(', ') || 'none set'}. Rounds: ${d.rounds.map((r) => r.roundName).join(', ') || 'none'}.${d.schedulingUrl ? `\n\n>> SET YOUR INTERVIEW AVAILABILITY <<\nYou're on the interview team for this role. Open the app to hold time in the target interview window:\n${d.schedulingUrl}` : ''}`;
   return { subject, html, text };
 }
 
