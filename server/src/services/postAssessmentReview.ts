@@ -255,14 +255,31 @@ const BACKFILL_STAGE_ORDER = [
 export function simulateUpstreamScores(candidate: any, toStage: string): Record<string, any> {
   const idx = (st: string) => BACKFILL_STAGE_ORDER.indexOf(st);
   const target = idx(toStage);
+  const rand = (min: number, span: number) => min + Math.floor(Math.random() * span);
   const patch: Record<string, any> = {};
-  if (target >= idx('Values Review') && candidate.resumeReviewScore == null) {
-    patch.resumeReviewScore = 72 + Math.floor(Math.random() * 27); // 72-98
-    if (candidate.screenRecommendation == null) patch.screenRecommendation = 'advance';
+
+  // Assessment stage -> CCAT (pass-leaning >= 30 for a candidate that advanced).
+  if (target >= idx('Assessment') && candidate.ccatScore == null) {
+    patch.ccatScore = rand(32, 19); // 32-50
   }
+  // Screen (Values Review) -> EPP match, company-values match, resume review.
+  if (target >= idx('Values Review')) {
+    if (candidate.eppValuesMatchScore == null) patch.eppValuesMatchScore = rand(70, 23);        // 70-92
+    if (candidate.companyValuesMatchScore == null) patch.companyValuesMatchScore = rand(70, 23); // 70-92
+    if (candidate.resumeReviewScore == null) {
+      patch.resumeReviewScore = rand(72, 27); // 72-98
+      if (candidate.screenRecommendation == null) patch.screenRecommendation = 'advance';
+    }
+  }
+  // Work Sample stage -> auto-scored work sample.
   if (target >= idx('Work Sample') && candidate.workSampleScore == null) {
-    patch.workSampleScore = 62 + Math.floor(Math.random() * 34); // 62-95
+    patch.workSampleScore = rand(62, 34); // 62-95
     if (candidate.workSampleNotes == null) patch.workSampleNotes = 'Simulated work-sample score (test data).';
+  }
+  // Interviewed (finalist) -> interview score + reference confidence.
+  if (target >= idx('Interviewed')) {
+    if (candidate.interviewScore == null) patch.interviewScore = rand(65, 31);          // 65-95
+    if (candidate.referenceCheckScore == null) patch.referenceCheckScore = rand(70, 26); // 70-95
   }
   return patch;
 }
