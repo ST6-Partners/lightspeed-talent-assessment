@@ -1,12 +1,24 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { Link } from 'react-router-dom';
-import { Megaphone, Trash2 } from 'lucide-react';
+import { Megaphone, Trash2, ChevronRight, ChevronDown, Users } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const JD_BADGE: Record<string, string> = {
   Draft: 'bg-gray-100 text-gray-600',
   Published: 'bg-green-100 text-green-700',
   Closed: 'bg-red-100 text-red-700',
+};
+
+const STAGE_BADGE: Record<string, string> = {
+  Applied: 'bg-gray-100 text-gray-600',
+  Assessment: 'bg-indigo-100 text-indigo-700',
+  'Work Sample': 'bg-purple-100 text-purple-700',
+  'Values Review': 'bg-amber-100 text-amber-700',
+  'Interview Scheduled': 'bg-blue-100 text-blue-700',
+  Interviewed: 'bg-cyan-100 text-cyan-700',
+  Offered: 'bg-green-100 text-green-700',
+  Hired: 'bg-emerald-100 text-emerald-700',
+  Rejected: 'bg-red-100 text-red-700',
 };
 
 export default function Postings() {
@@ -19,6 +31,9 @@ export default function Postings() {
   });
   const [busyId, setBusyId] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (id: string) => setExpanded((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const { data: candidates } = trpc.candidates.list.useQuery();
   const deleteReq = trpc.requisitions.delete.useMutation({
     onSuccess: () => { setConfirmId(null); utils.requisitions.list.invalidate(); utils.internalOpenings.postingWindows.invalidate(); },
   });
@@ -27,6 +42,8 @@ export default function Postings() {
   const open = (reqs ?? []).filter((r: any) => r.status === 'Open');
   const jdByReq: Record<string, any> = {};
   for (const jd of (jds ?? []) as any[]) { if (!jdByReq[jd.reqId]) jdByReq[jd.reqId] = jd; }
+  const candByJd: Record<string, any[]> = {};
+  for (const c of (candidates ?? []) as any[]) { if (c.jdId) (candByJd[c.jdId] ??= []).push(c); }
 
   return (
     <div>
@@ -56,9 +73,18 @@ export default function Postings() {
             <tbody>
               {open.map((r: any) => {
                 const jd = jdByReq[r.id];
+                const roleCandidates = jd ? (candByJd[jd.id] ?? []) : [];
+                const isExpanded = expanded.has(r.id);
                 return (
-                  <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50 text-sm">
-                    <td className="px-4 py-3 font-medium text-gray-900">{jd?.jobTitle ?? `${r.department} role`}</td>
+                  <Fragment key={r.id}>
+                  <tr className="border-b border-gray-50 hover:bg-gray-50 text-sm">
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      <button onClick={() => toggle(r.id)} className="inline-flex items-center gap-1.5 text-left hover:text-ls-primary">
+                        {isExpanded ? <ChevronDown size={15} className="text-gray-400" /> : <ChevronRight size={15} className="text-gray-400" />}
+                        <span>{jd?.jobTitle ?? `${r.department} role`}</span>
+                        <span className="ml-1 inline-flex items-center gap-1 text-xs text-gray-500 font-normal"><Users size={12} />{roleCandidates.length}</span>
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{r.department}</td>
                     <td className="px-4 py-3 text-gray-600">{r.hiringManager}</td>
                     <td className="px-4 py-3 text-gray-600">{r.numOpenings}</td>
@@ -114,6 +140,28 @@ export default function Postings() {
                       )}
                     </td>
                   </tr>
+                  {isExpanded && (
+                    <tr className="bg-gray-50/50">
+                      <td colSpan={8} className="px-4 pb-4 pt-0">
+                        {roleCandidates.length === 0 ? (
+                          <div className="text-xs text-gray-400 py-2">No candidates have applied for this role yet.</div>
+                        ) : (
+                          <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                            {roleCandidates.map((c: any) => (
+                              <Link key={c.id} to="/hiring/candidates" className="flex items-center justify-between px-4 py-2 border-b border-gray-50 last:border-b-0 hover:bg-gray-50">
+                                <span className="text-sm text-gray-800">{c.firstName} {c.lastName}</span>
+                                <span className="flex items-center gap-3">
+                                  <span className="text-xs text-gray-400">{c.email}</span>
+                                  <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STAGE_BADGE[c.currentStage] ?? 'bg-gray-100 text-gray-600'}`}>{c.currentStage}</span>
+                                </span>
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
