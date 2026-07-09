@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Check, Sparkles, ChevronDown, ChevronRight, Plus } from 'lucide-react';
+import { Check, Sparkles, ChevronDown, ChevronRight, Plus, Eye, EyeOff } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import SearchSelect from '../../components/SearchSelect';
 import { suggestedValueScore, percentileToScore, bandLabel } from '../../lib/epp';
@@ -19,6 +19,7 @@ export default function ScoreValues() {
   const [reviewedAt, setReviewedAt] = useState(today());
   const [currentReviewId, setCurrentReviewId] = useState<string | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
+  const [aiShown, setAiShown] = useState(false); // AI scorecard shown (filled) vs cleared
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
   const [interviewId, setInterviewId] = useState('');
@@ -49,29 +50,29 @@ export default function ScoreValues() {
     return m;
   }, [values, eppByTrait]);
 
-  // New-review prefill from EPP (skips when a saved review is loaded)
-  useEffect(() => {
-    if (!candidateId || currentReviewId !== null) return;
-    if (!values || eppQuery.isLoading) return;
+  // No auto pre-fill: the reviewer starts from a blank scorecard. The AI's
+  // suggested scorecard is applied (or cleared) on demand via the eye toggle.
+  const toggleAiRecommendation = () => {
+    if (aiShown) { setScores({}); setAiShown(false); return; }
     const m: Record<string, number> = {};
     (values ?? []).forEach((v: any) => { if (suggestions[v.id]) m[v.id] = suggestions[v.id].score; });
-    setScores(m);
-  }, [candidateId, currentReviewId, values, eppQuery.isLoading, suggestions]);
+    setScores(m); setAiShown(true);
+  };
 
   // Preselect candidate + round when arrived at via a deep link from the Interviews tab.
   useEffect(() => {
     const cid = params.get('id');
     const rid = params.get('round');
     if (cid) {
-      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({});
+      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setAiShown(false);
       setInterviewId(rid ?? '');
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectCandidate = (id: string) => {
-    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setInterviewId('');
+    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setInterviewId(''); setAiShown(false);
   };
-  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); };
+  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setAiShown(false); };
   const loadReview = (r: any) => {
     setCurrentReviewId(r.id);
     setReviewerId(r.reviewerId ?? '');
@@ -190,10 +191,20 @@ export default function ScoreValues() {
 
       {candidateId && (
         <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5 mb-5">
-          <div className="flex items-center gap-2 mb-1">
-            <Sparkles size={14} className="text-ls-primary" />
-            <h3 className="text-sm font-bold text-ls-ink">AI interview summary</h3>
-            <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-ls-primary-50 text-ls-primary border border-ls-cyan font-semibold">AI-generated</span>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="flex items-center gap-2">
+              <Sparkles size={14} className="text-ls-primary" />
+              <h3 className="text-sm font-bold text-ls-ink">AI interview summary</h3>
+              <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-ls-primary-50 text-ls-primary border border-ls-cyan font-semibold">AI-generated</span>
+            </div>
+            {currentReviewId === null && (
+              <button onClick={toggleAiRecommendation}
+                title={aiShown ? "Showing AI's suggested scorecard — click to clear it" : "Show AI's suggested scorecard"}
+                className={`text-xs inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors ${aiShown ? 'border-ls-cyan text-ls-primary bg-ls-primary-50' : 'border-ls-line text-ls-ink-2 hover:border-ls-cyan'}`}>
+                {aiShown ? <Eye size={14} /> : <EyeOff size={14} />}
+                AI Recommendation
+              </button>
+            )}
           </div>
           <p className="text-[11px] text-ls-ink-3 mb-3">Auto-generated from the interview transcript(s) to inform your scoring. Review it — it is not a decision, and it never goes to the candidate.</p>
           {(() => {
@@ -230,7 +241,7 @@ export default function ScoreValues() {
                 <span className="text-xs text-ls-ink-3">avg <b className="text-ls-ink">{pillarAvg(pillar) ?? '—'}</b></span>
               </div>
               {(byPillar[pillar] ?? []).map((v: any) => {
-                const sug = suggestions[v.id];
+                const sug = aiShown ? suggestions[v.id] : undefined;
                 const cur = scores[v.id];
                 const adjusted = sug && cur != null && cur !== sug.score;
                 const dims: string[] = Array.isArray(v.eppDimensions) ? v.eppDimensions : [];
