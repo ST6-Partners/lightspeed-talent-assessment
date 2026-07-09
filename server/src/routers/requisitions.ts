@@ -11,6 +11,7 @@ import { inboundEmails } from '../db/schema/email.js';
 import { emailReqStatusToCandidate } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
+import { ataSeedRoles } from '../data/ataSeedRoles.js';
 
 const RequisitionInput = z.object({
   department: z.string().min(1).max(200),
@@ -35,8 +36,18 @@ export const requisitionsRouter = router({
       const rows = await ctx.db.query.jobRequisitions.findMany({
         orderBy: desc(jobRequisitions.createdAt),
       });
-      if (input?.status) return rows.filter((r) => r.status === input.status);
-      return rows;
+      // Hide the seeded sample roles (their JD title is one of the ataSeedRoles titles)
+      // while they're still Draft, so the list shows only user-created intakes. The
+      // seeded rows remain in the DB as the reusable JD library; a seeded role that's
+      // actually been posted (status !== Draft) is still shown.
+      const seededTitles = new Set(ataSeedRoles.map((r) => r.jobDescription.title));
+      const jds = await ctx.db.query.jobDescriptions.findMany({});
+      const seededDraftReqIds = new Set(
+        jds.filter((j: any) => seededTitles.has(j.jobTitle)).map((j: any) => j.reqId),
+      );
+      const visible = rows.filter((r) => !(seededDraftReqIds.has(r.id) && r.status === 'Draft'));
+      if (input?.status) return visible.filter((r) => r.status === input.status);
+      return visible;
     }),
 
   getById: protectedProcedure
