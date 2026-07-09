@@ -4,8 +4,10 @@
 //     and submits a response (typed answer + optional link).
 //   • Protected: a recruiter sends the link and records a review.
 //
-// No AI auto-scoring yet — work-sample definitions + rubric are
-// still TBD. Scoring here is manual (recruiter-entered).
+// Work samples are AI auto-scored: workSample.submit fires
+// scoreAndStoreWorkSample (rubric-driven, per-criterion, pass mark +
+// optional auto-reject). Recruiters can still record a manual review,
+// and `rescore` re-runs the scorer after a rubric change.
 // ============================================================
 
 import { z } from 'zod';

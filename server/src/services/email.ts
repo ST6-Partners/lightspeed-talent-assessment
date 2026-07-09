@@ -667,6 +667,27 @@ export async function emailBookingStalledHR(data: {
   });
 }
 
+// HR flag when a candidate self-books outside the target interview window or
+// spreads their rounds beyond 48 hours. The booking already happened in the
+// scheduling tool, so we can't block it — we surface it so HR can rebook.
+export async function emailBookingOutsideWindowHR(data: {
+  candidateName: string;
+  jobTitle?: string;
+  reason: string;
+}) {
+  await sendEmail({
+    to: HR_EMAIL,
+    templateId: 'interview_booking_outside_window_hr',
+    subject: `Interview booked outside the window: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+    html: wrap(`
+      ${h1('Interview booked outside the target window')}
+      ${p(`<strong>${data.candidateName}</strong>${data.jobTitle ? ` (${data.jobTitle})` : ''} self-booked an interview that falls outside the planned window.`)}
+      ${p(data.reason)}
+      ${p('Consider rebooking so all rounds stay inside the ~48-hour window.')}
+    `),
+  });
+}
+
 // ── Stage-transition dispatcher ────────────────────────────
 // Called by the candidates router on every stage change.
 

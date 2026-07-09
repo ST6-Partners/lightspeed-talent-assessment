@@ -21,7 +21,8 @@ import crypto from 'crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '../db.js';
 import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
-import { emailInterviewBookedCandidate, emailBookingStalledHR } from './email.js';
+import { candidateInterviews } from '../db/schema/interviews.js';
+import { emailInterviewBookedCandidate, emailBookingStalledHR, emailBookingOutsideWindowHR } from './email.js';
 
 export function isCalendlyConfigured(): boolean {
   return Boolean(process.env.CALENDLY_WEBHOOK_SIGNING_KEY);
@@ -141,6 +142,34 @@ export async function applyCalendlyEvent(event: string, payload: any): Promise<{
       interviewDate: start ? start.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }) : 'the scheduled time',
       joinUrl: inv.joinUrl,
     }).catch((err) => console.error('[Calendly] confirmation email failed:', err));
+
+    // 48-hour window / target-window guard on the self-book path (parity with
+    // interviews.updateRound). A booking already made in Calendly can't be
+    // blocked here, so flag HR when it lands outside the plan.
+    if (start) {
+      let reason: string | null = null;
+      const ws = candidate.interviewWindowStart ? new Date(candidate.interviewWindowStart as any) : null;
+      const we = candidate.interviewWindowEnd ? new Date(candidate.interviewWindowEnd as any) : null;
+      if (ws && start < ws) reason = `Booked ${start.toISOString()}, before the target window opens (${ws.toISOString()}).`;
+      else if (we && start > we) reason = `Booked ${start.toISOString()}, after the target window closes (${we.toISOString()}).`;
+      if (!reason) {
+        const rounds = await db.select().from(candidateInterviews).where(eq(candidateInterviews.candidateId, candidate.id));
+        const times = rounds.filter((r: any) => r.scheduledAt).map((r: any) => new Date(r.scheduledAt as any).getTime());
+        times.push(start.getTime());
+        if (times.length > 1) {
+          const spreadH = (Math.max(...times) - Math.min(...times)) / 3_600_000;
+          if (spreadH > 48) reason = `This booking spreads the candidate's interview rounds across ${Math.round(spreadH)} hours (limit 48).`;
+        }
+      }
+      if (reason) {
+        console.warn(`[Calendly] ${candidate.email} booked outside window: ${reason}`);
+        await emailBookingOutsideWindowHR({
+          candidateName: `${candidate.firstName} ${candidate.lastName}`,
+          jobTitle,
+          reason,
+        }).catch((err) => console.error('[Calendly] outside-window HR email failed:', err));
+      }
+    }
 
     console.log(`[Calendly] ${candidate.email} booked -> Interview Scheduled`);
     return { handled: true, detail: `booked ${candidate.email}` };

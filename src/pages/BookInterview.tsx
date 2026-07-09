@@ -101,6 +101,11 @@ export default function BookInterview() {
         <p className="text-gray-500 text-sm mt-1">
           Hi {data.firstName}, pick the time that works best for you below. You'll get a calendar invite with the meeting link once you book.
         </p>
+        {data.windowStart && data.windowEnd && (
+          <p className="text-gray-700 text-sm mt-2 font-medium">
+            Please pick a time between {new Date(data.windowStart).toLocaleString()} and {new Date(data.windowEnd).toLocaleString()} so all of your interview rounds stay within the same ~48-hour window.
+          </p>
+        )}
         {/* Calendly inline widget — initialized by the loaded widget.js */}
         <div
           className="calendly-inline-widget mt-4"

@@ -186,6 +186,9 @@ export const candidates = pgTable('candidates', {
   interviewJoinUrl: text('interview_join_url'),                          // meeting join link (from Calendly, e.g. Zoom)
   calendlyEventUri: text('calendly_event_uri'),                          // Calendly scheduled_event uri
   calendlyCancelUrl: text('calendly_cancel_url'),                        // Calendly reschedule/cancel link
+  // Target interview window (HR-set when scheduling opens). Drives the in-window / 48h check on candidate self-booking.
+  interviewWindowStart: timestamp('interview_window_start', { withTimezone: true }),
+  interviewWindowEnd: timestamp('interview_window_end', { withTimezone: true }),
   // AI-generated interview content
   interviewQuestions: jsonb('interview_questions'),
   interviewTranscript: text('interview_transcript'),

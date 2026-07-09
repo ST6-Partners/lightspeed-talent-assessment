@@ -159,7 +159,7 @@ export async function startCronJobs(db: DrizzleClient): Promise<void> {
 
   let cron: any;
   try {
-    // @ts-expect-error node-cron is an optional peer dep, imported dynamically
+    // node-cron is a dependency; imported dynamically so the app still boots if it's ever absent.
     cron = await import('node-cron');
   } catch {
     console.log('[Job-Runner] node-cron not installed — cron scheduling disabled. Install with: npm install node-cron');

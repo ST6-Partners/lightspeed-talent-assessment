@@ -52,6 +52,9 @@ export const schedulingRouter = router({
     .input(z.object({
       candidateId: z.string().uuid(),
       calendlyUrl: z.string().url().max(2000).optional(),
+      // Target interview window (HR-set). Constrains the booking link and drives the self-book guard.
+      windowStart: z.string().datetime().optional(),
+      windowEnd: z.string().datetime().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
@@ -64,6 +67,8 @@ export const schedulingRouter = router({
         interviewBookingToken: bookingToken,
         interviewBookingOpenedAt: new Date(),
         ...(schedulingUrl ? { calendlySchedulingUrl: schedulingUrl } : {}),
+        ...(input.windowStart ? { interviewWindowStart: new Date(input.windowStart) } : {}),
+        ...(input.windowEnd ? { interviewWindowEnd: new Date(input.windowEnd) } : {}),
         updatedAt: new Date(),
       }).where(eq(candidates.id, candidate.id));
 
@@ -99,6 +104,8 @@ export const schedulingRouter = router({
         joinUrl: candidate.interviewJoinUrl,
         cancelUrl: candidate.calendlyCancelUrl,
         schedulingUrl: candidate.calendlySchedulingUrl,
+        windowStart: candidate.interviewWindowStart,
+        windowEnd: candidate.interviewWindowEnd,
         bookingUrl: candidate.interviewBookingToken ? `${appBaseUrl()}/book-interview/${candidate.interviewBookingToken}` : null,
         calendlyConfigured: isCalendlyConfigured(),
       };
@@ -114,16 +121,26 @@ export const schedulingRouter = router({
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This booking link is invalid or has expired.' });
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
       const base = candidate.calendlySchedulingUrl ?? defaultSchedulingUrl();
+      const windowStart = candidate.interviewWindowStart ? new Date(candidate.interviewWindowStart as any) : null;
+      const windowEnd = candidate.interviewWindowEnd ? new Date(candidate.interviewWindowEnd as any) : null;
+      // Calendly link prefilled with the candidate + our tracking token, opened
+      // at the target-window month so the candidate lands inside the window.
+      let calendlyUrl = base
+        ? prefillCalendlyUrl(base, `${candidate.firstName} ${candidate.lastName}`, candidate.email, input.token)
+        : null;
+      if (calendlyUrl && windowStart) {
+        const month = `${windowStart.getUTCFullYear()}-${String(windowStart.getUTCMonth() + 1).padStart(2, '0')}`;
+        calendlyUrl += `&month=${month}`;
+      }
       return {
         firstName: candidate.firstName,
         jobTitle: jobTitle ?? null,
         alreadyBooked: !!candidate.interviewScheduledAt,
         scheduledAt: candidate.interviewScheduledAt,
         joinUrl: candidate.interviewJoinUrl,
-        // Calendly link prefilled with the candidate + our tracking token.
-        calendlyUrl: base
-          ? prefillCalendlyUrl(base, `${candidate.firstName} ${candidate.lastName}`, candidate.email, input.token)
-          : null,
+        windowStart,
+        windowEnd,
+        calendlyUrl,
       };
     }),
 });
