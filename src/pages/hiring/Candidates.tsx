@@ -475,7 +475,7 @@ export default function Candidates() {
                                 className="flex items-center justify-between gap-2 text-xs bg-white rounded px-2.5 py-1.5 cursor-pointer hover:bg-gray-100 border border-gray-100"
                               >
                                 <span className="text-gray-800 font-medium">{c.firstName} {c.lastName}</span>
-                                <span className="text-gray-500">{c.referenceCheckScore != null ? `Score ${c.referenceCheckScore}` : ((c.referencesResponded ?? 0) > 0 ? 'Responses in' : 'Recorded')}</span>
+                                <span className="text-gray-500" title="AI confidence in its reference write-up. Not a candidate grade.">{c.referenceCheckScore != null ? `${c.referenceCheckScore}% confidence` : ((c.referencesResponded ?? 0) > 0 ? 'Responses in' : 'Recorded')}</span>
                               </div>
                             ))}
                           </div>
@@ -575,11 +575,11 @@ export default function Candidates() {
               { label: 'Values Match', value: (selected as any).companyValuesMatchScore != null ? `${(selected as any).companyValuesMatchScore}%` : null },
               { label: 'Work Sample', value: selected.workSampleScore },
               { label: 'Resume Review', value: selected.resumeReviewScore },
-              { label: 'Reference Check', value: selected.referenceCheckScore },
+              { label: 'Reference Confidence', value: selected.referenceCheckScore != null ? `${selected.referenceCheckScore}%` : null, hint: 'How well-supported the AI reference write-up is, based on the material provided. Not a candidate grade.' },
               { label: 'Interview Score', value: (selected as any).interviewScore },
-            ].map(({ label, value }) => (
-              <div key={label} className="bg-gray-50 rounded p-2">
-                <div className="text-xs text-gray-500">{label}</div>
+            ].map(({ label, value, hint }: any) => (
+              <div key={label} className="bg-gray-50 rounded p-2" title={hint}>
+                <div className="text-xs text-gray-500">{label}{hint && <span className="text-gray-300"> ⓘ</span>}</div>
                 <div className="text-sm font-medium text-gray-900">{value ?? '—'}</div>
               </div>
             ))}
@@ -1263,7 +1263,7 @@ function ReferenceCheckSection({ candidateId, existingNotes, onChanged, stage }:
       {result && (
         <div className="mt-1 space-y-2">
           <div className={`text-xs font-semibold rounded border p-2 ${recColor[result.recommendation] ?? 'text-gray-700 bg-gray-50 border-gray-200'}`}>
-            {recLabel[result.recommendation] ?? result.recommendation} · confidence {result.confidence}
+            {recLabel[result.recommendation] ?? result.recommendation} · {result.confidence}% confidence
             {result.mode === 'placeholder' ? ' · AI draft (no reference responses yet)' : ' · AI draft — verify'}
           </div>
           {result.summary && <div className="text-xs text-gray-700">{result.summary}</div>}
