@@ -267,7 +267,20 @@ export const candidatesRouter = router({
       let result = rows;
       if (input?.jdId) result = result.filter((c) => c.jdId === input.jdId);
       if (input?.stage) result = result.filter((c) => c.currentStage === input.stage);
-      return result;
+      // Attach per-candidate reference activity so the UI can show who is in /
+      // through a reference check without an extra round-trip per candidate.
+      const allRefs = await ctx.db.query.candidateReferences.findMany({});
+      const refAgg: Record<string, { requested: number; responded: number }> = {};
+      for (const r of allRefs as any[]) {
+        const a = refAgg[r.candidateId] ?? (refAgg[r.candidateId] = { requested: 0, responded: 0 });
+        if (r.status === 'requested' || r.status === 'responded') a.requested++;
+        if (r.status === 'responded') a.responded++;
+      }
+      return result.map((c) => ({
+        ...c,
+        referencesRequested: refAgg[c.id]?.requested ?? 0,
+        referencesResponded: refAgg[c.id]?.responded ?? 0,
+      }));
     }),
 
   getById: protectedProcedure

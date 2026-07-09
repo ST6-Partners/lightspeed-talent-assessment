@@ -55,6 +55,8 @@ export default function Candidates() {
   );
   const { data: jobDescriptions } = trpc.jobDescriptions.list.useQuery();
   const { data: requisitions } = trpc.requisitions.list.useQuery();
+  const { data: refCapData } = trpc.references.getFinalistCap.useQuery();
+  const referenceCap = refCapData?.cap ?? 3;
   const deptByReq: Record<string, string> = {};
   for (const r of (requisitions ?? []) as any[]) deptByReq[r.id] = r.department;
   const jdDepartments = Array.from(new Set(((jobDescriptions ?? []) as any[]).map((j) => deptByReq[j.reqId]).filter(Boolean))).sort();
@@ -125,7 +127,7 @@ export default function Candidates() {
   const SHORT: Record<string, string> = { 'Applied': 'App', 'Assessment': 'Assess', 'Values Review': 'Values', 'Work Sample': 'Sample', 'Interview Scheduled': 'Sched', 'Interviewed': 'Intv', 'Offered': 'Offer' };
   const toggleRole = (jdId: string) => setCollapsedRoles((m) => ({ ...m, [jdId]: !m[jdId] }));
   const toggleRefs = (jdId: string) => setOpenRefs((m) => ({ ...m, [jdId]: !m[jdId] }));
-  const hasRefCheck = (c: any) => c.referenceCheckScore != null || (c.referenceCheckNotes != null && String(c.referenceCheckNotes).trim().length > 0);
+  const hasRefCheck = (c: any) => c.referenceCheckScore != null || (c.referenceCheckNotes != null && String(c.referenceCheckNotes).trim().length > 0) || (c.referencesResponded ?? 0) > 0;
 
   const visibleCandidates = ((candidates ?? []) as any[]).filter((c: any) =>
     (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal)) &&
@@ -439,7 +441,7 @@ export default function Candidates() {
                           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-700 hover:bg-gray-50"
                         >
                           <FileCheck size={14} className="text-gray-400" />
-                          {g.refDone.length} reference{g.refDone.length === 1 ? '' : 's'} done
+                          {g.refDone.length}/{referenceCap} references done
                           <ChevronDown size={13} className={`text-gray-400 transition-transform ${openRefs[g.jdId] ? '' : '-rotate-90'}`} />
                         </button>
                       </div>
@@ -473,7 +475,7 @@ export default function Candidates() {
                                 className="flex items-center justify-between gap-2 text-xs bg-white rounded px-2.5 py-1.5 cursor-pointer hover:bg-gray-100 border border-gray-100"
                               >
                                 <span className="text-gray-800 font-medium">{c.firstName} {c.lastName}</span>
-                                <span className="text-gray-500">{c.referenceCheckScore != null ? `Score ${c.referenceCheckScore}` : 'Recorded'}</span>
+                                <span className="text-gray-500">{c.referenceCheckScore != null ? `Score ${c.referenceCheckScore}` : ((c.referencesResponded ?? 0) > 0 ? 'Responses in' : 'Recorded')}</span>
                               </div>
                             ))}
                           </div>
