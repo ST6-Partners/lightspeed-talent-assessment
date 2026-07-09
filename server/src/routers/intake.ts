@@ -135,26 +135,37 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
     db.select().from(awarenessList).where(eq(awarenessList.reqId, req.id)),
     db.select().from(interviewPlan).where(eq(interviewPlan.reqId, req.id)).orderBy(asc(interviewPlan.sortOrder)),
   ]);
-  const { subject, html, text } = buildKickoffEmail({
+  const commonArgs = {
     department: req.department, hiringManager: req.hiringManager,
     summaryRows: intakeSummaryRows(req), team, awareness, rounds,
     jdTitle: extras?.jdTitle, questions: extras?.questions, externalPostDate: extras?.externalPostDate,
-    schedulingUrl: `${appBaseUrl()}/hiring/interviews`,
-  });
-  // Record one copy into the test inbox (team inbox) so the kickoff is verifiable.
+  };
+  // Interviewers get an availability link; everyone else (non-interviewing team + the awareness list) does not.
+  const withLink = buildKickoffEmail({ ...commonArgs, schedulingUrl: `${appBaseUrl()}/hiring/interviews` });
+  const base = buildKickoffEmail(commonArgs);
+  const subject = base.subject;
+  // Who actually interviews: per-round interviewers + team members assigned to a round.
+  const interviewerRefs = new Set(
+    [
+      ...rounds.map((r: any) => r.interviewer),
+      ...team.filter((t: any) => t.roundRef || /interview/i.test(t.roleInProcess ?? '')).map((t: any) => t.personRef),
+    ].filter((x: any): x is string => typeof x === 'string' && /.+@.+\..+/.test(x)),
+  );
+  // Record one copy (interviewer version, so the availability link is verifiable) into the team inbox.
   try {
     await db.insert(inboundEmails).values({
       fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
       fromName: 'Lightspeed Hiring',
-      toEmail: HIRING_TEAM_INBOX, subject, body: text, replyTag: 'kickoff', source: 'simulated',
+      toEmail: HIRING_TEAM_INBOX, subject, body: withLink.text, replyTag: 'kickoff', source: 'simulated',
       raw: { kind: 'kickoff', reqId: req.id },
     });
   } catch (err) { console.error('[intake] kickoff inbox record failed:', err); }
-  // Real send to any team/awareness refs that look like email addresses.
+  // Real send: interviewers get the availability CTA, everyone else gets the base kickoff.
   const emailLike = [...team.map((t: any) => t.personRef), ...awareness.map((a: any) => a.personRef)]
     .filter((x: string) => /.+@.+\..+/.test(x));
   for (const to of Array.from(new Set(emailLike))) {
-    try { await sendEmail({ to, subject, html, templateId: 'intake_kickoff' }); } catch (err) { console.error('[intake] kickoff send failed:', err); }
+    const body = interviewerRefs.has(to) ? withLink : base;
+    try { await sendEmail({ to, subject, html: body.html, templateId: 'intake_kickoff' }); } catch (err) { console.error('[intake] kickoff send failed:', err); }
   }
 }
 
