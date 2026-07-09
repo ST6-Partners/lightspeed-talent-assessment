@@ -608,7 +608,7 @@ export default function Candidates() {
             : <OfferSection key={`offer-${selected.id}`} candidateId={selected.id} onChanged={refetch} />}
 
           {/* HR notes */}
-          <Section title="HR Notes">
+          <Section title="General Notes">
             <EditableTextarea
               label="Notes"
               value={selected.notes ?? ''}
