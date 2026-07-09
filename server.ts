@@ -72,21 +72,13 @@ async function main() {
   // attempts may hit ECONNREFUSED. Fails loudly only after exhausting retries.
   await applyMigrationsWithRetry();
 
-  // Seed the 20 real Lightspeed roles when the JD library is EMPTY (fresh or reset
-  // DB) so the roles are always present after a redeploy. Force a (re)seed with
-  // SEED_SAMPLE_JOBS=true. When roles already exist we skip — so an individually
-  // deleted role is NOT resurrected on the next boot. runRealJobs() is itself
-  // idempotent (skips when its marker role is present). Non-fatal on error.
+  // Always ensure the 20 real Lightspeed roles (the reusable JD library) exist.
+  // runRealJobs() is idempotent: it seeds only when its marker role is missing, so
+  // a wiped/reset JD library is restored on boot and never double-seeded. The seeded
+  // roles are hidden from the intake/roles list (see requisitions.list) while Draft,
+  // so restoring the library does NOT clutter the user's own intakes. Non-fatal.
   try {
-    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(jobDescriptions);
-    if (n === 0 || process.env.SEED_SAMPLE_JOBS === 'true') {
-      console.log(n === 0
-        ? '[boot] job-description library empty — seeding 20 real roles.'
-        : '[boot] SEED_SAMPLE_JOBS=true — running role seed.');
-      await runRealJobs();
-    } else {
-      console.log(`[boot] ${n} job descriptions present — skipping seed (deleted roles stay deleted).`);
-    }
+    await runRealJobs();
   } catch (e) {
     console.error('[boot] job-description seed failed (non-fatal):', e);
   }
