@@ -55,11 +55,16 @@ export default function Candidates() {
   );
   const { data: jobDescriptions } = trpc.jobDescriptions.list.useQuery();
   const { data: requisitions } = trpc.requisitions.list.useQuery();
+  const { data: departmentsList } = trpc.departments.list.useQuery();
   const { data: refCapData } = trpc.references.getFinalistCap.useQuery();
   const referenceCap = refCapData?.cap ?? 3;
   const deptByReq: Record<string, string> = {};
   for (const r of (requisitions ?? []) as any[]) deptByReq[r.id] = r.department;
   const jdDepartments = Array.from(new Set(((jobDescriptions ?? []) as any[]).map((j) => deptByReq[j.reqId]).filter(Boolean))).sort();
+  const deptOptions = Array.from(new Set([
+    ...(((departmentsList ?? []) as any[]).map((d) => d.name)),
+    ...jdDepartments,
+  ])).sort();
   const jdOptions = deptFilter
     ? ((jobDescriptions ?? []) as any[]).filter((j) => deptByReq[j.reqId] === deptFilter)
     : ((jobDescriptions ?? []) as any[]);
@@ -295,7 +300,7 @@ export default function Candidates() {
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan">
                   <option value="">— All departments —</option>
-                  {jdDepartments.map((d) => (
+                  {deptOptions.map((d) => (
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
