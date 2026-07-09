@@ -1148,6 +1148,7 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged }: { ca
 function ReferenceCheckSection({ candidateId, existingNotes, onChanged, stage }: { candidateId: string; existingNotes: string | null; onChanged?: () => void; stage?: string }) {
   const isFinalist = stage === 'Interviewed' || stage === 'Offered';
   const [result, setResult] = useState<any>(null);
+  const [copiedRef, setCopiedRef] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', email: '', relationship: '' });
 
   const refsQuery = trpc.references.list.useQuery({ candidateId });
@@ -1191,6 +1192,13 @@ function ReferenceCheckSection({ candidateId, existingNotes, onChanged, stage }:
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${statusColor[r.status] ?? 'bg-gray-100 text-gray-600'}`}>{r.status}</span>
+              <button
+                onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/reference/${r.token}`); setCopiedRef(r.id); setTimeout(() => setCopiedRef(null), 1500); }}
+                title="Copy the reference's private response link"
+                className="text-[11px] text-gray-400 hover:text-ls-primary whitespace-nowrap"
+              >
+                {copiedRef === r.id ? 'Copied' : 'Copy link'}
+              </button>
               <button onClick={() => removeRef.mutate({ id: r.id })} className="text-xs text-gray-400 hover:text-red-600">✕</button>
             </div>
           </div>
@@ -1213,6 +1221,10 @@ function ReferenceCheckSection({ candidateId, existingNotes, onChanged, stage }:
       >
         + Add reference
       </button>
+      {(form.name.trim() || form.email.trim()) && (!form.name.trim() || !form.email.trim()) && (
+        <div className="text-xs text-gray-400 mt-1">Enter both a name and an email to add a reference.</div>
+      )}
+      {addRef.error && <div className="text-xs text-red-600 mt-1">{addRef.error.message.includes('email') ? 'That email address is not valid. Enter a real email (e.g. name@company.com).' : addRef.error.message}</div>}
 
       {/* Actions */}
       <div className="flex gap-2 pt-1">
