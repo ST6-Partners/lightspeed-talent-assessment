@@ -46,21 +46,42 @@ export async function seedRoundsFromPlan(candidateId: string) {
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
   if (!candidate?.jdId) return existing;
   const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) });
-  if (!jd?.reqId) return existing;
+
+  // Resolve the OPENING the candidate is being hired into. A job description can
+  // be reused across openings (e.g. a "backfill — same JD" requisition), and in
+  // that case the JD still points at its ORIGINAL opening. So gather every
+  // requisition tied to this JD — the ones that reuse it (baseJdId) plus the
+  // JD's own home requisition — and prefer an Open/Approved one, most recent
+  // first. This stops a reused JD from pulling the old opening's rounds instead
+  // of the opening the candidate is actually in.
+  const byId = new Map<string, any>();
+  const reuseReqs = await db.select().from(jobRequisitions)
+    .where(eq(jobRequisitions.baseJdId, candidate.jdId));
+  for (const r of reuseReqs) byId.set(r.id, r);
+  if (jd?.reqId) {
+    const home = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) });
+    if (home) byId.set(home.id, home);
+  }
+  const candidateReqs = [...byId.values()];
+  if (candidateReqs.length === 0) return existing;
+  const statusRank = (st: string | null | undefined) =>
+    st === 'Open' ? 3 : st === 'Approved' ? 2 : st === 'Pending Approval' ? 1 : 0;
+  candidateReqs.sort((a, b) =>
+    statusRank(b.status) - statusRank(a.status) ||
+    (new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()));
+  const targetReq = candidateReqs[0];
 
   const plan = await db.select().from(interviewPlan)
-    .where(eq(interviewPlan.reqId, jd.reqId))
+    .where(eq(interviewPlan.reqId, targetReq.id))
     .orderBy(asc(interviewPlan.sortOrder));
 
   let toInsert: Array<{ candidateId: string; roundName: string; interviewerName?: string | null; sortOrder: number }>;
   if (plan.length) {
-    // Named rounds defined on the role's intake.
+    // Named rounds defined on that opening's intake.
     toInsert = plan.map((r, i) => ({ candidateId, roundName: r.roundName, interviewerName: (r as any).interviewer ?? null, sortOrder: r.sortOrder ?? i }));
   } else {
-    // No named rounds — fall back to the requisition's round COUNT so rounds
-    // still appear (generic "Round 1..N"). Only skip if we truly can't tell.
-    const req = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) });
-    const n = Math.max(1, Math.min(5, ((req as any)?.interviewRounds ?? 1)));
+    // No named rounds — fall back to that opening's round COUNT (generic "Round 1..N").
+    const n = Math.max(1, Math.min(5, ((targetReq as any)?.interviewRounds ?? 1)));
     toInsert = Array.from({ length: n }, (_, i) => ({ candidateId, roundName: `Round ${i + 1}`, sortOrder: i }));
   }
 
