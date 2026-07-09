@@ -597,9 +597,6 @@ export default function Candidates() {
           </Section>
 
           {/* Resume screen — checks resume vs REQUIRED qualifications only */}
-          {/* Internal candidate handling */}
-          <InternalSection key={`int-${selected.id}`} candidate={selected} onChanged={refetch} />
-
           <CombinedScreenSection key={selected.id} candidateId={selected.id} existingSummary={(selected as any).screenSummary ?? null} onChanged={refetch} />
 
           {/* Reference check — agent report (after interview, before offer) */}
@@ -953,7 +950,7 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged }: { ca
   const rec = result?.recommendation;
 
   return (
-    <Section title="Screen \u2014 resume \u00b7 skills \u00b7 values">
+    <Section title="Screen - resume, values, skills">
       <div className="text-xs text-gray-500">
         One automated screen for the 200 \u2192 20 gate. It checks the resume against the job's <strong>required</strong> qualifications (missing any, or needing sponsorship, auto-rejects), grades <strong>skills fit</strong> and <strong>values match</strong>, and gives one recommendation. Skills and values inform the call but never reject on their own. Scores are provisional \u2014 calibrate before relying on them.
       </div>
@@ -1080,7 +1077,7 @@ function ReferenceCheckSection({ candidateId, existingNotes, onChanged, stage }:
   };
 
   return (
-    <Section title="Reference Check (finalists)">
+    <Section title="Reference Check">
       <div className="text-xs text-gray-500">
         Run at the finalist stage. Add the references the candidate provided, email them a short questionnaire, then summarize the replies into a red-flags / positives report. Informational — it does not reject the candidate.
       </div>
@@ -1548,58 +1545,6 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
       {html && (
         <div className="mt-2 border border-gray-200 rounded bg-white max-h-96 overflow-y-auto">
           <div dangerouslySetInnerHTML={{ __html: html }} />
-        </div>
-      )}
-    </Section>
-  );
-}
-
-function InternalSection({ candidate, onChanged }: { candidate: any; onChanged?: () => void }) {
-  const [emp, setEmp] = useState(candidate.internalEmployee ?? '');
-  const [chain, setChain] = useState(candidate.leadershipAwareness ?? '');
-  const upd = trpc.candidates.update.useMutation({ onSuccess: () => onChanged?.() });
-  const notify = trpc.candidates.notifyLeadership.useMutation();
-  const isInternal = !!candidate.isInternal;
-
-  return (
-    <Section title="Internal Candidate">
-      <label className="flex items-center gap-2 text-xs text-gray-700">
-        <input type="checkbox" checked={isInternal}
-          onChange={(e) => upd.mutate({ id: candidate.id, isInternal: e.target.checked })} />
-        This is an internal candidate (current employee)
-      </label>
-
-      {isInternal && (
-        <div className="space-y-2 mt-1">
-          <div>
-            <div className="text-xs text-gray-500 mb-0.5">Current role at Lightspeed</div>
-            <div className="flex gap-1">
-              <input value={emp} onChange={(e) => setEmp(e.target.value)} className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs" />
-              <button onClick={() => upd.mutate({ id: candidate.id, internalEmployee: emp })} className="text-xs px-2 py-1 bg-ls-primary text-white rounded">Save</button>
-            </div>
-          </div>
-
-          <label className="flex items-center gap-2 text-xs text-gray-700">
-            <input type="checkbox" checked={!!candidate.managerAware}
-              onChange={(e) => upd.mutate({ id: candidate.id, managerAware: e.target.checked })} />
-            Their current manager knows they applied
-          </label>
-
-          <div>
-            <div className="text-xs text-gray-500 mb-0.5">This candidate\u2019s leadership chain (comma-separated) — notified so no one is blindsided</div>
-            <textarea value={chain} onChange={(e) => setChain(e.target.value)} rows={2}
-              placeholder="manager@…, skip-level@…, elt@…"
-              className="w-full px-2 py-1 border border-gray-300 rounded text-xs" />
-            <div className="flex gap-2 mt-1">
-              <button onClick={() => upd.mutate({ id: candidate.id, leadershipAwareness: chain })} className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-700">Save list</button>
-              <button onClick={() => notify.mutate({ id: candidate.id })} disabled={notify.isLoading}
-                className="text-xs px-2 py-1 bg-ls-primary text-white rounded disabled:opacity-50">
-                {notify.isLoading ? 'Notifying…' : 'Notify leadership'}
-              </button>
-            </div>
-            {notify.data && <div className="text-xs text-gray-500 mt-1">Notified {notify.data.sent} recipient(s).{(notify.data as any).reason ? ` ${(notify.data as any).reason}` : ''}</div>}
-            <div className="text-xs text-gray-400 mt-1">Manual list for now; automatic org-chart notification arrives with HRIS access.</div>
-          </div>
         </div>
       )}
     </Section>
