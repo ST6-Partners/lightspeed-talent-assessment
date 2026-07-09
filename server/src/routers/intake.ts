@@ -144,20 +144,25 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
   const withLink = buildKickoffEmail({ ...commonArgs, schedulingUrl: `${appBaseUrl()}/hiring/interviews` });
   const base = buildKickoffEmail(commonArgs);
   const subject = base.subject;
-  // Who actually interviews: per-round interviewers + team members assigned to a round.
+  // Interviewer email addresses: the per-round interviewer email (or the interviewer name if it
+  // happens to be an email) + team members flagged as interviewers. These get the availability link.
   const interviewerRefs = new Set(
     [
+      ...rounds.map((r: any) => r.interviewerEmail),
       ...rounds.map((r: any) => r.interviewer),
       ...team.filter((t: any) => t.roundRef || /interview/i.test(t.roleInProcess ?? '')).map((t: any) => t.personRef),
     ].filter((x: any): x is string => typeof x === 'string' && /.+@.+\..+/.test(x)),
   );
-  // Recipients + interviewer split (used for both the inbox verification copies and the real send).
-  const emailLike = [...team.map((t: any) => t.personRef), ...awareness.map((a: any) => a.personRef)]
+  // Team + awareness addresses that look like email.
+  const teamAwarenessEmails = [...team.map((t: any) => t.personRef), ...awareness.map((a: any) => a.personRef)]
     .filter((x: string) => /.+@.+\..+/.test(x));
-  const recipients = Array.from(new Set(emailLike));
-  const interviewerEmails = recipients.filter((to) => interviewerRefs.has(to));
-  const otherEmails = recipients.filter((to) => !interviewerRefs.has(to));
-  const hasInterviewers = interviewerRefs.size > 0;
+  // Interviewers (from rounds/team) get the availability email; everyone else on team + awareness
+  // gets the base kickoff. De-duplicated across both lists.
+  const interviewerEmails = Array.from(interviewerRefs);
+  const otherEmails = Array.from(new Set(teamAwarenessEmails.filter((e) => !interviewerRefs.has(e))));
+  // Show the interviewer verification copy whenever an interview process exists (any round),
+  // or a team member is flagged as an interviewer — not gated on an email being entered.
+  const hasInterviewers = rounds.length > 0 || interviewerRefs.size > 0;
 
   // Record verification copies into the team inbox: the base hiring kickoff (what the team +
   // awareness list receive) and, when there are interviewers, a separate interview-team version
@@ -354,6 +359,7 @@ const RoundInput = z.object({
   lengthMin: z.number().int().optional(),
   format: z.string().max(60).optional(),
   interviewer: z.string().max(200).optional(),
+  interviewerEmail: z.string().max(200).optional(),
 });
 const PersonInput = z.object({
   personRef: z.string().min(1).max(200),
@@ -624,7 +630,7 @@ export const intakeRouter = router({
       await ctx.db.delete(interviewPlan).where(eq(interviewPlan.reqId, reqId));
       if (rounds.length) {
         await ctx.db.insert(interviewPlan).values(
-          rounds.map((r, i) => ({ reqId, roundName: r.roundName, lengthMin: r.lengthMin, format: r.format, interviewer: r.interviewer, sortOrder: i })),
+          rounds.map((r, i) => ({ reqId, roundName: r.roundName, lengthMin: r.lengthMin, format: r.format, interviewer: r.interviewer, interviewerEmail: r.interviewerEmail || null, sortOrder: i })),
         );
       }
       await ctx.db.delete(hiringTeam).where(eq(hiringTeam.reqId, reqId));

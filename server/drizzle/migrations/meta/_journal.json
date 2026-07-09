@@ -358,6 +358,13 @@
       "when": 1960000021000,
       "tag": "0048_employee_manager_email",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1960000022000,
+      "tag": "0049_interview_plan_interviewer_email",
+      "breakpoints": true
     }
   ]
 }

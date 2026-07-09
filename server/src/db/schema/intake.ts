@@ -14,6 +14,7 @@ export const interviewPlan = pgTable('interview_plan', {
   lengthMin: integer('length_min'),
   format: varchar('format', { length: 60 }),
   interviewer: varchar('interviewer', { length: 200 }),
+  interviewerEmail: varchar('interviewer_email', { length: 200 }),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
