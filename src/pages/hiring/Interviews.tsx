@@ -101,32 +101,113 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
               className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
               Email prep + briefing
             </button>
-            <button onClick={() => setShowBriefing((v) => !v)} className="text-xs px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-gray-50">
-              {showBriefing ? 'Hide briefing' : 'Preview briefing'}
-            </button>
             {round.prepSentAt && <span className="text-[11px] text-green-600">prep emailed</span>}
           </div>
 
-          {/* Transcript -> feedback */}
+          {/* Transcript -> feedback (hidden once feedback has been generated) */}
+          {round.status !== 'completed' && (
+            <div>
+              <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={2}
+                placeholder="Paste this round's transcript (optional — leave blank for a generated sample)…"
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs font-mono" />
+              <button onClick={() => record.mutate({ id: round.id, transcript: transcript.trim() || undefined })} disabled={record.isLoading}
+                className="mt-1.5 text-xs px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-gray-50 disabled:opacity-50">
+                {record.isLoading ? 'Processing…' : 'Add transcript → feedback'}
+              </button>
+            </div>
+          )}
+
+          {/* ===== Briefing dropdown (above feedback) ===== */}
           <div>
-            <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={2}
-              placeholder="Paste this round's transcript (optional — leave blank for a generated sample)…"
-              className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs font-mono" />
-            <button onClick={() => record.mutate({ id: round.id, transcript: transcript.trim() || undefined })} disabled={record.isLoading}
-              className="mt-1.5 text-xs px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-gray-50 disabled:opacity-50">
-              {record.isLoading ? 'Processing…' : (round.status === 'completed' ? 'Re-run feedback' : 'Add transcript → feedback')}
+            <button type="button" onClick={() => setShowBriefing((v) => !v)}
+              className="flex items-center justify-between w-full text-left px-3 py-2.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg">
+              <span className="text-xs font-bold text-gray-800">Briefing for {round.roundName}'s interviewer</span>
+              {showBriefing ? <ChevronDown size={14} className="text-gray-500 shrink-0" /> : <ChevronRight size={14} className="text-gray-500 shrink-0" />}
             </button>
+            {showBriefing && (
+              <div className="mt-1.5 space-y-1.5">
+                {briefing.isLoading && <div className="text-[11px] text-gray-400">Loading…</div>}
+                {briefing.data && briefing.data.rounds.length === 0 && briefing.data.followUps.length === 0 && questions.length === 0 && (
+                  <div className="text-[11px] text-gray-400">No interview questions or earlier-round notes on file yet.</div>
+                )}
+
+                {questions.length > 0 && (() => {
+                  const key = 'stdq';
+                  const isOpen = briefOpen[key] ?? true;
+                  return (
+                    <div className="border border-gray-200 rounded">
+                      <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !(st[key] ?? true) }))}
+                        className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
+                        {isOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
+                        <span className="text-[11px] font-semibold text-gray-700">Standard interview questions ({questions.length})</span>
+                      </button>
+                      {isOpen && (
+                        <ul className="text-[11px] text-gray-600 list-disc pl-6 pr-2 py-2 space-y-1">
+                          {questions.map((qq: any, i: number) => (
+                            <li key={i}>{qq.category ? <strong>{qq.category}: </strong> : null}{qq.question}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {briefing.data && briefing.data.rounds.map((b: any, i: number) => {
+                  const key = `read-${i}`;
+                  const isOpen = briefOpen[key] ?? false;
+                  return (
+                    <div key={key} className="border border-gray-200 rounded">
+                      <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !isOpen }))}
+                        className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
+                        {isOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
+                        <span className="text-[11px] font-semibold text-gray-700">{b.roundName} — read on the candidate</span>
+                        {b.interviewerName && <span className="text-[10px] text-gray-400">· from {b.interviewerName}</span>}
+                      </button>
+                      {isOpen && (
+                        <p className="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 rounded mx-2 mb-2 p-2">{b.writtenRead}</p>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {briefing.data && briefing.data.followUps.length > 0 && (() => {
+                  const key = 'questions';
+                  const isOpen = briefOpen[key] ?? true;
+                  return (
+                    <div className="border border-blue-200 rounded">
+                      <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !(st[key] ?? true) }))}
+                        className="flex items-center gap-1.5 w-full text-left px-2 py-1.5 bg-blue-50">
+                        {isOpen ? <ChevronDown size={11} className="text-blue-500 shrink-0" /> : <ChevronRight size={11} className="text-blue-500 shrink-0" />}
+                        <span className="text-[11px] font-semibold text-blue-700">New questions to ask this round ({briefing.data.followUps.length})</span>
+                      </button>
+                      {isOpen && (
+                        <ul className="text-[11px] text-blue-800 list-disc pl-6 pr-2 py-2 space-y-1">
+                          {briefing.data.followUps.map((f: any, i: number) => (
+                            <li key={i}><strong>{FOLLOW_LABEL[f.type] ?? 'Follow up'}:</strong> {f.text} <span className="text-blue-400">(from {f.roundName})</span></li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {briefing.data && (briefing.data.rounds.length > 0 || briefing.data.followUps.length > 0) && (
+                  <div className="text-[10px] text-gray-400">Each earlier round's score is hidden, and coaching notes written for earlier interviewers aren't shared.</div>
+                )}
+              </div>
+            )}
           </div>
 
+          {/* ===== Interview feedback dropdown ===== */}
           {(round.feedbackHr || fus.length > 0) && (
-            <div className="border border-gray-200 rounded">
+            <div>
               <button type="button" onClick={() => setFbOpen((v) => !v)}
-                className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
-                {fbOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
-                <span className="text-[11px] font-semibold text-gray-700">Interview feedback{round.score != null ? ` · score ${round.score}/100` : ''}</span>
+                className="flex items-center justify-between w-full text-left px-3 py-2.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg">
+                <span className="text-xs font-bold text-gray-800">Interview feedback{round.score != null ? ` · score ${round.score}/100` : ''}</span>
+                {fbOpen ? <ChevronDown size={14} className="text-gray-500 shrink-0" /> : <ChevronRight size={14} className="text-gray-500 shrink-0" />}
               </button>
               {fbOpen && (
-                <div className="px-2 pb-2 space-y-2">
+                <div className="mt-1.5 space-y-2">
                   {round.feedbackHr && (
                     <div>
                       <div className="text-[11px] font-semibold text-gray-700">Read on the candidate</div>
@@ -171,83 +252,6 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
               </Link>
             )}
           </div>
-
-          {showBriefing && (
-            <div className="border-t border-gray-100 pt-2">
-              <div className="text-[11px] font-semibold text-gray-700 mb-1.5">What {round.roundName}'s interviewer receives</div>
-              {briefing.isLoading && <div className="text-[11px] text-gray-400">Loading…</div>}
-              {briefing.data && briefing.data.rounds.length === 0 && briefing.data.followUps.length === 0 && questions.length === 0 && (
-                <div className="text-[11px] text-gray-400">No interview questions or earlier-round notes on file yet.</div>
-              )}
-
-              {/* Interview questions for this round — every interviewer receives these */}
-              {questions.length > 0 && (() => {
-                const key = 'stdq';
-                const isOpen = briefOpen[key] ?? true;
-                return (
-                  <div className="border border-gray-200 rounded mb-1.5">
-                    <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !(st[key] ?? true) }))}
-                      className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
-                      {isOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
-                      <span className="text-[11px] font-semibold text-gray-700">Interview questions for this round ({questions.length})</span>
-                    </button>
-                    {isOpen && (
-                      <ul className="text-[11px] text-gray-600 list-disc pl-6 pr-2 py-2 space-y-1">
-                        {questions.map((qq: any, i: number) => (
-                          <li key={i}>{qq.category ? <strong>{qq.category}: </strong> : null}{qq.question}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* One collapsible section per earlier round's read on the candidate */}
-              {briefing.data && briefing.data.rounds.map((b: any, i: number) => {
-                const key = `read-${i}`;
-                const isOpen = briefOpen[key] ?? false;
-                return (
-                  <div key={key} className="border border-gray-200 rounded mb-1.5">
-                    <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !isOpen }))}
-                      className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
-                      {isOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
-                      <span className="text-[11px] font-semibold text-gray-700">{b.roundName} — read on the candidate</span>
-                      {b.interviewerName && <span className="text-[10px] text-gray-400">· from {b.interviewerName}</span>}
-                    </button>
-                    {isOpen && (
-                      <p className="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 rounded mx-2 mb-2 p-2">{b.writtenRead}</p>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Collapsible: new questions carried forward from earlier rounds */}
-              {briefing.data && briefing.data.followUps.length > 0 && (() => {
-                const key = 'questions';
-                const isOpen = briefOpen[key] ?? true;
-                return (
-                  <div className="border border-blue-200 rounded mb-1.5">
-                    <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !(st[key] ?? true) }))}
-                      className="flex items-center gap-1.5 w-full text-left px-2 py-1.5 bg-blue-50">
-                      {isOpen ? <ChevronDown size={11} className="text-blue-500 shrink-0" /> : <ChevronRight size={11} className="text-blue-500 shrink-0" />}
-                      <span className="text-[11px] font-semibold text-blue-700">New questions to ask this round ({briefing.data.followUps.length})</span>
-                    </button>
-                    {isOpen && (
-                      <ul className="text-[11px] text-blue-800 list-disc pl-6 pr-2 py-2 space-y-1">
-                        {briefing.data.followUps.map((f: any, i: number) => (
-                          <li key={i}><strong>{FOLLOW_LABEL[f.type] ?? 'Follow up'}:</strong> {f.text} <span className="text-blue-400">(from {f.roundName})</span></li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {briefing.data && (briefing.data.rounds.length > 0 || briefing.data.followUps.length > 0) && (
-                <div className="text-[10px] text-gray-400 mt-1">Each earlier round's score is hidden, and coaching notes written for earlier interviewers aren't shared.</div>
-              )}
-            </div>
-          )}
         </div>
       )}
     </div>
