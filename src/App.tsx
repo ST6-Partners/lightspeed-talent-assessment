@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import OfferApproval from './pages/OfferApproval';
 import JdReview from './pages/JdReview';
 import IntakeEdit from './pages/IntakeEdit';
@@ -12,7 +12,6 @@ import Approve from './pages/Approve';
 import Chat from './pages/Chat';
 import AdminSettings from './pages/AdminSettings';
 // Hiring Pipeline
-import HiringDashboard from './pages/hiring/HiringDashboard';
 import Requisitions from './pages/hiring/Requisitions';
 import Intake from './pages/hiring/Intake';
 import JobDescriptions from './pages/hiring/JobDescriptions';
@@ -42,13 +41,13 @@ export default function App() {
       <Route path="/jd-review/:token" element={<JdReview />} />
       <Route path="/intake-edit/:token" element={<IntakeEdit />} />
       <Route element={<Layout />}>
-        {/* Landing → hiring overview */}
-        <Route path="/" element={<HiringDashboard />} />
+        {/* Landing → candidates */}
+        <Route path="/" element={<Navigate to="/hiring/candidates" replace />} />
         {/* Utility (reached via header icons) */}
         <Route path="/chat" element={<Chat />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
-        {/* Dashboard */}
-        <Route path="/hiring" element={<HiringDashboard />} />
+        {/* Metrics */}
+        <Route path="/hiring" element={<Navigate to="/hiring/candidates" replace />} />
         <Route path="/hiring/metrics" element={<Insights />} />
         {/* Talent Acquisition */}
         <Route path="/hiring/intake" element={<Intake />} />

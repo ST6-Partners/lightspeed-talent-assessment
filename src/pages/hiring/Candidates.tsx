@@ -130,6 +130,8 @@ export default function Candidates() {
   );
   const jdById: Record<string, any> = {};
   for (const j of (jobDescriptions ?? []) as any[]) jdById[j.id] = j;
+  const reqById: Record<string, any> = {};
+  for (const r of (requisitions ?? []) as any[]) reqById[r.id] = r;
   const groupMap = new Map<string, any[]>();
   for (const c of visibleCandidates) {
     const key = c.jdId ?? 'none';
@@ -145,6 +147,7 @@ export default function Candidates() {
       counts,
       title: jdId === 'none' ? 'Unassigned role' : getJdTitle(jdId),
       dept: jdId === 'none' ? '' : (deptByReq[jdById[jdId]?.reqId] ?? ''),
+      hm: jdId === 'none' ? '' : (reqById[jdById[jdId]?.reqId]?.hiringManager ?? ''),
     };
   }).sort((a, b) => b.cands.length - a.cands.length);
 
@@ -153,7 +156,12 @@ export default function Candidates() {
     return (
       <tr key={c.id} onClick={() => setSelectedId(selectedId === c.id ? null : c.id)}
         className={`border-b border-gray-50 text-sm cursor-pointer transition-colors ${selectedId === c.id ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
-        <td className="px-4 py-3 font-medium text-gray-900">{c.firstName} {c.lastName}{c.isInternal && <span className="ml-2 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-purple-100 text-purple-700 align-middle">Internal</span>}</td>
+        <td className="px-4 py-3 font-medium text-gray-900">
+          <div className="flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center text-[11px] font-semibold shrink-0">{`${(c.firstName?.[0] ?? '')}${(c.lastName?.[0] ?? '')}`}</span>
+            <span>{c.firstName} {c.lastName}{c.isInternal && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-purple-100 text-purple-700 align-middle">Internal</span>}</span>
+          </div>
+        </td>
         <td className="px-4 py-3 text-gray-500">{c.email}</td>
         <td className="px-4 py-3">
           <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STAGE_COLORS[c.currentStage] ?? ''}`}>{c.currentStage}</span>
@@ -384,56 +392,87 @@ export default function Candidates() {
           </div>
         )}
 
-        <div className="bg-white rounded-lg border border-gray-200">
-          {roleGroups.length === 0 ? (
-            <div className="p-8 text-center text-gray-400 text-sm">No candidates found.</div>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3">Stage</th>
-                  <th className="px-4 py-3">CCAT</th>
-                  <th className="px-4 py-3">EPP Match</th>
-                  <th className="px-4 py-3">Values Match</th>
-                  <th className="px-4 py-3">Applied</th>
-                  <th className="px-4 py-3 w-24">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {roleGroups.map((g) => {
-                  const collapsed = collapsedRoles[g.jdId];
-                  return (
-                    <Fragment key={g.jdId}>
-                      <tr className="border-b border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100" onClick={() => toggleRole(g.jdId)}>
-                        <td colSpan={8} className="px-4 py-2.5">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <ChevronDown size={15} className={`text-gray-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
-                            <span className="font-semibold text-gray-800 text-sm">{g.title}</span>
-                            {g.dept && <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{g.dept}</span>}
-                            <span className="text-xs text-gray-500">{g.cands.length} in pipeline</span>
-                            <div className="ml-auto flex items-center gap-1.5">
-                              {FUNNEL_STAGES.map((st) => {
-                                const n = g.counts[st] ?? 0;
-                                return (
-                                  <span key={st} title={st} className={`text-[11px] px-1.5 py-0.5 rounded ${n ? 'bg-white border border-gray-200 text-gray-700' : 'text-gray-300'}`}>
-                                    {SHORT[st]} {n}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                      {!collapsed && g.cands.map((c: any) => candidateRow(c))}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Open roles</div>
+            <div className="text-2xl font-bold text-gray-900 mt-1">{roleGroups.filter((g) => g.jdId !== 'none').length}</div>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">In pipeline</div>
+            <div className="text-2xl font-bold text-gray-900 mt-1">{visibleCandidates.length}</div>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Offers out</div>
+            <div className="text-2xl font-bold text-gray-900 mt-1">{visibleCandidates.filter((c: any) => c.currentStage === 'Offered').length}</div>
+          </div>
         </div>
+
+        {roleGroups.length === 0 ? (
+          <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400 text-sm">No candidates found.</div>
+        ) : (
+          <div className="space-y-3">
+            {roleGroups.map((g) => {
+              const collapsed = collapsedRoles[g.jdId];
+              const maxN = Math.max(1, ...FUNNEL_STAGES.map((st) => g.counts[st] ?? 0));
+              return (
+                <div key={g.jdId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="p-4 cursor-pointer hover:bg-gray-50" onClick={() => toggleRole(g.jdId)}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <ChevronDown size={16} className={`text-gray-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+                          <span className="text-base font-semibold text-gray-900">{g.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 ml-6 text-xs text-gray-500 flex-wrap">
+                          {g.dept && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{g.dept}</span>}
+                          {g.hm && <span>{g.hm}</span>}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-2xl font-bold text-gray-900 leading-none">{g.cands.length}</div>
+                        <div className="text-[11px] text-gray-400 mt-0.5">applicants</div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-3 ml-6">
+                      {FUNNEL_STAGES.map((st) => {
+                        const n = g.counts[st] ?? 0;
+                        const h = Math.max(3, Math.round((n / maxN) * 28));
+                        return (
+                          <div key={st} className="flex-1 text-center" title={`${st}: ${n}`}>
+                            <div className="text-sm font-semibold text-gray-900">{n}</div>
+                            <div className="mx-auto my-1 rounded" style={{ height: `${h}px`, background: n ? '#93b5e8' : '#eef1f5' }} />
+                            <div className="text-[10px] text-gray-400">{SHORT[st]}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {!collapsed && (
+                    <div className="border-t border-gray-100 overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-4 py-2.5">Name</th>
+                            <th className="px-4 py-2.5">Email</th>
+                            <th className="px-4 py-2.5">Stage</th>
+                            <th className="px-4 py-2.5">CCAT</th>
+                            <th className="px-4 py-2.5">EPP Match</th>
+                            <th className="px-4 py-2.5">Values Match</th>
+                            <th className="px-4 py-2.5">Applied</th>
+                            <th className="px-4 py-2.5 w-24">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {g.cands.map((c: any) => candidateRow(c))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Rejected candidates — collapsed, out of the main pipeline */}
         {(candidates ?? []).filter((c: any) => c.currentStage === 'Rejected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).length > 0 && (

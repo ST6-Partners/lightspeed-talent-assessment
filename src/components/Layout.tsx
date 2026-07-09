@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, LayoutDashboard, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video } from 'lucide-react';
+import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import ChatDrawer from './ChatDrawer';
@@ -13,7 +13,6 @@ import WhatsNew from './WhatsNew';
 import { trpc } from '../lib/trpc';
 
 const topNav = [
-  { path: '/hiring', label: 'Overview', icon: LayoutDashboard },
   { path: '/hiring/metrics', label: 'Metrics', icon: BarChart2 },
 ];
 
