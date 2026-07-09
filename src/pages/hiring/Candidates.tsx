@@ -1116,6 +1116,18 @@ function ReferenceCheckSection({ candidateId, existingNotes, onChanged, stage }:
         </button>
       </div>
       {!isFinalist && <div className="text-xs text-amber-600">Reference checks unlock at the finalist stage (after interviews). Current stage: {stage ?? '—'}.</div>}
+      {sendReqs.error && (
+        <div className="text-xs text-red-600 space-y-1">
+          <div>{sendReqs.error.message}</div>
+          <button
+            onClick={() => sendReqs.mutate({ candidateId, override: true })}
+            disabled={sendReqs.isLoading}
+            className="text-xs px-2 py-1 border border-red-300 text-red-700 rounded hover:bg-red-50 disabled:opacity-50"
+          >
+            Override cap and send anyway
+          </button>
+        </div>
+      )}
       {sendReqs.data && <div className="text-xs text-gray-500">Sent {sendReqs.data.sent} request(s).</div>}
       <div className="text-xs text-gray-400">{responded}/{refs.length} references responded.</div>
 

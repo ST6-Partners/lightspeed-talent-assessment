@@ -6,10 +6,14 @@
 // questionnaire via SendGrid, references reply through a tokenized
 // link, and the responses feed the reference-check summary. This is
 // the traditional consented reference check — no open-web research.
+//
+// Two guards on sending: (1) a stage gate (finalist stage only) and
+// (2) a per-requisition finalist cap (references only run on the final
+// 2-3 candidates, per the manager meeting). Both must pass to send.
 // ============================================================
 
 import { z } from 'zod';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
@@ -17,6 +21,7 @@ import { candidates, candidateReferences, jobDescriptions } from '../db/schema/h
 import { sendEmail } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
+import { getReferenceFinalistCap, setReferenceFinalistCap } from '../services/referenceConfig.js';
 
 function appBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -72,7 +77,12 @@ export const referencesRouter = router({
 
   // Send the questionnaire to every reference that hasn't responded.
   sendRequests: protectedProcedure
-    .input(z.object({ candidateId: z.string().uuid() }))
+    .input(z.object({
+      candidateId: z.string().uuid(),
+      // Bypass the finalist cap for an edge case (e.g. a finalist dropped
+      // out and is being swapped). Audited when used.
+      override: z.boolean().optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
@@ -80,6 +90,36 @@ export const referencesRouter = router({
       if (!['Interviewed', 'Offered'].includes(candidate.currentStage as string)) {
         throw new TRPCError({ code: 'FORBIDDEN', message: `Reference requests go out at the finalist stage (after interviews). ${candidate.firstName} ${candidate.lastName} is at "${candidate.currentStage}".` });
       }
+      // Finalist cap: references only run on the final N candidates for a
+      // role (manager meeting). The stage gate above handles timing; this
+      // handles the "final few" count. Candidates attach to a role by jdId
+      // (same grouping requisitions.ts uses); skip the cap if jdId is unset.
+      const groupKey = candidate.jdId ?? null;
+      if (groupKey && !input.override) {
+        const cap = await getReferenceFinalistCap(ctx.db);
+        const siblings = await ctx.db.query.candidates.findMany({ where: eq(candidates.jdId, groupKey) });
+        const siblingIds = siblings.map((c: any) => c.id);
+        let inCheck: string[] = [];
+        if (siblingIds.length) {
+          const refRows = await ctx.db.query.candidateReferences.findMany({
+            where: and(
+              inArray(candidateReferences.candidateId, siblingIds),
+              inArray(candidateReferences.status, ['requested', 'responded']),
+            ),
+          });
+          inCheck = Array.from(new Set(refRows.map((r: any) => r.candidateId as string)));
+        }
+        if (!inCheck.includes(candidate.id) && inCheck.length >= cap) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: `Reference checks are limited to the final ${cap} candidate${cap === 1 ? '' : 's'} for this role. ${inCheck.length} ${inCheck.length === 1 ? 'is' : 'are'} already in reference check. Remove one before starting another, or override to proceed.`,
+          });
+        }
+      }
+      if (input.override) {
+        await auditChange(ctx.db, ctx.user.id, input.candidateId, 'candidates', 'update', { field: 'reference_finalist_cap', oldValue: null, newValue: 'override: bypassed finalist cap' });
+      }
+
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
       const refs = await ctx.db.query.candidateReferences.findMany({
         where: eq(candidateReferences.candidateId, input.candidateId),
@@ -144,5 +184,16 @@ export const referencesRouter = router({
         .set({ response: input.response, wouldRehire: input.wouldRehire ?? null, status: 'responded', respondedAt: new Date() })
         .where(eq(candidateReferences.id, ref.id));
       return { ok: true };
+    }),
+
+  // ── Config: the per-requisition finalist cap (tunable, no deploy) ──
+  getFinalistCap: protectedProcedure
+    .query(async ({ ctx }) => ({ cap: await getReferenceFinalistCap(ctx.db) })),
+
+  setFinalistCap: protectedProcedure
+    .input(z.object({ cap: z.number().int().min(1).max(25) }))
+    .mutation(async ({ ctx, input }) => {
+      const cap = await setReferenceFinalistCap(ctx.db, input.cap, ctx.user.id);
+      return { cap };
     }),
 });
