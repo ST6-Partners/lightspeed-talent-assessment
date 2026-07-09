@@ -29,6 +29,7 @@ export default function Candidates() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showWsScoring, setShowWsScoring] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   // Deep-link support: /hiring/candidates?candidate=<id> preselects that candidate.
   useEffect(() => {
@@ -512,6 +513,31 @@ export default function Candidates() {
               </div>
             ) : (
               <div className="text-xs text-gray-400 italic">No submission yet.</div>
+            )}
+
+            {(selected as any).workSampleScore != null && (
+              <div className="pt-1">
+                <button
+                  onClick={() => setShowWsScoring(!showWsScoring)}
+                  className="flex items-center gap-1 text-xs font-medium text-ls-primary"
+                >
+                  <ChevronDown size={12} className={`transition-transform ${showWsScoring ? '' : '-rotate-90'}`} />
+                  {showWsScoring ? 'Hide scoring breakdown' : 'View scoring breakdown'}
+                </button>
+                {showWsScoring && (
+                  <div className="mt-2 border border-gray-200 rounded-lg p-3 bg-white">
+                    <div className="flex items-baseline gap-2 mb-2">
+                      <span className="text-lg font-semibold text-gray-900">{(selected as any).workSampleScore}</span>
+                      <span className="text-xs text-gray-500">/ 100 overall</span>
+                    </div>
+                    {(selected as any).workSampleNotes ? (
+                      <div className="text-[11px] text-gray-700 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">{(selected as any).workSampleNotes}</div>
+                    ) : (
+                      <div className="text-xs text-gray-400 italic">Scored, but no breakdown was saved. Re-score with AI to regenerate it.</div>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="pt-1">
@@ -1619,7 +1645,7 @@ export function SchedulingSection({ candidate, onChanged }: { candidate: any; on
 }
 
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   return (
     <div className="mb-4 border-t border-gray-100 pt-3">
       <button
