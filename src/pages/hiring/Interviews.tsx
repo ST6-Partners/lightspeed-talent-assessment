@@ -35,7 +35,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, questions }: { round: any; defaultOpen: boolean; onChanged: () => void; reviews: any[]; valueName: Record<string, string>; questions: any[] }) {
+function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, questions, standardQuestions }: { round: any; defaultOpen: boolean; onChanged: () => void; reviews: any[]; valueName: Record<string, string>; questions: any[]; standardQuestions: any[] }) {
   const [open, setOpen] = useState(defaultOpen);
   const [transcript, setTranscript] = useState('');
   const [showBriefing, setShowBriefing] = useState(false);
@@ -127,11 +127,11 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
             {showBriefing && (
               <div className="mt-1.5 space-y-1.5">
                 {briefing.isLoading && <div className="text-[11px] text-gray-400">Loading…</div>}
-                {briefing.data && briefing.data.rounds.length === 0 && briefing.data.followUps.length === 0 && questions.length === 0 && (
+                {briefing.data && briefing.data.rounds.length === 0 && briefing.data.followUps.length === 0 && questions.length === 0 && standardQuestions.length === 0 && (
                   <div className="text-[11px] text-gray-400">No interview questions or earlier-round notes on file yet.</div>
                 )}
 
-                {questions.length > 0 && (() => {
+                {standardQuestions.length > 0 && (() => {
                   const key = 'stdq';
                   const isOpen = briefOpen[key] ?? true;
                   return (
@@ -139,7 +139,28 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
                       <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !(st[key] ?? true) }))}
                         className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
                         {isOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
-                        <span className="text-[11px] font-semibold text-gray-700">Standard interview questions ({questions.length})</span>
+                        <span className="text-[11px] font-semibold text-gray-700">Standard interview questions · ~70% ({standardQuestions.length})</span>
+                      </button>
+                      {isOpen && (
+                        <ul className="text-[11px] text-gray-600 list-disc pl-6 pr-2 py-2 space-y-1">
+                          {standardQuestions.map((qq: any, i: number) => (
+                            <li key={i}>{qq.category ? <strong>{qq.category}: </strong> : null}{qq.question}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {questions.length > 0 && (() => {
+                  const key = 'tailoredq';
+                  const isOpen = briefOpen[key] ?? true;
+                  return (
+                    <div className="border border-gray-200 rounded">
+                      <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !(st[key] ?? true) }))}
+                        className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
+                        {isOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
+                        <span className="text-[11px] font-semibold text-gray-700">Tailored questions for this candidate · ~30% ({questions.length})</span>
                       </button>
                       {isOpen && (
                         <ul className="text-[11px] text-gray-600 list-disc pl-6 pr-2 py-2 space-y-1">
@@ -272,6 +293,7 @@ export default function Interviews() {
   const { data: jobDescriptions } = trpc.jobDescriptions.list.useQuery();
   const rounds = trpc.interviews.list.useQuery({ candidateId: candidateId ?? '' }, { enabled: !!candidateId });
   const reviewsQuery = trpc.values.getCandidateReviews.useQuery({ candidateId: candidateId ?? '' }, { enabled: !!candidateId });
+  const stdQ = trpc.interviews.standardQuestions.useQuery({ candidateId: candidateId ?? '' }, { enabled: !!candidateId });
   const { data: valuesList } = trpc.values.list.useQuery();
   const valueName: Record<string, string> = {};
   (valuesList ?? []).forEach((v: any) => { valueName[v.id] = v.name; });
@@ -401,7 +423,7 @@ export default function Interviews() {
             <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Rounds</div>
             <div className="space-y-2">
               {list.map((r) => (
-                <RoundCard key={r.id} round={r} defaultOpen={r.id === firstIncompleteId} onChanged={refreshAll} reviews={reviewsQuery.data ?? []} valueName={valueName} questions={(selected as any).interviewQuestions ?? []} />
+                <RoundCard key={r.id} round={r} defaultOpen={r.id === firstIncompleteId} onChanged={refreshAll} reviews={reviewsQuery.data ?? []} valueName={valueName} questions={(selected as any).interviewQuestions ?? []} standardQuestions={stdQ.data?.questions ?? []} />
               ))}
               {list.length === 0 && <div className="text-xs text-gray-400 pb-1">No rounds yet. They appear automatically from the role plan when a candidate reaches the interview stage, or add one below.</div>}
             </div>

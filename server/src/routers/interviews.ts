@@ -9,12 +9,13 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq, asc, sql } from 'drizzle-orm';
+import { eq, asc, sql, desc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { db } from '../db.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
-import { candidates, jobDescriptions } from '../db/schema/hiring.js';
+import { candidates, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
+import { interviewQuestions } from '../db/schema/intake.js';
 import {
   seedRoundsFromPlan,
   generateRoundFeedback,
@@ -45,6 +46,32 @@ export const interviewsRouter = router({
     .input(z.object({ candidateId: z.string().uuid() }))
     .mutation(async ({ input }) => {
       return seedRoundsFromPlan(input.candidateId);
+    }),
+
+  // The role's STANDARD (~70%) interview question set for this candidate's
+  // opening. Candidate-agnostic; stored per requisition. Resolves the opening
+  // the same way rounds do (reqs tied to the JD, preferring Open/Approved).
+  standardQuestions: protectedProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const cand = await db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
+      if (!cand?.jdId) return { questions: [] as any[], source: null as string | null };
+      const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, cand.jdId) });
+      const byId = new Map<string, any>();
+      const reuse = await db.select().from(jobRequisitions).where(eq(jobRequisitions.baseJdId, cand.jdId));
+      for (const r of reuse) byId.set(r.id, r);
+      if (jd?.reqId) {
+        const home = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) });
+        if (home) byId.set(home.id, home);
+      }
+      const reqs = [...byId.values()];
+      if (!reqs.length) return { questions: [] as any[], source: null as string | null };
+      const rank = (st: string | null | undefined) => (st === 'Open' ? 3 : st === 'Approved' ? 2 : st === 'Pending Approval' ? 1 : 0);
+      reqs.sort((a, b) => rank(b.status) - rank(a.status) || (new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()));
+      const row = (await db.select().from(interviewQuestions)
+        .where(eq(interviewQuestions.reqId, reqs[0].id))
+        .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0];
+      return { questions: (row?.questions as any[]) ?? [], source: (row?.source as string | null) ?? null };
     }),
 
   // Add one round to the end.
