@@ -39,6 +39,7 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName }: { roun
   const [open, setOpen] = useState(defaultOpen);
   const [transcript, setTranscript] = useState('');
   const [showBriefing, setShowBriefing] = useState(false);
+  const [briefOpen, setBriefOpen] = useState<Record<string, boolean>>({});
 
   const update = trpc.interviews.updateRound.useMutation({ onSuccess: onChanged, onError: (err) => { alert(err.message); onChanged?.(); } });
   const remove = trpc.interviews.removeRound.useMutation({ onSuccess: onChanged });
@@ -159,29 +160,55 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName }: { roun
 
           {showBriefing && (
             <div className="border-t border-gray-100 pt-2">
-              <div className="text-[11px] font-semibold text-gray-700 mb-1">Briefing this interviewer receives</div>
+              <div className="text-[11px] font-semibold text-gray-700 mb-1.5">What {round.roundName}'s interviewer receives</div>
               {briefing.isLoading && <div className="text-[11px] text-gray-400">Loading…</div>}
               {briefing.data && briefing.data.rounds.length === 0 && briefing.data.followUps.length === 0 && (
-                <div className="text-[11px] text-gray-400">No earlier completed rounds yet — nothing to carry forward.</div>
+                <div className="text-[11px] text-gray-400">This is the first round — there's nothing carried forward yet.</div>
               )}
-              {briefing.data && briefing.data.rounds.map((b: any, i: number) => (
-                <div key={i} className="mb-1.5">
-                  <div className="text-[11px] font-medium text-gray-700">{b.roundName}{b.interviewerName ? ` · ${b.interviewerName}` : ''}</div>
-                  <p className="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 rounded p-2">{b.writtenRead}</p>
-                </div>
-              ))}
-              {briefing.data && briefing.data.followUps.length > 0 && (
-                <div className="mt-1">
-                  <div className="text-[11px] font-semibold text-blue-700">Follow up in this round</div>
-                  <ul className="text-[11px] text-blue-700 list-disc pl-4">
-                    {briefing.data.followUps.map((f: any, i: number) => (
-                      <li key={i}><strong>{FOLLOW_LABEL[f.type] ?? 'Follow up'} ({f.roundName}):</strong> {f.text}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+
+              {/* One collapsible section per earlier round's read on the candidate */}
+              {briefing.data && briefing.data.rounds.map((b: any, i: number) => {
+                const key = `read-${i}`;
+                const isOpen = briefOpen[key] ?? false;
+                return (
+                  <div key={key} className="border border-gray-200 rounded mb-1.5">
+                    <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !isOpen }))}
+                      className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
+                      {isOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
+                      <span className="text-[11px] font-semibold text-gray-700">{b.roundName} — read on the candidate</span>
+                      {b.interviewerName && <span className="text-[10px] text-gray-400">· from {b.interviewerName}</span>}
+                    </button>
+                    {isOpen && (
+                      <p className="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 rounded mx-2 mb-2 p-2">{b.writtenRead}</p>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Collapsible: new questions carried forward from earlier rounds */}
+              {briefing.data && briefing.data.followUps.length > 0 && (() => {
+                const key = 'questions';
+                const isOpen = briefOpen[key] ?? true;
+                return (
+                  <div className="border border-blue-200 rounded mb-1.5">
+                    <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !(st[key] ?? true) }))}
+                      className="flex items-center gap-1.5 w-full text-left px-2 py-1.5 bg-blue-50">
+                      {isOpen ? <ChevronDown size={11} className="text-blue-500 shrink-0" /> : <ChevronRight size={11} className="text-blue-500 shrink-0" />}
+                      <span className="text-[11px] font-semibold text-blue-700">New questions to ask this round ({briefing.data.followUps.length})</span>
+                    </button>
+                    {isOpen && (
+                      <ul className="text-[11px] text-blue-800 list-disc pl-6 pr-2 py-2 space-y-1">
+                        {briefing.data.followUps.map((f: any, i: number) => (
+                          <li key={i}><strong>{FOLLOW_LABEL[f.type] ?? 'Follow up'}:</strong> {f.text} <span className="text-blue-400">(from {f.roundName})</span></li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })()}
+
               {briefing.data && (briefing.data.rounds.length > 0 || briefing.data.followUps.length > 0) && (
-                <div className="text-[10px] text-gray-400 mt-1">Scores hidden. Coaching notes for earlier interviewers are not shared.</div>
+                <div className="text-[10px] text-gray-400 mt-1">Each earlier round's score is hidden, and coaching notes written for earlier interviewers aren't shared.</div>
               )}
             </div>
           )}
