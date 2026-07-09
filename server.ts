@@ -12,9 +12,9 @@ import { valuesApiRouter } from './server/src/http/valuesApi.js';
 import { createContext } from './server/src/trpc.js';
 import { db } from './server/src/db.js';
 import { inboundEmails } from './server/src/db/schema/email.js';
-import { users } from './server/src/db/schema/index.js';
+import { users, jobDescriptions } from './server/src/db/schema/index.js';
 import { readDoc } from './server/src/services/dropboxDocs.js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { pool, db } from './server/src/db.js';
 import * as backupService from './server/src/services/backup.js';
 import { runRealJobs } from './server/src/seedRealJobs.js';
@@ -72,18 +72,23 @@ async function main() {
   // attempts may hit ECONNREFUSED. Fails loudly only after exhausting retries.
   await applyMigrationsWithRetry();
 
-  // Sample role seeding is OPT-IN (set SEED_SAMPLE_JOBS=true). Off by default so the
-  // app shows only the requisitions/intakes the user actually creates, and so a sample
-  // that's been deleted never reappears on the next boot. Manual seeding is still
-  // available via `npm run db:seed:realjobs`.
-  if (process.env.SEED_SAMPLE_JOBS === 'true') {
-    try {
+  // Seed the 20 real Lightspeed roles when the JD library is EMPTY (fresh or reset
+  // DB) so the roles are always present after a redeploy. Force a (re)seed with
+  // SEED_SAMPLE_JOBS=true. When roles already exist we skip — so an individually
+  // deleted role is NOT resurrected on the next boot. runRealJobs() is itself
+  // idempotent (skips when its marker role is present). Non-fatal on error.
+  try {
+    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(jobDescriptions);
+    if (n === 0 || process.env.SEED_SAMPLE_JOBS === 'true') {
+      console.log(n === 0
+        ? '[boot] job-description library empty — seeding 20 real roles.'
+        : '[boot] SEED_SAMPLE_JOBS=true — running role seed.');
       await runRealJobs();
-    } catch (e) {
-      console.error('[boot] job-description seed failed (non-fatal):', e);
+    } else {
+      console.log(`[boot] ${n} job descriptions present — skipping seed (deleted roles stay deleted).`);
     }
-  } else {
-    console.log('[boot] sample job seeding disabled (set SEED_SAMPLE_JOBS=true to enable).');
+  } catch (e) {
+    console.error('[boot] job-description seed failed (non-fatal):', e);
   }
 
   // ── Automatic daily database backups (best-effort) ──
