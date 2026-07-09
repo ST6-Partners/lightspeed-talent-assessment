@@ -814,6 +814,7 @@ interface KickoffData {
   jdTitle?: string;
   questions?: Array<{ category?: string; question: string }>;
   externalPostDate?: string;
+  schedulingUrl?: string;
 }
 
 export function buildKickoffEmail(d: KickoffData): { subject: string; html: string; text: string } {
@@ -847,9 +848,14 @@ export function buildKickoffEmail(d: KickoffData): { subject: string; html: stri
       <li>${d.externalPostDate ? `Role posted <strong>internally now</strong> (3-day window); opens <strong>externally on ${d.externalPostDate}</strong>.` : 'Posting: pending.'}</li>
     </ul>
     ${d.questions && d.questions.length ? `<p style="font-size:13px;font-weight:700;color:#33465c;margin:0 0 2px;">Interview questions</p><ol style="margin:6px 0 16px;padding-left:20px;font-size:13px;color:#333;">${d.questions.map((q) => `<li>${q.question}${q.category ? ` <span style=\"color:#999;\">(${q.category})</span>` : ''}</li>`).join('')}</ol>` : ''}
-    ${p('<span style="font-size:12px;color:#888;">Candidate self-scheduling link will appear here once the scheduling tool is connected.</span>')}
+    ${d.schedulingUrl
+      ? `<p style="font-size:13px;font-weight:700;color:#33465c;margin:14px 0 2px;">Set your interview availability</p>
+    <p style="font-size:14px;color:#333;margin:6px 0 8px;">If you're on the interview team for this role, open the app to connect your calendar and hold time inside the target interview window.</p>
+    <p style="margin:6px 0 4px;"><a href="${d.schedulingUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;">Set my availability</a></p>
+    <p style="font-size:12px;color:#888;">Or paste this link: ${d.schedulingUrl}</p>`
+      : p('<span style="font-size:12px;color:#888;">Candidate self-scheduling link will appear here once the scheduling tool is connected.</span>')}
   `);
-  const text = `Hiring kickoff — ${role} has been fully approved and is open. Hiring manager: ${d.hiringManager}. Team: ${d.team.map((t) => t.personRef).join(', ') || 'none set'}. Rounds: ${d.rounds.map((r) => r.roundName).join(', ') || 'none'}. Scheduling link pending the scheduling-tool integration.`;
+  const text = `Hiring kickoff — ${role} has been fully approved and is open. Hiring manager: ${d.hiringManager}. Team: ${d.team.map((t) => t.personRef).join(', ') || 'none set'}. Rounds: ${d.rounds.map((r) => r.roundName).join(', ') || 'none'}. ${d.schedulingUrl ? `Set your interview availability: ${d.schedulingUrl}` : 'Scheduling link pending the scheduling-tool integration.'}`;
   return { subject, html, text };
 }
 
