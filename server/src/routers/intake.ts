@@ -13,6 +13,7 @@ import { interviewPlan, hiringTeam, awarenessList, approvals } from '../db/schem
 import { inboundEmails } from '../db/schema/email.js';
 import type { DrizzleClient } from '../db.js';
 import { jobDescriptions } from '../db/schema/hiring.js';
+import { ataSeedRoles } from '../data/ataSeedRoles.js';
 import { interviewQuestions } from '../db/schema/intake.js';
 import { assessmentTasks } from '../db/schema/assessmentTasks.js';
 import { departments } from '../db/schema/departments.js';
@@ -574,9 +575,17 @@ export const intakeRouter = router({
 
   // Intakes are job_requisitions; list them newest-first.
   list: protectedProcedure.query(async ({ ctx }) => {
-    return ctx.db.query.jobRequisitions.findMany({
+    const rows = await ctx.db.query.jobRequisitions.findMany({
       orderBy: desc(jobRequisitions.createdAt),
     });
+    // Hide the seeded sample roles (JD title in the ataSeedRoles set) while they're
+    // still Draft — those are the reusable JD library, not user-created intakes.
+    const seededTitles = new Set(ataSeedRoles.map((r) => r.jobDescription.title));
+    const jds = await ctx.db.query.jobDescriptions.findMany({});
+    const seededReqIds = new Set(
+      jds.filter((j: any) => seededTitles.has(j.jobTitle)).map((j: any) => j.reqId),
+    );
+    return rows.filter((r) => !(seededReqIds.has(r.id) && r.status === 'Draft'));
   }),
 
   get: protectedProcedure
