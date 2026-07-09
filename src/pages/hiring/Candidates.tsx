@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2 } from 'lucide-react';
+import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, FileCheck } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const STAGES = [
@@ -48,6 +48,7 @@ export default function Candidates() {
   });
   const [deptFilter, setDeptFilter] = useState('');
   const [collapsedRoles, setCollapsedRoles] = useState<Record<string, boolean>>({});
+  const [openRefs, setOpenRefs] = useState<Record<string, boolean>>({});
 
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(
     stageFilter ? { stage: stageFilter } : undefined
@@ -123,6 +124,8 @@ export default function Candidates() {
   const FUNNEL_STAGES = ['Applied', 'Assessment', 'Values Review', 'Work Sample', 'Interview Scheduled', 'Interviewed', 'Offered'] as const;
   const SHORT: Record<string, string> = { 'Applied': 'App', 'Assessment': 'Assess', 'Values Review': 'Values', 'Work Sample': 'Sample', 'Interview Scheduled': 'Sched', 'Interviewed': 'Intv', 'Offered': 'Offer' };
   const toggleRole = (jdId: string) => setCollapsedRoles((m) => ({ ...m, [jdId]: !m[jdId] }));
+  const toggleRefs = (jdId: string) => setOpenRefs((m) => ({ ...m, [jdId]: !m[jdId] }));
+  const hasRefCheck = (c: any) => c.referenceCheckScore != null || (c.referenceCheckNotes != null && String(c.referenceCheckNotes).trim().length > 0);
 
   const visibleCandidates = ((candidates ?? []) as any[]).filter((c: any) =>
     (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal)) &&
@@ -141,10 +144,12 @@ export default function Candidates() {
   const roleGroups = Array.from(groupMap.entries()).map(([jdId, cands]) => {
     const counts: Record<string, number> = {};
     for (const c of cands) counts[c.currentStage] = (counts[c.currentStage] ?? 0) + 1;
+    const refDone = cands.filter((c: any) => hasRefCheck(c));
     return {
       jdId,
       cands,
       counts,
+      refDone,
       title: jdId === 'none' ? 'Unassigned role' : getJdTitle(jdId),
       dept: jdId === 'none' ? '' : (deptByReq[jdById[jdId]?.reqId] ?? ''),
       hm: jdId === 'none' ? '' : (reqById[jdById[jdId]?.reqId]?.hiringManager ?? ''),
@@ -428,9 +433,15 @@ export default function Candidates() {
                           {g.hm && <span>{g.hm}</span>}
                         </div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <div className="text-2xl font-bold text-gray-900 leading-none">{g.cands.length}</div>
-                        <div className="text-[11px] text-gray-400 mt-0.5">applicants</div>
+                      <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => toggleRefs(g.jdId)}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-700 hover:bg-gray-50"
+                        >
+                          <FileCheck size={14} className="text-gray-400" />
+                          {g.refDone.length} reference{g.refDone.length === 1 ? '' : 's'} done
+                          <ChevronDown size={13} className={`text-gray-400 transition-transform ${openRefs[g.jdId] ? '' : '-rotate-90'}`} />
+                        </button>
                       </div>
                     </div>
                     <div className="flex gap-2 mt-3 ml-6">
@@ -447,6 +458,29 @@ export default function Candidates() {
                       })}
                     </div>
                   </div>
+                  {openRefs[g.jdId] && (
+                    <div className="px-4 pb-3">
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                        <div className="text-xs font-medium text-gray-600 mb-2">Reference checks for this role</div>
+                        {g.refDone.length === 0 ? (
+                          <div className="text-xs text-gray-400">No reference checks done yet.</div>
+                        ) : (
+                          <div className="space-y-1">
+                            {g.refDone.map((c: any) => (
+                              <div
+                                key={c.id}
+                                onClick={() => setSelectedId(c.id)}
+                                className="flex items-center justify-between gap-2 text-xs bg-white rounded px-2.5 py-1.5 cursor-pointer hover:bg-gray-100 border border-gray-100"
+                              >
+                                <span className="text-gray-800 font-medium">{c.firstName} {c.lastName}</span>
+                                <span className="text-gray-500">{c.referenceCheckScore != null ? `Score ${c.referenceCheckScore}` : 'Recorded'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   {!collapsed && (
                     <div className="border-t border-gray-100 overflow-x-auto">
                       <table className="w-full">
