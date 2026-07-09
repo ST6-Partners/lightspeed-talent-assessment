@@ -72,12 +72,18 @@ async function main() {
   // attempts may hit ECONNREFUSED. Fails loudly only after exhausting retries.
   await applyMigrationsWithRetry();
 
-  // Seed the role library (20 job descriptions) if it's empty. Idempotent:
-  // runRealJobs() skips when the roles are already present. Non-fatal on error.
-  try {
-    await runRealJobs();
-  } catch (e) {
-    console.error('[boot] job-description seed failed (non-fatal):', e);
+  // Sample role seeding is OPT-IN (set SEED_SAMPLE_JOBS=true). Off by default so the
+  // app shows only the requisitions/intakes the user actually creates, and so a sample
+  // that's been deleted never reappears on the next boot. Manual seeding is still
+  // available via `npm run db:seed:realjobs`.
+  if (process.env.SEED_SAMPLE_JOBS === 'true') {
+    try {
+      await runRealJobs();
+    } catch (e) {
+      console.error('[boot] job-description seed failed (non-fatal):', e);
+    }
+  } else {
+    console.log('[boot] sample job seeding disabled (set SEED_SAMPLE_JOBS=true to enable).');
   }
 
   // ── Automatic daily database backups (best-effort) ──
