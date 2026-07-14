@@ -76,13 +76,31 @@ export default function ScoreValues() {
     return m;
   }, [values, eppByTrait]);
 
-  // No auto pre-fill: the reviewer starts from a blank scorecard. The AI's
-  // suggested scorecard is applied (or cleared) on demand via the eye toggle.
-  const toggleAiRecommendation = () => {
-    if (aiShown) { setScores({}); setAiShown(false); return; }
+  // No auto pre-fill: the reviewer starts from a blank scorecard. A single
+  // "AI Recommendation" toggle at the top fills BOTH sections on demand —
+  // Values from the EPP mapping, Capability from the AI service.
+  const anyRecShown = aiShown || capAiShown;
+  const applyRecommendations = async () => {
+    if (aiShown || capAiShown) {
+      setScores({}); setAiShown(false);
+      setCapScores({}); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setCapAiShown(false);
+      return;
+    }
     const m: Record<string, number> = {};
     (values ?? []).forEach((v: any) => { if (suggestions[v.id]) m[v.id] = suggestions[v.id].score; });
     setScores(m); setAiShown(true);
+    if (candidateId) {
+      setCapRecError(null);
+      try {
+        const res: any = await capRecMutation.mutateAsync({ candidateId });
+        const sc: Record<string, number> = {};
+        const sg: Record<string, { score: number; rationale: string }> = {};
+        (res?.items ?? []).forEach((it: any) => { sc[it.capabilityItemId] = it.score; sg[it.capabilityItemId] = { score: it.score, rationale: it.rationale }; });
+        if (Object.keys(sc).length) { setCapScores((prev) => ({ ...prev, ...sc })); setCapSuggest(sg); setCapRecMode(res?.mode ?? null); setCapAiShown(true); }
+      } catch (err: any) {
+        setCapRecError(err?.message ? `Couldn't generate the capability suggestion: ${err.message}` : "Couldn't generate the capability suggestion. Try again.");
+      }
+    }
   };
 
   // Preselect candidate + round when arrived at via a deep link from the Interviews tab.
@@ -129,22 +147,6 @@ export default function ScoreValues() {
 
   const setScore = (valueId: string, score: number) => setScores((p) => ({ ...p, [valueId]: score }));
   const setCapScore = (id: string, score: number) => setCapScores((p) => ({ ...p, [id]: score }));
-  const toggleCapabilityRecommendation = async () => {
-    if (capAiShown) { setCapScores({}); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setCapAiShown(false); return; }
-    if (!candidateId) return;
-    setCapRecError(null);
-    try {
-      const res: any = await capRecMutation.mutateAsync({ candidateId });
-      const sc: Record<string, number> = {};
-      const sg: Record<string, { score: number; rationale: string }> = {};
-      (res?.items ?? []).forEach((it: any) => { sc[it.capabilityItemId] = it.score; sg[it.capabilityItemId] = { score: it.score, rationale: it.rationale }; });
-      if (!Object.keys(sc).length) { setCapRecError('No capability items to score yet.'); return; }
-      setCapScores((prev) => ({ ...prev, ...sc }));
-      setCapSuggest(sg); setCapRecMode(res?.mode ?? null); setCapAiShown(true);
-    } catch (err: any) {
-      setCapRecError(err?.message ? `Couldn't generate a recommendation: ${err.message}` : "Couldn't generate a recommendation. Try again.");
-    }
-  };
   const toggleExpand = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
   const pillarAvg = (pillar: string) => {
@@ -262,11 +264,11 @@ export default function ScoreValues() {
               <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-ls-primary-50 text-ls-primary border border-ls-cyan font-semibold">AI-generated</span>
             </div>
             {currentReviewId === null && (
-              <button onClick={toggleAiRecommendation}
-                title={aiShown ? "Showing AI's suggested scorecard — click to clear it" : "Show AI's suggested scorecard"}
-                className={`text-xs inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors ${aiShown ? 'border-ls-cyan text-ls-primary bg-ls-primary-50' : 'border-ls-line text-ls-ink-2 hover:border-ls-cyan'}`}>
-                {aiShown ? <Eye size={14} /> : <EyeOff size={14} />}
-                AI Recommendation
+              <button onClick={applyRecommendations} disabled={capRecMutation.isLoading || !candidateId}
+                title={anyRecShown ? 'Showing AI suggestions — click to clear both sections' : 'Suggest scores for Values and Capability'}
+                className={`text-xs inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-50 ${anyRecShown ? 'border-ls-cyan text-ls-primary bg-ls-primary-50' : 'border-ls-line text-ls-ink-2 hover:border-ls-cyan'}`}>
+                {capRecMutation.isLoading ? <Sparkles size={14} className="animate-pulse" /> : anyRecShown ? <Eye size={14} /> : <EyeOff size={14} />}
+                {capRecMutation.isLoading ? 'Thinking…' : 'AI Recommendation'}
               </button>
             )}
           </div>
@@ -376,19 +378,9 @@ export default function ScoreValues() {
               <div className="flex items-baseline justify-between mb-1 gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-ls-ink">Capability</h3>
-                  <p className="text-xs text-ls-ink-3">Can this person do the job? Score each 1–5. Values stays its own section above.</p>
+                  <p className="text-xs text-ls-ink-3">Can this person do the job? Score each 1–5. The AI Recommendation button up top fills this too.</p>
                 </div>
-                <div className="flex items-center gap-3 flex-none">
-                  {currentReviewId === null && (
-                    <button onClick={toggleCapabilityRecommendation} disabled={capRecMutation.isLoading || !candidateId}
-                      title={capAiShown ? 'Showing AI suggestion — click to clear it' : 'Suggest scores from the interview feedback'}
-                      className={`text-xs inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-50 ${capAiShown ? 'border-ls-cyan text-ls-primary bg-ls-primary-50' : 'border-ls-line text-ls-ink-2 hover:border-ls-cyan'}`}>
-                      {capRecMutation.isLoading ? <Sparkles size={14} className="animate-pulse" /> : capAiShown ? <Eye size={14} /> : <EyeOff size={14} />}
-                      {capRecMutation.isLoading ? 'Thinking…' : 'AI Recommendation'}
-                    </button>
-                  )}
-                  <span className="text-xs text-ls-ink-3">avg <b className="text-ls-ink">{capAvg ?? '—'}</b></span>
-                </div>
+                <span className="text-xs text-ls-ink-3">avg <b className="text-ls-ink">{capAvg ?? '—'}</b></span>
               </div>
               {capRecError && (
                 <div className="text-[11px] text-red-600 mb-2">{capRecError}</div>
