@@ -1467,7 +1467,7 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
       </div>
       {approvalStatus.data && (
         <div className={`text-xs mt-1 rounded p-2 border ${approvalStatus.data.status === 'approved' ? 'bg-green-50 border-green-200 text-green-800' : approvalStatus.data.status === 'sent_back' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
-          {approvalStatus.data.status === 'pending' && <>Sent to the hiring manager for approval{approvalStatus.data.managerName ? ` (${approvalStatus.data.managerName})` : ''}. The candidate has not been contacted yet - it is waiting in the test inbox for review and sign-off.</>}
+          {approvalStatus.data.status === 'pending' && <>Sent for approval{approvalStatus.data.currentApproverName ? ` — awaiting ${approvalStatus.data.currentApproverName}` : (approvalStatus.data.managerName ? ` (${approvalStatus.data.managerName})` : '')}{approvalStatus.data.totalSteps && approvalStatus.data.totalSteps > 1 ? ` · ${approvalStatus.data.approvedCount}/${approvalStatus.data.totalSteps} approvers signed off` : ''}. The candidate has not been contacted yet - it is waiting in the test inbox for review and sign-off.</>}
           {approvalStatus.data.status === 'approved' && <>Approved{approvalStatus.data.managerName ? ` by ${approvalStatus.data.managerName}` : ''} - the offer has been sent to the candidate.</>}
           {approvalStatus.data.status === 'sent_back' && <>Sent back by the hiring manager{approvalStatus.data.managerNote ? `: "${approvalStatus.data.managerNote}"` : ''}. Fix the offer above and send for approval again.</>}
         </div>
@@ -1646,7 +1646,7 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
       </div>
       {approvalStatus.data && (
         <div className={`text-xs mt-1 rounded p-2 border ${approvalStatus.data.status === 'approved' ? 'bg-green-50 border-green-200 text-green-800' : approvalStatus.data.status === 'sent_back' ? 'bg-amber-50 border-amber-200 text-amber-800' : 'bg-blue-50 border-blue-200 text-blue-800'}`}>
-          {approvalStatus.data.status === 'pending' && <>Sent to the hiring manager for approval{approvalStatus.data.managerName ? ` (${approvalStatus.data.managerName})` : ''}. The employee has not been contacted yet - it is waiting in the test inbox for review and sign-off.</>}
+          {approvalStatus.data.status === 'pending' && <>Sent for approval{approvalStatus.data.currentApproverName ? ` — awaiting ${approvalStatus.data.currentApproverName}` : (approvalStatus.data.managerName ? ` (${approvalStatus.data.managerName})` : '')}{approvalStatus.data.totalSteps && approvalStatus.data.totalSteps > 1 ? ` · ${approvalStatus.data.approvedCount}/${approvalStatus.data.totalSteps} approvers signed off` : ''}. The employee has not been contacted yet - it is waiting in the test inbox for review and sign-off.</>}
           {approvalStatus.data.status === 'approved' && <>Approved{approvalStatus.data.managerName ? ` by ${approvalStatus.data.managerName}` : ''} - the internal offer has been sent.</>}
           {approvalStatus.data.status === 'sent_back' && <>Sent back by the hiring manager{approvalStatus.data.managerNote ? `: "${approvalStatus.data.managerNote}"` : ''}. Fix the offer above and send for approval again.</>}
         </div>

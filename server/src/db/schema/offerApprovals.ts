@@ -8,7 +8,7 @@
 // (same pattern as intake `approvals`).
 // ============================================================
 
-import { pgTable, uuid, varchar, text, jsonb, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, jsonb, integer, timestamp } from 'drizzle-orm/pg-core';
 import { candidates } from './hiring.js';
 import { users } from './core.js';
 
@@ -27,6 +27,16 @@ export const offerApprovals = pgTable('offer_approvals', {
   createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
   decidedAt: timestamp('decided_at', { withTimezone: true }),
   sentToCandidateAt: timestamp('sent_to_candidate_at', { withTimezone: true }),
+  // Multi-level approval chain (migration 0050). Ordered list of approver
+  // steps the offer routes through: the hiring manager, then each manager
+  // above them in the reporting line (employees.managerEmail). Each step:
+  //   { order:number, name:string, email:string,
+  //     status:'pending'|'approved'|'sent_back',
+  //     actedName?:string, note?:string, decidedAt?:string }
+  // Empty [] = legacy single-manager gate (pre-0050 behavior).
+  chain: jsonb('chain').notNull().default([]),
+  // Index into `chain` of the approver whose sign-off is currently awaited.
+  currentStep: integer('current_step').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

@@ -40,6 +40,8 @@ import { getInternalReportConfig, setInternalReportConfig } from '../services/in
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 import { seedCandidateResume, seedAssessmentResults, simulateUpstreamScores } from '../services/postAssessmentReview.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
+import { walkLeadershipChain } from '../services/orgChain.js';
+import { employees } from '../db/schema/employees.js';
 
 const STAGES = [
   'Applied',
@@ -245,6 +247,92 @@ async function deliverInternalOfferToCandidate(db: any, userId: string | null, c
     trackActivity(db, userId, 'send_internal_offer', 'candidates', { candidateId: candidate.id }).catch(() => {});
   }
   return { html: letterHtml, newTitle };
+}
+
+// ── Multi-level offer approval chain ─────────────────────────────────────
+// The offer routes sequentially through the hiring manager and every manager
+// above them in the reporting line (employees.managerEmail). Each approver
+// signs off in turn; the letter reaches the candidate only after the FINAL
+// approver signs off. Any approver can send it back, which halts the chain
+// and returns it to the recruiter. (An empty chain = the pre-0050 legacy
+// single-manager gate, still handled by offerApprovalDecide.)
+type OfferApprovalStep = {
+  order: number;
+  name: string;
+  email: string;
+  status: 'pending' | 'approved' | 'sent_back';
+  actedName?: string | null;
+  note?: string | null;
+  decidedAt?: string | null;
+};
+
+async function buildOfferApproverChain(
+  db: any,
+  managerName: string,
+  managerEmail: string,
+): Promise<OfferApprovalStep[]> {
+  const steps: OfferApprovalStep[] = [
+    { order: 0, name: managerName || 'Hiring Manager', email: managerEmail, status: 'pending' },
+  ];
+  // Walk up the org chart from the hiring manager; each manager above becomes
+  // the next approval step. walkLeadershipChain de-dupes and caps depth.
+  const above = await walkLeadershipChain(db, managerEmail);
+  let order = 1;
+  for (const email of above) {
+    const emp = await db.query.employees.findFirst({ where: eq(employees.email, email) });
+    steps.push({ order: order++, name: emp?.name ?? email, email, status: 'pending' });
+  }
+  return steps;
+}
+
+async function notifyOfferApprover(
+  db: any,
+  row: { id: string; payload: any },
+  chain: OfferApprovalStep[],
+  stepIndex: number,
+  candidate: { id?: string; firstName: string; lastName: string },
+  kind: 'external' | 'internal',
+): Promise<void> {
+  const step = chain[stepIndex];
+  if (!step) return;
+  const payload: any = row.payload;
+  const roleLabel = kind === 'internal'
+    ? (payload?.comp?.newTitle ?? 'the role')
+    : (payload?.jobTitle ?? 'the role');
+  const candidateName = `${candidate.firstName} ${candidate.lastName}`.trim();
+  const letterHtml = kind === 'internal'
+    ? renderInternalOfferLetter(payload as InternalOfferLetterInput)
+    : renderOfferLetter(payload as OfferLetterInput);
+  const approvalUrl = `/offer-approval/${row.id}`;
+  const total = chain.length;
+  const isFinal = stepIndex === total - 1;
+  const stepLabel = `approval ${stepIndex + 1} of ${total}`;
+  const recipientNoun = kind === 'internal' ? 'employee' : 'candidate';
+  const priorLine = stepIndex > 0
+    ? `<p style="color:#4b5563;font-size:13px">Already signed off by: ${chain.slice(0, stepIndex).map((s) => escHtml(s.actedName || s.name)).join(', ')}.</p>`
+    : '';
+  const nextClause = isFinal
+    ? ` As the final approver, your sign-off sends the offer to the ${recipientNoun}.`
+    : ' Signing off passes it to the next approver in the chain.';
+  const body = `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">`
+    + `<p><strong>${escHtml(candidateName)}</strong> has reached the offer stage for <strong>${escHtml(roleLabel)}</strong>. `
+    + `You are ${stepLabel} in the offer approval chain.${nextClause} Please review the draft offer letter below, edit anything that needs fixing, then sign off — or send it back.</p>`
+    + priorLine
+    + `<p><a href="${approvalUrl}" style="display:inline-block;padding:8px 14px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Open, review &amp; sign off</a></p>`
+    + `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"/>`
+    + letterHtml + `</div>`;
+  try {
+    await db.insert(inboundEmails).values({
+      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+      fromName: 'Lightspeed Hiring',
+      toEmail: step.email,
+      subject: `Offer approval needed (${stepLabel}): ${candidateName} — ${roleLabel}`,
+      body,
+      replyTag: 'offer_approval',
+      source: 'simulated',
+      raw: { kind: 'offer_approval', approvalId: row.id, candidateId: candidate.id, approvalUrl, step: stepIndex },
+    });
+  } catch (err) { console.error('[offer-approval] inbox record failed:', err); }
 }
 
 export const candidatesRouter = router({
@@ -1103,39 +1191,24 @@ export const candidatesRouter = router({
       const managerName = (req as any)?.hiringManager ?? offer.reportsTo ?? 'Hiring Manager';
       const managerEmail = process.env.HIRING_MANAGER_EMAIL ?? process.env.HR_EMAIL ?? 'hiring-manager@lightspeedsystems.com';
 
+      const chain = await buildOfferApproverChain(ctx.db, managerName, managerEmail);
       const [row] = await ctx.db.insert(offerApprovals).values({
         candidateId: candidate.id,
         payload: offer as any,
         status: 'pending',
         kind: 'external',
+        chain: chain as any,
+        currentStep: 0,
         createdBy: ctx.user.id,
       }).returning();
 
-      const candidateName = `${candidate.firstName} ${candidate.lastName}`.trim();
-      const roleLabel = offer.jobTitle || 'the role';
-      const approvalUrl = `/offer-approval/${row.id}`;
-      const letterHtml = renderOfferLetter(offer);
-      const body = `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">`
-        + `<p><strong>${escHtml(candidateName)}</strong> has reached the offer stage for <strong>${escHtml(roleLabel)}</strong>. `
-        + `Please review the draft offer letter below, edit anything that needs fixing, then sign off to send it to the candidate — or send it back.</p>`
-        + `<p><a href="${approvalUrl}" style="display:inline-block;padding:8px 14px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Open, review &amp; sign off</a></p>`
-        + `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"/>`
-        + letterHtml + `</div>`;
-      try {
-        await ctx.db.insert(inboundEmails).values({
-          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
-          fromName: 'Lightspeed Hiring',
-          toEmail: managerEmail,
-          subject: `Offer approval needed: ${candidateName} — ${roleLabel}`,
-          body,
-          replyTag: 'offer_approval',
-          source: 'simulated',
-          raw: { kind: 'offer_approval', approvalId: row.id, candidateId: candidate.id, approvalUrl },
-        });
-      } catch (err) { console.error('[offer-approval] inbox record failed:', err); }
+      // Notify the first approver (the hiring manager). Each subsequent
+      // approver is notified as the chain advances in offerApprovalDecide.
+      await notifyOfferApprover(ctx.db, row, chain, 0, candidate, 'external');
 
       trackActivity(ctx.db, ctx.user.id, 'request_offer_approval', 'candidates', { candidateId: candidate.id }).catch(() => {});
-      return { ok: true, approvalId: row.id, approvalUrl, managerName };
+      const approvalUrl = `/offer-approval/${row.id}`;
+      return { ok: true, approvalId: row.id, approvalUrl, managerName, approvers: chain.length };
     }),
 
   // Recruiter: latest approval state for a candidate (drives the Offer section UI).
@@ -1146,7 +1219,16 @@ export const candidatesRouter = router({
         .where(eq(offerApprovals.candidateId, input.candidateId))
         .orderBy(desc(offerApprovals.createdAt)).limit(1);
       if (!row) return null;
-      return { id: row.id, status: row.status, managerName: row.managerName, managerNote: row.managerNote, decidedAt: row.decidedAt, sentToCandidateAt: row.sentToCandidateAt, createdAt: row.createdAt };
+      const chain = ((row as any).chain ?? []) as OfferApprovalStep[];
+      const currentStep = (row as any).currentStep ?? 0;
+      const approvedCount = chain.filter((cs) => cs.status === 'approved').length;
+      return {
+        id: row.id, status: row.status, managerName: row.managerName, managerNote: row.managerNote,
+        decidedAt: row.decidedAt, sentToCandidateAt: row.sentToCandidateAt, createdAt: row.createdAt,
+        totalSteps: chain.length || null,
+        approvedCount,
+        currentApproverName: (row.status === 'pending' && chain.length) ? (chain[currentStep]?.name ?? null) : null,
+      };
     }),
 
   // Public (tokenized): the manager's review view.
@@ -1160,6 +1242,8 @@ export const candidatesRouter = router({
       const html = kind === 'internal'
         ? renderInternalOfferLetter(row.payload as InternalOfferLetterInput)
         : renderOfferLetter(row.payload as OfferLetterInput);
+      const chain = ((row as any).chain ?? []) as OfferApprovalStep[];
+      const currentStep = (row as any).currentStep ?? 0;
       return {
         status: row.status,
         kind,
@@ -1168,6 +1252,12 @@ export const candidatesRouter = router({
         managerName: row.managerName,
         managerNote: row.managerNote,
         html,
+        // Multi-level chain progress (empty for legacy single-gate rows).
+        chain: chain.map((cs) => ({ order: cs.order, name: cs.name, status: cs.status })),
+        currentStep,
+        currentApproverName: chain.length ? (chain[currentStep]?.name ?? null) : null,
+        stepNumber: chain.length ? currentStep + 1 : null,
+        totalSteps: chain.length || null,
       };
     }),
 
@@ -1207,34 +1297,79 @@ export const candidatesRouter = router({
       const payload: any = row.payload;
       const roleLabel = kind === 'internal' ? (payload?.comp?.newTitle ?? 'the role') : (payload?.jobTitle ?? 'the role');
 
-      if (input.action === 'approve') {
+      const chain = ((row as any).chain ?? []) as OfferApprovalStep[];
+      const candidateName = `${candidate.firstName} ${candidate.lastName}`.trim();
+
+      const deliver = async () => {
         if (kind === 'internal') await deliverInternalOfferToCandidate(ctx.db, row.createdBy ?? null, candidate, payload as InternalOfferLetterInput);
         else await deliverOfferToCandidate(ctx.db, row.createdBy ?? null, candidate, payload as OfferLetterInput);
+      };
+      const notifySentBack = async () => {
+        try {
+          await ctx.db.insert(inboundEmails).values({
+            fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+            fromName: input.managerName ? `${input.managerName} (approver)` : 'Offer approver',
+            toEmail: process.env.HR_EMAIL ?? process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+            subject: `Offer sent back: ${candidateName} — ${roleLabel}`,
+            body: `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">`
+              + `<p>The draft offer for <strong>${escHtml(candidateName)}</strong> was sent back${input.managerName ? ` by ${escHtml(input.managerName)}` : ''} and was <strong>not</strong> sent to the candidate.</p>`
+              + `<p><strong>Reason:</strong> ${escHtml(input.note ?? '(none given)')}</p></div>`,
+            replyTag: 'offer_approval',
+            source: 'simulated',
+            raw: { kind: 'offer_sent_back', approvalId: row.id, candidateId: candidate.id },
+          });
+        } catch (err) { console.error('[offer-approval] send-back inbox failed:', err); }
+      };
+
+      // ---- Legacy single-manager gate (rows created before migration 0050) ----
+      if (chain.length === 0) {
+        if (input.action === 'approve') {
+          await deliver();
+          await ctx.db.update(offerApprovals)
+            .set({ status: 'approved', managerName: input.managerName ?? null, managerNote: input.note ?? null, decidedAt: new Date(), sentToCandidateAt: new Date(), updatedAt: new Date() })
+            .where(eq(offerApprovals.id, row.id));
+          return { ok: true, status: 'approved' as const };
+        }
         await ctx.db.update(offerApprovals)
-          .set({ status: 'approved', managerName: input.managerName ?? null, managerNote: input.note ?? null, decidedAt: new Date(), sentToCandidateAt: new Date(), updatedAt: new Date() })
-          .where(eq(offerApprovals.id, input.token));
-        return { ok: true, status: 'approved' as const };
+          .set({ status: 'sent_back', managerName: input.managerName ?? null, managerNote: input.note ?? null, decidedAt: new Date(), updatedAt: new Date() })
+          .where(eq(offerApprovals.id, row.id));
+        await notifySentBack();
+        return { ok: true, status: 'sent_back' as const };
       }
 
-      // send_back: return to the recruiter/HR inbox with the reason; do not advance.
+      // ---- Multi-level approval chain ----
+      const i = (row as any).currentStep ?? 0;
+      if (i < 0 || i >= chain.length) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This offer has already been fully decided.' });
+      }
+      const nowIso = new Date().toISOString();
+
+      if (input.action === 'approve') {
+        chain[i] = { ...chain[i], status: 'approved', actedName: input.managerName ?? null, note: input.note ?? null, decidedAt: nowIso };
+        const isFinal = i >= chain.length - 1;
+        if (isFinal) {
+          // Final approver: deliver the letter to the candidate and close out.
+          await deliver();
+          await ctx.db.update(offerApprovals)
+            .set({ chain: chain as any, status: 'approved', managerName: input.managerName ?? chain[i].name, managerNote: input.note ?? null, decidedAt: new Date(), sentToCandidateAt: new Date(), updatedAt: new Date() })
+            .where(eq(offerApprovals.id, row.id));
+          return { ok: true, status: 'approved' as const };
+        }
+        // Advance to the next approver and notify them; nothing goes to the candidate yet.
+        const next = i + 1;
+        await ctx.db.update(offerApprovals)
+          .set({ chain: chain as any, currentStep: next, updatedAt: new Date() })
+          .where(eq(offerApprovals.id, row.id));
+        await notifyOfferApprover(ctx.db, { id: row.id, payload }, chain, next, candidate, kind);
+        return { ok: true, status: 'advanced' as const, nextApproverName: chain[next].name, stepNumber: next + 1, totalSteps: chain.length };
+      }
+
+      // send_back at any step halts the chain and returns it to the recruiter.
+      chain[i] = { ...chain[i], status: 'sent_back', actedName: input.managerName ?? null, note: input.note ?? null, decidedAt: nowIso };
       await ctx.db.update(offerApprovals)
-        .set({ status: 'sent_back', managerName: input.managerName ?? null, managerNote: input.note ?? null, decidedAt: new Date(), updatedAt: new Date() })
-        .where(eq(offerApprovals.id, input.token));
-      const candidateName = `${candidate.firstName} ${candidate.lastName}`.trim();
-      try {
-        await ctx.db.insert(inboundEmails).values({
-          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
-          fromName: input.managerName ? `${input.managerName} (Hiring Manager)` : 'Hiring Manager',
-          toEmail: process.env.HR_EMAIL ?? process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
-          subject: `Offer sent back: ${candidateName} — ${roleLabel}`,
-          body: `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">`
-            + `<p>The draft offer for <strong>${escHtml(candidateName)}</strong> was sent back by the hiring manager and was <strong>not</strong> sent to the candidate.</p>`
-            + `<p><strong>Reason:</strong> ${escHtml(input.note ?? '(none given)')}</p></div>`,
-          replyTag: 'offer_approval',
-          source: 'simulated',
-          raw: { kind: 'offer_sent_back', approvalId: row.id, candidateId: candidate.id },
-        });
-      } catch (err) { console.error('[offer-approval] send-back inbox failed:', err); }
+        .set({ chain: chain as any, status: 'sent_back', managerName: input.managerName ?? null, managerNote: input.note ?? null, decidedAt: new Date(), updatedAt: new Date() })
+        .where(eq(offerApprovals.id, row.id));
+      await notifySentBack();
       return { ok: true, status: 'sent_back' as const };
     }),
 
@@ -1358,39 +1493,22 @@ export const candidatesRouter = router({
       const managerName = offer.comp.newManager ?? 'Hiring Manager';
       const managerEmail = process.env.HIRING_MANAGER_EMAIL ?? process.env.HR_EMAIL ?? 'hiring-manager@lightspeedsystems.com';
 
+      const chain = await buildOfferApproverChain(ctx.db, managerName, managerEmail);
       const [row] = await ctx.db.insert(offerApprovals).values({
         candidateId: candidate.id,
         payload: offer as any,
         status: 'pending',
         kind: 'internal',
+        chain: chain as any,
+        currentStep: 0,
         createdBy: ctx.user.id,
       }).returning();
 
-      const candidateName = `${candidate.firstName} ${candidate.lastName}`.trim();
-      const roleLabel = offer.comp.newTitle || 'the new role';
-      const approvalUrl = `/offer-approval/${row.id}`;
-      const letterHtml = renderInternalOfferLetter(offer);
-      const body = `<div style="font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;line-height:1.6;color:#1a1a1a">`
-        + `<p><strong>${escHtml(candidateName)}</strong> is moving into <strong>${escHtml(roleLabel)}</strong> (internal move). `
-        + `Please review the draft internal offer below, edit anything that needs fixing, then sign off to send it to the employee — or send it back.</p>`
-        + `<p><a href="${approvalUrl}" style="display:inline-block;padding:8px 14px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">Open, review &amp; sign off</a></p>`
-        + `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0"/>`
-        + letterHtml + `</div>`;
-      try {
-        await ctx.db.insert(inboundEmails).values({
-          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
-          fromName: 'Lightspeed Hiring',
-          toEmail: managerEmail,
-          subject: `Internal offer approval needed: ${candidateName} — ${roleLabel}`,
-          body,
-          replyTag: 'offer_approval',
-          source: 'simulated',
-          raw: { kind: 'offer_approval', approvalId: row.id, candidateId: candidate.id, approvalUrl },
-        });
-      } catch (err) { console.error('[internal-offer-approval] inbox record failed:', err); }
+      await notifyOfferApprover(ctx.db, row, chain, 0, candidate, 'internal');
 
       trackActivity(ctx.db, ctx.user.id, 'request_internal_offer_approval', 'candidates', { candidateId: candidate.id }).catch(() => {});
-      return { ok: true, approvalId: row.id, approvalUrl, managerName };
+      const approvalUrl = `/offer-approval/${row.id}`;
+      return { ok: true, approvalId: row.id, approvalUrl, managerName, approvers: chain.length };
     }),
 
   internalOfferPreview: protectedProcedure

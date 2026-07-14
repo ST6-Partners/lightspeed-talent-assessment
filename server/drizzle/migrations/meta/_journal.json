@@ -365,6 +365,13 @@
       "when": 1960000022000,
       "tag": "0049_interview_plan_interviewer_email",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1784039043038,
+      "tag": "0050_offer_approval_chain",
+      "breakpoints": true
     }
   ]
 }

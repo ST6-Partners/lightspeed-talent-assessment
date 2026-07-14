@@ -38,7 +38,7 @@ export default function OfferApproval() {
   const [html, setHtml] = useState<string>('');
   const [managerName, setManagerName] = useState('');
   const [note, setNote] = useState('');
-  const [done, setDone] = useState<null | { kind: 'approved' | 'sent_back'; msg: string }>(null);
+  const [done, setDone] = useState<null | { kind: 'approved' | 'advanced' | 'sent_back'; msg: string }>(null);
   const [savedFlash, setSavedFlash] = useState(false);
 
   useEffect(() => { if (view.data) { setP(view.data.payload); setHtml(view.data.html); } }, [view.data]);
@@ -47,9 +47,12 @@ export default function OfferApproval() {
     onSuccess: (r) => { setHtml(r.html); setSavedFlash(true); setTimeout(() => setSavedFlash(false), 2000); },
   });
   const decide = trpc.candidates.offerApprovalDecide.useMutation({
-    onSuccess: (r) => setDone(r.status === 'approved'
-      ? { kind: 'approved', msg: 'Signed off — the offer letter has been sent.' }
-      : { kind: 'sent_back', msg: 'Sent back to the hiring team. The candidate was not contacted.' }),
+    onSuccess: (r) => setDone(
+      r.status === 'approved'
+        ? { kind: 'approved', msg: 'Signed off — the offer letter has been sent to the candidate.' }
+        : r.status === 'advanced'
+          ? { kind: 'advanced', msg: `Signed off — forwarded to the next approver${(r as any).nextApproverName ? ` (${(r as any).nextApproverName})` : ''}. The candidate has not been contacted yet.` }
+          : { kind: 'sent_back', msg: 'Sent back to the hiring team. The candidate was not contacted.' }),
   });
   const err = save.error?.message || decide.error?.message;
 
@@ -71,8 +74,8 @@ export default function OfferApproval() {
     return (
       <Shell><div style={card}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
-          {done.kind === 'approved' ? <CheckCircle2 size={22} color="#15803d" /> : <XCircle size={22} color="#b45309" />}
-          <h2 style={{ margin: 0, fontSize: 18 }}>{done.kind === 'approved' ? 'Offer approved & sent' : 'Offer sent back'}</h2>
+          {done.kind === 'sent_back' ? <XCircle size={22} color="#b45309" /> : <CheckCircle2 size={22} color="#15803d" />}
+          <h2 style={{ margin: 0, fontSize: 18 }}>{done.kind === 'approved' ? 'Offer approved & sent' : done.kind === 'advanced' ? 'Signed off — forwarded' : 'Offer sent back'}</h2>
         </div>
         <p style={{ color: '#4b5563', fontSize: 14 }}>{done.msg}</p>
         <p style={{ color: '#9aa6b6', fontSize: 12 }}>You can close this window.</p>
@@ -96,6 +99,26 @@ export default function OfferApproval() {
         <h2 style={{ margin: '0 0 4px', fontSize: 18 }}>Approve {isInternal ? 'internal move' : 'offer'} for {view.data.candidateName}</h2>
         <p style={{ color: '#5b6675', fontSize: 13, margin: 0 }}>Review and edit the draft below, then sign off to send it — or send it back to the hiring team. Nothing is sent to the {isInternal ? 'employee' : 'candidate'} until you sign off.</p>
       </div>
+
+      {(view.data.totalSteps ?? 0) > 1 && (
+        <div style={{ ...card, marginBottom: 16, background: '#eff6ff', borderColor: '#bfdbfe' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
+            Multi-level approval — step {view.data.stepNumber} of {view.data.totalSteps}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {(view.data.chain ?? []).map((cs: any, idx: number) => (
+              <span key={idx} style={{ fontSize: 12, padding: '3px 9px', borderRadius: 999, border: '1px solid', ...(cs.status === 'approved' ? { background: '#dcfce7', borderColor: '#86efac', color: '#166534' } : cs.status === 'sent_back' ? { background: '#fef3c7', borderColor: '#fcd34d', color: '#92400e' } : idx === (view.data.currentStep ?? 0) ? { background: '#dbeafe', borderColor: '#93c5fd', color: '#1e40af', fontWeight: 700 } : { background: '#f1f5f9', borderColor: '#e2e8f0', color: '#64748b' }) }}>
+                {idx + 1}. {cs.name}{cs.status === 'approved' ? ' \u2713' : idx === (view.data.currentStep ?? 0) ? ' — you' : ''}
+              </span>
+            ))}
+          </div>
+          <p style={{ color: '#475569', fontSize: 12, margin: '10px 0 0' }}>
+            {view.data.stepNumber === view.data.totalSteps
+              ? 'You are the final approver — your sign-off sends the offer to the candidate.'
+              : 'Your sign-off forwards the offer to the next approver. The candidate is contacted only after the final approver signs off.'}
+          </p>
+        </div>
+      )}
 
       <div style={{ ...card, marginBottom: 16 }}>
         {!isInternal ? (
@@ -154,7 +177,7 @@ export default function OfferApproval() {
         <textarea style={{ ...inp, fontFamily: 'inherit' }} rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What needs to change?" />
         {err && <div style={{ color: '#b91c1c', fontSize: 13, marginTop: 10 }}>{err}</div>}
         <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-          <button style={{ ...btn('#15803d'), opacity: decide.isLoading ? 0.6 : 1 }} disabled={decide.isLoading} onClick={approve}>Approve &amp; send</button>
+          <button style={{ ...btn('#15803d'), opacity: decide.isLoading ? 0.6 : 1 }} disabled={decide.isLoading} onClick={approve}>{(view.data.totalSteps ?? 0) > 1 && view.data.stepNumber !== view.data.totalSteps ? 'Approve \u0026 forward' : 'Approve \u0026 send'}</button>
           <button style={{ ...btn('#b45309'), opacity: decide.isLoading || !note.trim() ? 0.6 : 1 }} disabled={decide.isLoading || !note.trim()} onClick={sendBack}>Send back</button>
         </div>
       </div>
