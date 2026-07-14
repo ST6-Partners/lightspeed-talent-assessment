@@ -729,6 +729,57 @@ export const candidatesRouter = router({
       return candidate;
     }),
 
+  // Resolve a candidate in the Review queue (below the auto-advance bar). A human
+  // either approves them (clears the flag so they proceed) or rejects them; both log.
+  resolveReview: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      decision: z.enum(['advance', 'reject']),
+      reason: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      const jobTitle = await getJobTitle(ctx.db, existing.jdId);
+
+      if (input.decision === 'reject') {
+        const reason = input.reason || 'Rejected after human review of the below-bar screen.';
+        const [candidate] = await ctx.db.update(candidates)
+          .set({ currentStage: 'Rejected', rejectionReason: reason, screenRecommendation: 'rejected', updatedAt: new Date() })
+          .where(eq(candidates.id, input.id))
+          .returning();
+        await ctx.db.insert(candidateStageHistory).values({
+          candidateId: input.id, fromStage: existing.currentStage, toStage: 'Rejected',
+          changedBy: ctx.user.id, reason,
+        });
+        await logDecision(ctx.db, {
+          candidateId: input.id, decisionType: 'manual_stage_change', outcome: 'rejected',
+          decidedByType: 'human', decidedBy: ctx.user.id, reason,
+          inputs: { from: 'review_queue', fromStage: existing.currentStage },
+        });
+        dispatchStageEmail('Rejected', existing.currentStage, {
+          firstName: existing.firstName, lastName: existing.lastName, email: existing.email, jobTitle,
+        }).catch(() => {});
+        await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+        trackActivity(ctx.db, ctx.user.id, 'review_reject', 'candidates', { candidateId: input.id }).catch(() => {});
+        return candidate;
+      }
+
+      const reason = input.reason || 'Approved after human review — cleared the below-bar flag to proceed.';
+      const [candidate] = await ctx.db.update(candidates)
+        .set({ screenRecommendation: 'advance', updatedAt: new Date() })
+        .where(eq(candidates.id, input.id))
+        .returning();
+      await logDecision(ctx.db, {
+        candidateId: input.id, decisionType: 'manual_stage_change', outcome: 'advanced',
+        decidedByType: 'human', decidedBy: ctx.user.id, reason,
+        inputs: { from: 'review_queue', stage: existing.currentStage },
+      });
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'review_advance', 'candidates', { candidateId: input.id }).catch(() => {});
+      return candidate;
+    }),
+
   // Mark assessment as sent (called when CCAT link is dispatched)
   markAssessmentSent: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))

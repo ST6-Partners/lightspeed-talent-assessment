@@ -20,6 +20,7 @@ const talentNav = [
   { path: '/hiring/intake', label: 'Intake', icon: ClipboardList },
   { path: '/hiring/requisitions', label: 'Requisitions', icon: ClipboardList },
   { path: '/hiring/candidates', label: 'Candidates', icon: Users },
+  { path: '/hiring/review', label: 'Review', icon: ClipboardCheck },
   { path: '/hiring/internal', label: 'Internal Pipeline', icon: UserCheck },
   { path: '/hiring/assessments', label: 'Assessments', icon: ClipboardCheck },
   { path: '/hiring/tasks', label: 'Work Sample', icon: Library },
