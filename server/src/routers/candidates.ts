@@ -40,6 +40,7 @@ import { getInternalReportConfig, setInternalReportConfig } from '../services/in
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 import { prepInterviewQuestions } from '../services/interviewPrep.js';
 import { seedCandidateResume, seedAssessmentResults, simulateUpstreamScores } from '../services/postAssessmentReview.js';
+import { rankOneCandidateIntoRole } from '../services/candidateRanking.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
 import { walkLeadershipChain } from '../services/orgChain.js';
 import { employees } from '../db/schema/employees.js';
@@ -426,6 +427,8 @@ export const candidatesRouter = router({
       // Seed the resume at application time. CCAT + EPP come later, when the
       // candidate reaches the Assessment stage.
       await seedCandidateResume(ctx.db, candidate.id, candidate).catch((err) => console.error('[create] seed resume failed:', err));
+      // Keep the role's ranking live: score this new applicant and slot them in (fire-and-forget).
+      rankOneCandidateIntoRole(ctx.db, candidate.id, ctx.user.id).catch((err) => console.error('[create] live ranking failed:', err));
 
       // Normal path — fire emails (non-blocking)
       emailApplicationReceived({ ...candidateData, jobTitle }).catch(() => {});

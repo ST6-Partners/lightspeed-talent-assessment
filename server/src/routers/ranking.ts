@@ -1,13 +1,15 @@
 // ============================================================
 // RANKING ROUTER — advisory candidate ranking for a role.
-// rankRole (re)builds the ranking; getForRole reads it back joined
-// with candidate basics for the ranked view. No stage changes here.
+// getForRole returns the live top 15 (best first, in-pool only).
+// rankRole rebuilds the whole ranking on demand. No stage changes here.
 // ============================================================
 import { z } from 'zod';
-import { eq, asc, desc } from 'drizzle-orm';
+import { eq, and, desc, notInArray, sql } from 'drizzle-orm';
 import { router, protectedProcedure } from '../trpc.js';
 import { candidateRankings, rankingRuns, candidates } from '../db/schema/hiring.js';
 import { rankRoleCandidates } from '../services/candidateRanking.js';
+
+const DROPPED = ['Rejected', 'Hired', 'Offered'] as const;
 
 export const rankingRouter = router({
   rankRole: protectedProcedure
@@ -25,12 +27,16 @@ export const rankingRouter = router({
         .where(eq(rankingRuns.jdId, input.jdId))
         .orderBy(desc(rankingRuns.createdAt))
         .limit(1);
-      if (!run) return { run: null, rankings: [] as any[] };
+
+      const inPool = and(
+        eq(candidateRankings.jdId, input.jdId),
+        notInArray(candidates.currentStage, DROPPED as any),
+      );
+
       const rankings = await ctx.db
         .select({
           id: candidateRankings.id,
           candidateId: candidateRankings.candidateId,
-          rank: candidateRankings.rank,
           recommendation: candidateRankings.recommendation,
           strengths: candidateRankings.strengths,
           concerns: candidateRankings.concerns,
@@ -41,8 +47,20 @@ export const rankingRouter = router({
         })
         .from(candidateRankings)
         .innerJoin(candidates, eq(candidates.id, candidateRankings.candidateId))
-        .where(eq(candidateRankings.jdId, input.jdId))
-        .orderBy(asc(candidateRankings.rank));
-      return { run, rankings };
+        .where(inPool)
+        .orderBy(desc(candidateRankings.sortScore))
+        .limit(15);
+
+      const [{ n }] = (await ctx.db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(candidateRankings)
+        .innerJoin(candidates, eq(candidates.id, candidateRankings.candidateId))
+        .where(inPool)) as any;
+
+      return {
+        run: run ?? null,
+        total: n ?? rankings.length,
+        rankings,
+      };
     }),
 });
