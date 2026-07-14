@@ -32,6 +32,7 @@ export default function ScoreValues() {
   const [capAiShown, setCapAiShown] = useState(false);
   const [capSuggest, setCapSuggest] = useState<Record<string, { score: number; rationale: string }>>({});
   const [capRecMode, setCapRecMode] = useState<'ai' | 'placeholder' | null>(null);
+  const [capRecError, setCapRecError] = useState<string | null>(null);
   const [aiShown, setAiShown] = useState(false); // AI scorecard shown (filled) vs cleared
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
@@ -89,15 +90,15 @@ export default function ScoreValues() {
     const cid = params.get('id');
     const rid = params.get('round');
     if (cid) {
-      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setAiShown(false);
+      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setAiShown(false);
       setInterviewId(rid ?? ''); setBaseline(snap('', today(), rid ?? '', {}));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectCandidate = (id: string) => {
-    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setInterviewId(''); setAiShown(false); setBaseline(snap('', today(), '', {}));
+    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setInterviewId(''); setAiShown(false); setBaseline(snap('', today(), '', {}));
   };
-  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setAiShown(false); setBaseline(snap('', today(), interviewId, {})); };
+  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setAiShown(false); setBaseline(snap('', today(), interviewId, {})); };
   const loadReview = (r: any) => {
     setCurrentReviewId(r.id);
     setReviewerId(r.reviewerId ?? '');
@@ -108,7 +109,7 @@ export default function ScoreValues() {
     setScores(m);
     const cm: Record<string, number> = {};
     (r.capabilityScores ?? []).forEach((s: any) => { cm[s.capabilityItemId] = s.score; });
-    setCapScores(cm); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null);
+    setCapScores(cm); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null);
     setBaseline(snap(r.reviewerId ?? '', new Date(r.reviewedAt).toISOString().slice(0, 10), r.interviewId ?? '', m, cm));
   };
 
@@ -128,18 +129,21 @@ export default function ScoreValues() {
 
   const setScore = (valueId: string, score: number) => setScores((p) => ({ ...p, [valueId]: score }));
   const setCapScore = (id: string, score: number) => setCapScores((p) => ({ ...p, [id]: score }));
-  const toggleCapabilityRecommendation = () => {
-    if (capAiShown) { setCapScores({}); setCapSuggest({}); setCapRecMode(null); setCapAiShown(false); return; }
+  const toggleCapabilityRecommendation = async () => {
+    if (capAiShown) { setCapScores({}); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setCapAiShown(false); return; }
     if (!candidateId) return;
-    capRecMutation.mutate({ candidateId }, {
-      onSuccess: (res: any) => {
-        const sc: Record<string, number> = {};
-        const sg: Record<string, { score: number; rationale: string }> = {};
-        (res?.items ?? []).forEach((it: any) => { sc[it.capabilityItemId] = it.score; sg[it.capabilityItemId] = { score: it.score, rationale: it.rationale }; });
-        setCapScores((prev) => ({ ...prev, ...sc }));
-        setCapSuggest(sg); setCapRecMode(res?.mode ?? null); setCapAiShown(true);
-      },
-    });
+    setCapRecError(null);
+    try {
+      const res: any = await capRecMutation.mutateAsync({ candidateId });
+      const sc: Record<string, number> = {};
+      const sg: Record<string, { score: number; rationale: string }> = {};
+      (res?.items ?? []).forEach((it: any) => { sc[it.capabilityItemId] = it.score; sg[it.capabilityItemId] = { score: it.score, rationale: it.rationale }; });
+      if (!Object.keys(sc).length) { setCapRecError('No capability items to score yet.'); return; }
+      setCapScores((prev) => ({ ...prev, ...sc }));
+      setCapSuggest(sg); setCapRecMode(res?.mode ?? null); setCapAiShown(true);
+    } catch (err: any) {
+      setCapRecError(err?.message ? `Couldn't generate a recommendation: ${err.message}` : "Couldn't generate a recommendation. Try again.");
+    }
   };
   const toggleExpand = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
@@ -386,6 +390,9 @@ export default function ScoreValues() {
                   <span className="text-xs text-ls-ink-3">avg <b className="text-ls-ink">{capAvg ?? '—'}</b></span>
                 </div>
               </div>
+              {capRecError && (
+                <div className="text-[11px] text-red-600 mb-2">{capRecError}</div>
+              )}
               {capAiShown && capRecMode === 'placeholder' && (
                 <div className="text-[11px] text-ls-watch mb-2">Sandbox draft — no AI model connected. Set ANTHROPIC_API_KEY for a suggestion grounded in the interview notes.</div>
               )}
