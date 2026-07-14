@@ -123,8 +123,6 @@ interface QuestionGenInput {
   valueScores?: Array<{ value: string; score: number }>;
   resumeReviewNotes?: string | null;
   resumeReviewScore?: number | null;
-  referenceCheckNotes?: string | null;
-  referenceCheckScore?: number | null;
   workSampleScore?: number | null;
   ccatScore?: number | null;
 }
@@ -203,7 +201,6 @@ interface FeedbackInput {
   eppValuesMatchScore?: number | null;
   workSampleScore?: number | null;
   resumeReviewScore?: number | null;
-  referenceCheckScore?: number | null;
 }
 
 export async function analyzeInterviewTranscript(
@@ -241,7 +238,6 @@ Prior scores:
 - EPP Values Match: ${input.eppValuesMatchScore ?? 'N/A'}%
 - Work Sample: ${input.workSampleScore ?? 'N/A'}
 - Resume Review: ${input.resumeReviewScore ?? 'N/A'}
-- Reference Check: ${input.referenceCheckScore ?? 'N/A'}
 
 Planned interview questions:
 ${questionList}
@@ -600,133 +596,6 @@ Return ONLY a JSON array. Each element:
   } catch (err) {
     console.error('[AI] screenResumeRequirements failed — falling back to keyword screen:', err);
     return keywordScreen(requirements, resumeText);
-  }
-}
-
-
-// ============================================================
-// REFERENCE CHECK — agent that assembles a balanced reference
-// report (good signals + concerns) for a finalist, to inform the
-// offer decision. Runs after the interview, before the offer.
-//
-// IMPORTANT (compliance): this does NOT scrape the open web for a
-// real named person. Automated background/reference research is a
-// regulated activity (consent / FCRA-style rules, accuracy, and
-// defamation risk) and must clear the security/legal review before
-// it runs against real applicants. This function synthesizes a
-// structured report from the information the app already holds and
-// is clearly marked as an AI draft to verify. `fetchReferenceSource`
-// is the seam where a compliant provider / candidate-supplied
-// references / (post-legal-review) search tool plugs in later.
-// ============================================================
-
-const REFERENCE_MODEL = 'claude-sonnet-4-6';
-
-export interface ReferenceCheckInput {
-  firstName: string;
-  lastName: string;
-  jobTitle?: string;
-  linkedinUrl?: string | null;
-  notes?: string | null;
-  interviewFeedbackHr?: string | null;
-  interviewScore?: number | null;
-  // Optional external material from a compliant reference source (empty for now).
-  externalReferenceMaterial?: string | null;
-}
-
-export interface ReferenceCheckResult {
-  positives: string[];
-  concerns: string[];
-  summary: string;
-  recommendation: 'proceed' | 'proceed_with_caution' | 'flag_for_review';
-  confidence: number;               // 0–100, how well-supported the report is
-  mode: 'ai' | 'placeholder';       // 'placeholder' = sandbox/no-key draft
-  provenance?: DecisionProvenance;  // Phase 2 — set on the AI path
-}
-
-// Seam for a real reference source. Returns null today (no external
-// research performed). A compliant provider or candidate-provided
-// references get wired in here later.
-async function fetchReferenceSource(_input: ReferenceCheckInput): Promise<string | null> {
-  return null;
-}
-
-function placeholderReference(input: ReferenceCheckInput): ReferenceCheckResult {
-  const name = `${input.firstName} ${input.lastName}`.trim();
-  return {
-    positives: [
-      `Interview signal on file for ${name}${input.interviewScore != null ? ` (interview score ${input.interviewScore})` : ''}.`,
-      'No negative signals in the information currently on file.',
-    ],
-    concerns: [
-      'No verified external references gathered yet — connect a reference source to populate this.',
-    ],
-    summary:
-      'Draft reference report generated from on-file data only. No external references were gathered. Verify with real references before relying on this.',
-    recommendation: 'proceed_with_caution',
-    confidence: 20,
-    mode: 'placeholder',
-  };
-}
-
-export async function runReferenceCheck(input: ReferenceCheckInput): Promise<ReferenceCheckResult> {
-  const external = await fetchReferenceSource(input);
-
-  if (SANDBOX) {
-    console.log('[AI SANDBOX] runReferenceCheck | placeholder draft (no ANTHROPIC_API_KEY)');
-    return placeholderReference(input);
-  }
-
-  const system = `You are assisting an HR team with a reference-check summary for a job finalist,
-run after their interview and before an offer. Produce a BALANCED report: genuine positive signals
-AND any concerns, but only from the material provided. Do NOT invent references, employers, or facts,
-and do NOT speculate about protected characteristics. If there is little material, say so and keep
-confidence low. This is an AI draft to be verified with real references — never a final background check.
-Return ONLY JSON:
-{
-  "positives": ["..."],
-  "concerns": ["..."],
-  "summary": "2-3 sentences",
-  "recommendation": "proceed" | "proceed_with_caution" | "flag_for_review",
-  "confidence": 0-100
-}`;
-
-  const user = `Finalist: ${input.firstName} ${input.lastName}
-Role: ${input.jobTitle ?? 'Unknown'}
-LinkedIn: ${input.linkedinUrl || 'not provided'}
-Interview score: ${input.interviewScore ?? 'N/A'}
-Interview feedback (HR): ${input.interviewFeedbackHr || 'none on file'}
-Recruiter notes: ${input.notes || 'none'}
-External reference material: ${external || 'none gathered (no compliant reference source connected yet)'}`;
-
-  try {
-    const meta = await callClaudeMeta(system, user, REFERENCE_MODEL);
-    const raw = meta.text;
-    const fenced = raw.replace(/```json|```/g, '');
-    const start = fenced.indexOf('{');
-    const end = fenced.lastIndexOf('}');
-    const parsed = JSON.parse(fenced.slice(start, end + 1));
-    return {
-      positives: Array.isArray(parsed.positives) ? parsed.positives.map(String) : [],
-      concerns: Array.isArray(parsed.concerns) ? parsed.concerns.map(String) : [],
-      summary: String(parsed.summary ?? ''),
-      recommendation: ['proceed', 'proceed_with_caution', 'flag_for_review'].includes(parsed.recommendation)
-        ? parsed.recommendation
-        : 'proceed_with_caution',
-      confidence: Math.max(0, Math.min(100, Number(parsed.confidence) || 0)),
-      mode: 'ai',
-      provenance: {
-        model: meta.model,
-        requestedModel: meta.requestedModel,
-        promptId: PROMPTS.referenceCheck.id,
-        promptVersion: PROMPTS.referenceCheck.version,
-        inputTokens: meta.inputTokens,
-        outputTokens: meta.outputTokens,
-      },
-    };
-  } catch (err) {
-    console.error('[AI] runReferenceCheck failed — returning placeholder:', err);
-    return placeholderReference(input);
   }
 }
 

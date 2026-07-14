@@ -109,7 +109,6 @@ export async function processInterviewFeedback(input: ProcessInterviewInput): Pr
     eppValuesMatchScore: candidate.eppValuesMatchScore,
     workSampleScore: candidate.workSampleScore,
     resumeReviewScore: candidate.resumeReviewScore,
-    referenceCheckScore: (candidate as any).referenceCheckScore,
   });
 
   await db.update(candidates)

@@ -165,7 +165,6 @@ export async function generateRoundFeedback(roundId: string, transcriptIn?: stri
     eppValuesMatchScore: candidate.eppValuesMatchScore,
     workSampleScore: candidate.workSampleScore,
     resumeReviewScore: candidate.resumeReviewScore,
-    referenceCheckScore: (candidate as any).referenceCheckScore,
   });
 
   await db.update(candidateInterviews).set({

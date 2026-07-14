@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, FileCheck } from 'lucide-react';
+import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const STAGES = [
@@ -48,7 +48,6 @@ export default function Candidates() {
   });
   const [deptFilter, setDeptFilter] = useState('');
   const [collapsedRoles, setCollapsedRoles] = useState<Record<string, boolean>>({});
-  const [openRefs, setOpenRefs] = useState<Record<string, boolean>>({});
 
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(
     stageFilter ? { stage: stageFilter } : undefined
@@ -56,8 +55,6 @@ export default function Candidates() {
   const { data: jobDescriptions } = trpc.jobDescriptions.list.useQuery();
   const { data: requisitions } = trpc.requisitions.list.useQuery();
   const { data: departmentsList } = trpc.departments.list.useQuery();
-  const { data: refCapData } = trpc.references.getFinalistCap.useQuery();
-  const referenceCap = refCapData?.cap ?? 3;
   const deptByReq: Record<string, string> = {};
   for (const r of (requisitions ?? []) as any[]) deptByReq[r.id] = r.department;
   const jdDepartments = Array.from(new Set(((jobDescriptions ?? []) as any[]).map((j) => deptByReq[j.reqId]).filter(Boolean))).sort();
@@ -131,8 +128,6 @@ export default function Candidates() {
   const FUNNEL_STAGES = ['Applied', 'Assessment', 'Values Review', 'Work Sample', 'Interview Scheduled', 'Interviewed', 'Offered'] as const;
   const SHORT: Record<string, string> = { 'Applied': 'App', 'Assessment': 'Assess', 'Values Review': 'Values', 'Work Sample': 'Sample', 'Interview Scheduled': 'Sched', 'Interviewed': 'Intv', 'Offered': 'Offer' };
   const toggleRole = (jdId: string) => setCollapsedRoles((m) => ({ ...m, [jdId]: !m[jdId] }));
-  const toggleRefs = (jdId: string) => setOpenRefs((m) => ({ ...m, [jdId]: !m[jdId] }));
-  const hasRefCheck = (c: any) => c.referenceCheckScore != null || (c.referenceCheckNotes != null && String(c.referenceCheckNotes).trim().length > 0) || (c.referencesResponded ?? 0) > 0;
 
   const visibleCandidates = ((candidates ?? []) as any[]).filter((c: any) =>
     (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal)) &&
@@ -151,12 +146,10 @@ export default function Candidates() {
   const roleGroups = Array.from(groupMap.entries()).map(([jdId, cands]) => {
     const counts: Record<string, number> = {};
     for (const c of cands) counts[c.currentStage] = (counts[c.currentStage] ?? 0) + 1;
-    const refDone = cands.filter((c: any) => hasRefCheck(c));
     return {
       jdId,
       cands,
       counts,
-      refDone,
       title: jdId === 'none' ? 'Unassigned role' : getJdTitle(jdId),
       dept: jdId === 'none' ? '' : (deptByReq[jdById[jdId]?.reqId] ?? ''),
       hm: jdId === 'none' ? '' : (reqById[jdById[jdId]?.reqId]?.hiringManager ?? ''),
@@ -440,16 +433,6 @@ export default function Candidates() {
                           {g.hm && <span>{g.hm}</span>}
                         </div>
                       </div>
-                      <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => toggleRefs(g.jdId)}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-700 hover:bg-gray-50"
-                        >
-                          <FileCheck size={14} className="text-gray-400" />
-                          {g.refDone.length}/{referenceCap} references done
-                          <ChevronDown size={13} className={`text-gray-400 transition-transform ${openRefs[g.jdId] ? '' : '-rotate-90'}`} />
-                        </button>
-                      </div>
                     </div>
                     <div className="flex gap-2 mt-3 ml-6">
                       {FUNNEL_STAGES.map((st) => {
@@ -465,29 +448,6 @@ export default function Candidates() {
                       })}
                     </div>
                   </div>
-                  {openRefs[g.jdId] && (
-                    <div className="px-4 pb-3">
-                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                        <div className="text-xs font-medium text-gray-600 mb-2">Reference checks for this role</div>
-                        {g.refDone.length === 0 ? (
-                          <div className="text-xs text-gray-400">No reference checks done yet.</div>
-                        ) : (
-                          <div className="space-y-1">
-                            {g.refDone.map((c: any) => (
-                              <div
-                                key={c.id}
-                                onClick={() => setSelectedId(c.id)}
-                                className="flex items-center justify-between gap-2 text-xs bg-white rounded px-2.5 py-1.5 cursor-pointer hover:bg-gray-100 border border-gray-100"
-                              >
-                                <span className="text-gray-800 font-medium">{c.firstName} {c.lastName}</span>
-                                <span className="text-gray-500" title="AI confidence in its reference write-up. Not a candidate grade.">{c.referenceCheckScore != null ? `${c.referenceCheckScore}% confidence` : ((c.referencesResponded ?? 0) > 0 ? 'Responses in' : 'Recorded')}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
                   {!collapsed && (
                     <div className="border-t border-gray-100 overflow-x-auto">
                       <table className="w-full">
@@ -580,7 +540,6 @@ export default function Candidates() {
               { label: 'Values Match', value: (selected as any).companyValuesMatchScore != null ? `${(selected as any).companyValuesMatchScore}%` : null },
               { label: 'Work Sample', value: selected.workSampleScore },
               { label: 'Resume Review', value: selected.resumeReviewScore },
-              { label: 'Reference Confidence', value: selected.referenceCheckScore != null ? `${selected.referenceCheckScore}%` : null, hint: 'How well-supported the AI reference write-up is, based on the material provided. Not a candidate grade.' },
               { label: 'Interview Score', value: (selected as any).interviewScore },
             ].map(({ label, value, hint }: any) => (
               <div key={label} className="bg-gray-50 rounded p-2" title={hint}>
@@ -707,9 +666,6 @@ export default function Candidates() {
           {/* Resume screen — checks resume vs REQUIRED qualifications only */}
           <CombinedScreenSection key={selected.id} candidateId={selected.id} existingSummary={(selected as any).screenSummary ?? null} onChanged={refetch} />
 
-          {/* Reference check — agent report (after interview, before offer) */}
-          <ReferenceCheckSection key={`ref-${selected.id}`} candidateId={selected.id} existingNotes={(selected as any).referenceCheckNotes ?? null} onChanged={refetch} stage={selected.currentStage} />
-
           {/* Offer letter — internal moves get a before/now comparison; external gets the standard letter */}
           {(selected as any).isInternal
             ? <InternalOfferSection key={`ioffer-${selected.id}`} candidateId={selected.id} onChanged={refetch} />
@@ -721,11 +677,6 @@ export default function Candidates() {
               label="Notes"
               value={selected.notes ?? ''}
               onSave={(v) => saveNotes(selected.id, 'notes', v)}
-            />
-            <EditableTextarea
-              label="Reference Check Notes"
-              value={(selected as any).referenceCheckNotes ?? ''}
-              onSave={(v) => saveNotes(selected.id, 'referenceCheckNotes', v)}
             />
           </Section>
 
@@ -746,7 +697,6 @@ const DECISION_LABELS: Record<string, string> = {
   work_sample: 'Work sample',
   interview_questions: 'Interview questions',
   interview_feedback: 'Interview feedback',
-  reference_check: 'Reference check',
   manual_stage_change: 'Manual stage change',
 };
 
@@ -1208,150 +1158,6 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged }: { ca
 
       {!result && existingSummary && (
         <div className="text-xs text-gray-600 whitespace-pre-wrap mt-1">{existingSummary}</div>
-      )}
-    </Section>
-  );
-}
-
-function ReferenceCheckSection({ candidateId, existingNotes, onChanged, stage }: { candidateId: string; existingNotes: string | null; onChanged?: () => void; stage?: string }) {
-  const isFinalist = stage === 'Interviewed' || stage === 'Offered';
-  const [result, setResult] = useState<any>(null);
-  const [copiedRef, setCopiedRef] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', relationship: '' });
-
-  const refsQuery = trpc.references.list.useQuery({ candidateId });
-  const addRef = trpc.references.add.useMutation({ onSuccess: () => { setForm({ name: '', email: '', relationship: '' }); refsQuery.refetch(); } });
-  const removeRef = trpc.references.remove.useMutation({ onSuccess: () => refsQuery.refetch() });
-  const sendReqs = trpc.references.sendRequests.useMutation({ onSuccess: () => refsQuery.refetch() });
-  const run = trpc.candidates.referenceCheck.useMutation({ onSuccess: (r) => { setResult(r); onChanged?.(); } });
-
-  const refs = refsQuery.data ?? [];
-  const responded = refs.filter((r: any) => r.status === 'responded').length;
-
-  const recLabel: Record<string, string> = { proceed: 'Proceed', proceed_with_caution: 'Proceed with caution', flag_for_review: 'Flag for review' };
-  const recColor: Record<string, string> = {
-    proceed: 'text-green-700 bg-green-50 border-green-200',
-    proceed_with_caution: 'text-amber-700 bg-amber-50 border-amber-200',
-    flag_for_review: 'text-red-700 bg-red-50 border-red-200',
-  };
-  const statusColor: Record<string, string> = {
-    pending: 'bg-gray-100 text-gray-600', requested: 'bg-blue-100 text-blue-700', responded: 'bg-green-100 text-green-700',
-  };
-
-  return (
-    <Section title="Reference Check">
-      <div className="text-xs text-gray-500">
-        Run at the finalist stage. Add the references the candidate provided, email them a short questionnaire, then summarize the replies into a red-flags / positives report. Informational — it does not reject the candidate.
-      </div>
-
-      {/* Reference list */}
-      <div className="space-y-1">
-        {refs.length === 0 && <div className="text-xs text-gray-400 italic">No references added yet.</div>}
-        {refs.map((r: any) => (
-          <div key={r.id} className="flex items-center justify-between gap-2 bg-gray-50 rounded p-2">
-            <div className="min-w-0">
-              <div className="text-xs font-medium text-gray-800 truncate">{r.name} <span className="text-gray-400 font-normal">{r.relationship ? `· ${r.relationship}` : ''}</span></div>
-              <div className="text-xs text-gray-500 truncate">{r.email}</div>
-              {r.status === 'responded' && r.response && (
-                <div className="text-xs text-gray-700 mt-1 whitespace-pre-wrap">
-                  {r.wouldRehire ? <span className="font-medium">Would rehire: {r.wouldRehire}. </span> : null}{r.response}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${statusColor[r.status] ?? 'bg-gray-100 text-gray-600'}`}>{r.status}</span>
-              <button
-                onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/reference/${r.token}`); setCopiedRef(r.id); setTimeout(() => setCopiedRef(null), 1500); }}
-                title="Copy the reference's private response link"
-                className="text-[11px] text-gray-400 hover:text-ls-primary whitespace-nowrap"
-              >
-                {copiedRef === r.id ? 'Copied' : 'Copy link'}
-              </button>
-              <button onClick={() => removeRef.mutate({ id: r.id })} className="text-xs text-gray-400 hover:text-red-600">✕</button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Add a reference */}
-      <div className="grid grid-cols-3 gap-1">
-        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Name"
-          className="px-2 py-1 border border-gray-300 rounded text-xs" />
-        <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="Email"
-          className="px-2 py-1 border border-gray-300 rounded text-xs" />
-        <input value={form.relationship} onChange={(e) => setForm({ ...form, relationship: e.target.value })} placeholder="Relationship"
-          className="px-2 py-1 border border-gray-300 rounded text-xs" />
-      </div>
-      <button
-        onClick={() => addRef.mutate({ candidateId, name: form.name, email: form.email, relationship: form.relationship || undefined })}
-        disabled={!form.name.trim() || !form.email.trim() || addRef.isLoading}
-        className="text-xs px-3 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-      >
-        + Add reference
-      </button>
-      {(form.name.trim() || form.email.trim()) && (!form.name.trim() || !form.email.trim()) && (
-        <div className="text-xs text-gray-400 mt-1">Enter both a name and an email to add a reference.</div>
-      )}
-      {addRef.error && <div className="text-xs text-red-600 mt-1">{addRef.error.message.includes('email') ? 'That email address is not valid. Enter a real email (e.g. name@company.com).' : addRef.error.message}</div>}
-
-      {/* Actions */}
-      <div className="flex gap-2 pt-1">
-        <button
-          onClick={() => sendReqs.mutate({ candidateId })}
-          disabled={refs.length === 0 || sendReqs.isLoading || !isFinalist}
-          className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50"
-        >
-          {sendReqs.isLoading ? 'Sending…' : 'Email reference requests'}
-        </button>
-        <button
-          onClick={() => run.mutate({ id: candidateId })}
-          disabled={run.isLoading || !isFinalist}
-          className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
-        >
-          {run.isLoading ? 'Summarizing…' : 'Summarize references'}
-        </button>
-      </div>
-      {!isFinalist && <div className="text-xs text-amber-600">Reference checks unlock at the finalist stage (after interviews). Current stage: {stage ?? '—'}.</div>}
-      {sendReqs.error && (
-        <div className="text-xs text-red-600 space-y-1">
-          <div>{sendReqs.error.message}</div>
-          <button
-            onClick={() => sendReqs.mutate({ candidateId, override: true })}
-            disabled={sendReqs.isLoading}
-            className="text-xs px-2 py-1 border border-red-300 text-red-700 rounded hover:bg-red-50 disabled:opacity-50"
-          >
-            Override cap and send anyway
-          </button>
-        </div>
-      )}
-      {sendReqs.data && <div className="text-xs text-gray-500">Sent {sendReqs.data.sent} request(s).</div>}
-      <div className="text-xs text-gray-400">{responded}/{refs.length} references responded.</div>
-
-      {/* Summary */}
-      {result && (
-        <div className="mt-1 space-y-2">
-          <div className={`text-xs font-semibold rounded border p-2 ${recColor[result.recommendation] ?? 'text-gray-700 bg-gray-50 border-gray-200'}`}>
-            {recLabel[result.recommendation] ?? result.recommendation} · {result.confidence}% confidence
-            {result.mode === 'placeholder' ? ' · AI draft (no reference responses yet)' : ' · AI draft — verify'}
-          </div>
-          {result.summary && <div className="text-xs text-gray-700">{result.summary}</div>}
-          {result.positives?.length > 0 && (
-            <div>
-              <div className="text-xs font-medium text-green-700 mb-0.5">Positive signals</div>
-              <ul className="list-disc list-inside">{result.positives.map((x: string, i: number) => <li key={i} className="text-xs text-green-700">{x}</li>)}</ul>
-            </div>
-          )}
-          {result.concerns?.length > 0 && (
-            <div>
-              <div className="text-xs font-medium text-amber-700 mb-0.5">Concerns</div>
-              <ul className="list-disc list-inside">{result.concerns.map((x: string, i: number) => <li key={i} className="text-xs text-amber-700">{x}</li>)}</ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {!result && existingNotes && (
-        <div className="text-xs text-gray-600 whitespace-pre-wrap mt-1">{existingNotes}</div>
       )}
     </Section>
   );

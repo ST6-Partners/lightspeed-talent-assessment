@@ -65,14 +65,6 @@ export const PROMPTS = {
     lastRevised: '2026-07-14',
     changelog: ['1.0.0 — initial registry entry.'],
   },
-  referenceCheck: {
-    id: 'reference-check',
-    version: '1.0.0',
-    model: 'claude-sonnet-4-6',
-    purpose: 'Synthesize a balanced reference report from held information; not a web scrape; marked AI draft.',
-    lastRevised: '2026-07-14',
-    changelog: ['1.0.0 — initial registry entry.'],
-  },
 } as const;
 
 export type PromptKey = keyof typeof PROMPTS;

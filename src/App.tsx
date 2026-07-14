@@ -5,7 +5,6 @@ import IntakeEdit from './pages/IntakeEdit';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import WorkSample from './pages/WorkSample';
-import Reference from './pages/Reference';
 import BookInterview from './pages/BookInterview';
 import ApplyInternal from './pages/ApplyInternal';
 import Approve from './pages/Approve';
@@ -33,7 +32,6 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/work-sample/:token" element={<WorkSample />} />
-      <Route path="/reference/:token" element={<Reference />} />
       <Route path="/book-interview/:token" element={<BookInterview />} />
       <Route path="/apply-internal/:jdId" element={<ApplyInternal />} />
       <Route path="/approve/:token" element={<Approve />} />

@@ -343,10 +343,9 @@ export function simulateUpstreamScores(candidate: any, toStage: string): Record<
     // simulated sample data. Replaces the old one-line stub.
     if (candidate.workSampleNotes == null) patch.workSampleNotes = simulatedWorkSampleBreakdown(wsScore);
   }
-  // Interviewed (finalist) -> interview score + reference confidence.
+  // Interviewed (finalist) -> interview score.
   if (target >= idx('Interviewed')) {
     if (candidate.interviewScore == null) patch.interviewScore = rand(65, 31);          // 65-95
-    if (candidate.referenceCheckScore == null) patch.referenceCheckScore = rand(70, 26); // 70-95
   }
   return patch;
 }

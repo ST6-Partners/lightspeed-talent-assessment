@@ -157,10 +157,8 @@ export const candidates = pgTable('candidates', {
   workSampleSubmittedAt: timestamp('work_sample_submitted_at', { withTimezone: true }),
   workSampleNotes: text('work_sample_notes'),
   resumeReviewScore: integer('resume_review_score'),
-  referenceCheckScore: integer('reference_check_score'),
-  // Work sample + resume + reference check notes
+  // Work sample + resume notes
   resumeReviewNotes: text('resume_review_notes'),
-  referenceCheckNotes: text('reference_check_notes'),
   valuesMatchNotes: text('values_match_notes'),
   // Combined screen (resume + values + skills) — one automated screen result
   skillsFitScore: integer('skills_fit_score'),
@@ -230,24 +228,5 @@ export const emailLog = pgTable('email_log', {
   status: emailStatusEnum('status').notNull().default('pending'),
   error: text('error'),
   sentAt: timestamp('sent_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-
-// ── candidate_references (candidate-provided references + responses) ──
-export const candidateReferences = pgTable('candidate_references', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  candidateId: uuid('candidate_id')
-    .references(() => candidates.id, { onDelete: 'cascade' })
-    .notNull(),
-  name: varchar('name', { length: 200 }).notNull(),
-  email: varchar('email', { length: 300 }).notNull(),
-  relationship: varchar('relationship', { length: 200 }),
-  token: varchar('token', { length: 64 }).notNull(),
-  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending | requested | responded
-  requestedAt: timestamp('requested_at', { withTimezone: true }),
-  respondedAt: timestamp('responded_at', { withTimezone: true }),
-  response: text('response'),
-  wouldRehire: varchar('would_rehire', { length: 20 }), // yes | no | unsure
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

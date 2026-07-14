@@ -8,7 +8,7 @@ import { eq, desc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { randomUUID } from 'node:crypto';
 import { router, protectedProcedure, publicProcedure } from '../trpc.js';
-import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions, emailLog, candidateReferences } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions, emailLog } from '../db/schema/hiring.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { offerApprovals } from '../db/schema/offerApprovals.js';
 import { candidateEppScores } from '../db/schema/epp.js';
@@ -33,7 +33,6 @@ import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
 import { scoreSkillsFit } from '../services/ai.js';
 import { computeEppScans, ingestEppResults } from '../services/eppScans.js';
-import { runReferenceCheck } from '../services/ai.js';
 import { draftTransitionPlan } from '../services/ai.js';
 import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, STANDARD_INTERNAL_OFFER_CLAUSES, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
 import { createOfferAgreement } from '../services/adobeSign.js';
@@ -356,20 +355,7 @@ export const candidatesRouter = router({
       let result = rows;
       if (input?.jdId) result = result.filter((c) => c.jdId === input.jdId);
       if (input?.stage) result = result.filter((c) => c.currentStage === input.stage);
-      // Attach per-candidate reference activity so the UI can show who is in /
-      // through a reference check without an extra round-trip per candidate.
-      const allRefs = await ctx.db.query.candidateReferences.findMany({});
-      const refAgg: Record<string, { requested: number; responded: number }> = {};
-      for (const r of allRefs as any[]) {
-        const a = refAgg[r.candidateId] ?? (refAgg[r.candidateId] = { requested: 0, responded: 0 });
-        if (r.status === 'requested' || r.status === 'responded') a.requested++;
-        if (r.status === 'responded') a.responded++;
-      }
-      return result.map((c) => ({
-        ...c,
-        referencesRequested: refAgg[c.id]?.requested ?? 0,
-        referencesResponded: refAgg[c.id]?.responded ?? 0,
-      }));
+      return result;
     }),
 
   getById: protectedProcedure
@@ -468,9 +454,7 @@ export const candidatesRouter = router({
       eppValuesMatchScore: z.number().int().optional(),
       workSampleScore: z.number().int().optional(),
       resumeReviewScore: z.number().int().optional(),
-      referenceCheckScore: z.number().int().optional(),
       resumeReviewNotes: z.string().optional(),
-      referenceCheckNotes: z.string().optional(),
       valuesMatchNotes: z.string().optional(),
       interviewerName: z.string().max(200).optional(),
       interviewerEmail: z.string().email().max(300).optional(),
@@ -656,8 +640,6 @@ export const candidatesRouter = router({
               valueScores,
               resumeReviewNotes: (existing as any).resumeReviewNotes,
               resumeReviewScore: (existing as any).resumeReviewScore,
-              referenceCheckNotes: (existing as any).referenceCheckNotes,
-              referenceCheckScore: (existing as any).referenceCheckScore,
               workSampleScore: (existing as any).workSampleScore,
               ccatScore: (existing as any).ccatScore,
             });
@@ -1031,84 +1013,6 @@ export const candidatesRouter = router({
         eppMatch, companyValuesMatch, eppScans,
         summary: screenSummary,
       };
-    }),
-
-  // Reference check = agent-assembled report of positive signals + concerns for
-  // a finalist, run after the interview and before the offer. Informational and
-  // human-reviewed: it does NOT change stage or reject. (See ai.ts for the
-  // compliance note — no live web-scraping of real applicants.)
-  referenceCheck: protectedProcedure
-    .input(z.object({ id: z.string().uuid() }))
-    .mutation(async ({ ctx, input }) => {
-      const candidate = await ctx.db.query.candidates.findFirst({
-        where: eq(candidates.id, input.id),
-      });
-      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
-
-      // Gate to finalists: reference checks run after interviews, before/at offer.
-      if (!['Interviewed', 'Offered'].includes(candidate.currentStage as string)) {
-        throw new TRPCError({ code: 'FORBIDDEN', message: `Reference checks run at the finalist stage (after interviews). ${candidate.firstName} ${candidate.lastName} is at "${candidate.currentStage}".` });
-      }
-
-      const jobTitle = await getJobTitle(ctx.db, candidate.jdId);
-
-      // Pull the candidate-provided references that have responded.
-      const refs = await ctx.db.query.candidateReferences.findMany({
-        where: eq(candidateReferences.candidateId, input.id),
-      });
-      const responded = refs.filter((r: any) => r.status === 'responded' && r.response);
-      const externalReferenceMaterial = responded.length
-        ? responded.map((r: any) =>
-            `Reference: ${r.name}${r.relationship ? ` (${r.relationship})` : ''}` +
-            `${r.wouldRehire ? ` — would rehire: ${r.wouldRehire}` : ''}\n${r.response}`,
-          ).join('\n\n')
-        : null;
-
-      const result = await runReferenceCheck({
-        firstName: candidate.firstName,
-        lastName: candidate.lastName,
-        jobTitle,
-        linkedinUrl: candidate.linkedinUrl,
-        notes: candidate.notes,
-        interviewFeedbackHr: (candidate as any).interviewFeedbackHr,
-        interviewScore: (candidate as any).interviewScore,
-        externalReferenceMaterial,
-      });
-
-      const report = [
-        result.summary,
-        result.positives.length ? `Positives: ${result.positives.join('; ')}` : '',
-        result.concerns.length ? `Concerns: ${result.concerns.join('; ')}` : '',
-        `Recommendation: ${result.recommendation} (confidence ${result.confidence}). ` +
-          (result.mode === 'placeholder'
-            ? '[AI draft — no external references gathered; connect a reference source]'
-            : '[AI draft — verify with real references]'),
-      ].filter(Boolean).join('\n');
-
-      await ctx.db.update(candidates)
-        .set({ referenceCheckNotes: report, referenceCheckScore: result.confidence, updatedAt: new Date() })
-        .where(eq(candidates.id, input.id));
-
-      // Phase 2 — record the reference-check synthesis with AI provenance (advisory).
-      await logDecision(ctx.db, {
-        candidateId: input.id,
-        decisionType: 'reference_check',
-        outcome: 'scored',
-        score: result.confidence,
-        decidedByType: result.mode === 'ai' ? 'ai' : 'deterministic',
-        decidedBy: ctx.user.id,
-        model: result.provenance?.model ?? null,
-        requestedModel: result.provenance?.requestedModel ?? null,
-        promptId: result.provenance?.promptId ?? null,
-        promptVersion: result.provenance?.promptVersion ?? null,
-        reason: `Reference report synthesized: ${result.recommendation} (confidence ${result.confidence}). AI draft to verify, not an automated decision.`,
-        inputs: { recommendation: result.recommendation, confidence: result.confidence, mode: result.mode },
-      });
-
-      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'reference_check', 'candidates', { candidateId: input.id }).catch(() => {});
-
-      return result;
     }),
 
   // Build the offer-letter input from the candidate + JD + requisition + HR inputs.
@@ -1975,7 +1879,6 @@ export const candidatesRouter = router({
         eppValuesMatchScore: candidate.eppValuesMatchScore,
         workSampleScore: candidate.workSampleScore,
         resumeReviewScore: candidate.resumeReviewScore,
-        referenceCheckScore: candidate.referenceCheckScore,
       });
 
       // Store results
