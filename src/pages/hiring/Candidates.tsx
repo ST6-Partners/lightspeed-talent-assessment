@@ -729,9 +729,71 @@ export default function Candidates() {
             />
           </Section>
 
+          {/* Decision history — Phase 2 provenance trail (model + prompt version + reason) */}
+          <DecisionHistorySection key={`dh-${selected.id}`} candidateId={selected.id} />
+
         </div>
       )}
     </div>
+  );
+}
+
+// ── Decision history (Phase 2 provenance) ──────────────────
+const DECISION_LABELS: Record<string, string> = {
+  assessment_gate: 'Assessment gate',
+  post_assessment_review: 'Post-assessment review',
+  resume_screen: 'Resume screen',
+  work_sample: 'Work sample',
+  interview_questions: 'Interview questions',
+  interview_feedback: 'Interview feedback',
+  reference_check: 'Reference check',
+};
+
+function outcomeClasses(outcome: string): string {
+  switch (outcome) {
+    case 'passed':
+    case 'advanced': return 'bg-green-100 text-green-700';
+    case 'rejected':
+    case 'failed': return 'bg-red-100 text-red-700';
+    case 'pending_review': return 'bg-amber-100 text-amber-700';
+    default: return 'bg-gray-100 text-gray-600';
+  }
+}
+
+export function DecisionHistorySection({ candidateId }: { candidateId: string }) {
+  const { data: decisions, isLoading } = trpc.decisions.listByCandidate.useQuery({ candidateId });
+
+  return (
+    <Section title="Decision History">
+      <div className="text-xs text-gray-500 mb-2">
+        Every automated, rule-based, and human decision for this candidate — with the model and prompt version
+        that produced it, and a plain-language reason. Read-only audit trail.
+      </div>
+      {isLoading && <div className="text-xs text-gray-400">Loading…</div>}
+      {!isLoading && (!decisions || decisions.length === 0) && (
+        <div className="text-xs text-gray-400">No decisions recorded yet for this candidate.</div>
+      )}
+      <div className="space-y-2">
+        {(decisions ?? []).map((d: any) => (
+          <div key={d.id} className="border border-gray-200 rounded-lg p-3">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="text-sm font-medium text-gray-900">{DECISION_LABELS[d.decisionType] ?? d.decisionType}</span>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${outcomeClasses(d.outcome)}`}>{d.outcome}</span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600">
+                {d.decidedByType === 'ai' ? 'AI' : d.decidedByType === 'human' ? 'Human' : 'Rule'}
+              </span>
+              <span className="flex-1" />
+              <span className="text-[11px] text-gray-400">{d.createdAt ? new Date(d.createdAt).toLocaleString() : ''}</span>
+            </div>
+            {d.reason && <div className="text-xs text-gray-600 leading-relaxed mb-1">{d.reason}</div>}
+            <div className="text-[11px] text-gray-400 font-mono">
+              {d.score != null && <>score {d.score} · </>}
+              {d.model ? <>{d.model}{d.promptId ? <> · prompt {d.promptId} {d.promptVersion}</> : null}</> : <>decided by {d.decidedByType}</>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
   );
 }
 
