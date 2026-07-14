@@ -6,6 +6,8 @@
 // log to console and return mock data. No real API calls.
 // ============================================================
 
+import { PROMPTS } from './prompts.js';
+
 const SANDBOX = !process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? '';
 const MODEL = 'claude-3-5-sonnet-20241022';
@@ -38,11 +40,28 @@ export interface InterviewFeedback {
   feedbackCandidate: string;       // candidate-facing summary
   feedbackInterviewer: string;     // coaching summary for the interviewer
   followUps: InterviewFollowUp[];  // open threads to carry into later rounds
+  provenance?: DecisionProvenance; // Phase 2 — set on the AI path
 }
 
 // ── Core Claude caller ─────────────────────────────────────
 
-async function callClaude(systemPrompt: string, userPrompt: string, model: string = MODEL): Promise<string> {
+// Metadata about a completed Claude call — used by Phase 2 decision
+// provenance so every candidate-affecting decision records the model
+// that was ACTUALLY used (the API echoes back the resolved model id,
+// which can differ from the alias we requested) plus token usage.
+export interface ClaudeCallMeta {
+  text: string;
+  model: string;            // resolved model id from the API response
+  requestedModel: string;   // what we asked for
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
+async function callClaudeMeta(
+  systemPrompt: string,
+  userPrompt: string,
+  model: string = MODEL,
+): Promise<ClaudeCallMeta> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -64,7 +83,30 @@ async function callClaude(systemPrompt: string, userPrompt: string, model: strin
   }
 
   const data = await response.json() as any;
-  return data.content[0].text as string;
+  return {
+    text: data.content[0].text as string,
+    model: (data.model as string) ?? model,
+    requestedModel: model,
+    inputTokens: data.usage?.input_tokens ?? null,
+    outputTokens: data.usage?.output_tokens ?? null,
+  };
+}
+
+// Backward-compatible thin wrapper: returns only the text. Existing
+// callers that don't need provenance keep using this unchanged.
+async function callClaude(systemPrompt: string, userPrompt: string, model: string = MODEL): Promise<string> {
+  return (await callClaudeMeta(systemPrompt, userPrompt, model)).text;
+}
+
+// Provenance attached to an AI-produced result so the caller (which has
+// the candidate id + db) can log it to the decision_log. Phase 2.
+export interface DecisionProvenance {
+  model: string;          // resolved model id from the API response
+  requestedModel: string;
+  promptId: string;
+  promptVersion: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
 }
 
 // ── Question generation ────────────────────────────────────
@@ -219,12 +261,21 @@ Return a JSON object with:
 Return ONLY the JSON object, no other text.`;
 
   try {
-    const raw = await callClaude(system, user, 'claude-sonnet-4-6');
+    const meta = await callClaudeMeta(system, user, PROMPTS.interviewFeedback.model);
+    const raw = meta.text;
     const fenced = raw.replace(/```json|```/g, '');
     const objStart = fenced.indexOf('{');
     const objEnd = fenced.lastIndexOf('}');
     const feedback = JSON.parse(fenced.slice(objStart, objEnd + 1)) as InterviewFeedback;
     if (!Array.isArray(feedback.followUps)) feedback.followUps = [];
+    feedback.provenance = {
+      model: meta.model,
+      requestedModel: meta.requestedModel,
+      promptId: PROMPTS.interviewFeedback.id,
+      promptVersion: PROMPTS.interviewFeedback.version,
+      inputTokens: meta.inputTokens,
+      outputTokens: meta.outputTokens,
+    };
     return feedback;
   } catch (err) {
     console.error('[AI] analyzeInterviewTranscript failed:', err);
@@ -419,6 +470,7 @@ export interface ResumeScreenResult {
   // 'ai' = real Claude screen (trustworthy enough to drive an auto-decision);
   // 'keyword' = deterministic fallback (advisory only — do NOT auto-reject on it).
   mode: 'ai' | 'keyword';
+  provenance?: DecisionProvenance; // Phase 2 — set on the AI path
 }
 
 // Split a required-qualifications blob into individual requirement lines.
@@ -524,7 +576,8 @@ Return ONLY a JSON array. Each element:
   const user = `REQUIRED QUALIFICATIONS:\n${requirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}\n\nRESUME:\n${resumeText}`;
 
   try {
-    const raw = await callClaude(system, user, RESUME_SCREEN_MODEL);
+    const meta = await callClaudeMeta(system, user, RESUME_SCREEN_MODEL);
+    const raw = meta.text;
     const parsed = JSON.parse(extractJsonArray(raw)) as RequirementCheck[];
     // Normalize + guard against the model dropping/renaming items.
     const checks: RequirementCheck[] = requirements.map((req) => {
@@ -533,7 +586,17 @@ Return ONLY a JSON array. Each element:
       if (hit) return { requirement: req, met: !!hit.met, evidence: String(hit.evidence ?? '') };
       return { requirement: req, met: false, evidence: 'Not assessed by the model — treat as unverified.' };
     });
-    return summarizeScreen(checks);
+    return {
+      ...summarizeScreen(checks),
+      provenance: {
+        model: meta.model,
+        requestedModel: meta.requestedModel,
+        promptId: PROMPTS.resumeScreen.id,
+        promptVersion: PROMPTS.resumeScreen.version,
+        inputTokens: meta.inputTokens,
+        outputTokens: meta.outputTokens,
+      },
+    };
   } catch (err) {
     console.error('[AI] screenResumeRequirements failed — falling back to keyword screen:', err);
     return keywordScreen(requirements, resumeText);
@@ -578,6 +641,7 @@ export interface ReferenceCheckResult {
   recommendation: 'proceed' | 'proceed_with_caution' | 'flag_for_review';
   confidence: number;               // 0–100, how well-supported the report is
   mode: 'ai' | 'placeholder';       // 'placeholder' = sandbox/no-key draft
+  provenance?: DecisionProvenance;  // Phase 2 — set on the AI path
 }
 
 // Seam for a real reference source. Returns null today (no external
@@ -636,7 +700,8 @@ Recruiter notes: ${input.notes || 'none'}
 External reference material: ${external || 'none gathered (no compliant reference source connected yet)'}`;
 
   try {
-    const raw = await callClaude(system, user, REFERENCE_MODEL);
+    const meta = await callClaudeMeta(system, user, REFERENCE_MODEL);
+    const raw = meta.text;
     const fenced = raw.replace(/```json|```/g, '');
     const start = fenced.indexOf('{');
     const end = fenced.lastIndexOf('}');
@@ -650,6 +715,14 @@ External reference material: ${external || 'none gathered (no compliant referenc
         : 'proceed_with_caution',
       confidence: Math.max(0, Math.min(100, Number(parsed.confidence) || 0)),
       mode: 'ai',
+      provenance: {
+        model: meta.model,
+        requestedModel: meta.requestedModel,
+        promptId: PROMPTS.referenceCheck.id,
+        promptVersion: PROMPTS.referenceCheck.version,
+        inputTokens: meta.inputTokens,
+        outputTokens: meta.outputTokens,
+      },
     };
   } catch (err) {
     console.error('[AI] runReferenceCheck failed — returning placeholder:', err);
@@ -694,6 +767,7 @@ export interface WorkSampleScoreResult {
   rubricUsed: boolean;       // false when no scoring guide was configured
   criteria: WorkSampleCriterion[]; // per-rubric-point breakdown
   mode: 'ai' | 'placeholder';
+  provenance?: DecisionProvenance; // Phase 2 — set on the AI path
 }
 
 export interface WorkSampleCriterion {
@@ -782,7 +856,8 @@ ${input.submission || '(empty)'}
 ${input.link || 'none'}`;
 
   try {
-    const raw = await callClaude(system, user, WORK_SAMPLE_MODEL);
+    const meta = await callClaudeMeta(system, user, WORK_SAMPLE_MODEL);
+    const raw = meta.text;
     const fenced = raw.replace(/```json|```/g, '');
     const parsed = JSON.parse(fenced.slice(fenced.indexOf('{'), fenced.lastIndexOf('}') + 1));
     const clamp = (n: any) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
@@ -806,6 +881,14 @@ ${input.link || 'none'}`;
           })).filter((c: any) => c.criterion)
         : [],
       mode: 'ai',
+      provenance: {
+        model: meta.model,
+        requestedModel: meta.requestedModel,
+        promptId: PROMPTS.workSampleScore.id,
+        promptVersion: PROMPTS.workSampleScore.version,
+        inputTokens: meta.inputTokens,
+        outputTokens: meta.outputTokens,
+      },
     };
   } catch (err) {
     console.error('[AI] scoreWorkSample failed — returning placeholder:', err);

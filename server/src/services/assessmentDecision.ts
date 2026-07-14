@@ -26,6 +26,7 @@ import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema
 import { resolveDeptWorkSample } from './workSampleResolver.js';
 import { dispatchStageEmail, emailAssessmentFailedHR } from './email.js';
 import { runPostAssessmentReview } from './postAssessmentReview.js';
+import { logDecision } from './decisionLog.js';
 
 // Candidates need a CCAT score of at least this to advance.
 // Below it, they are automatically rejected. (Flowchart: "Score 30+".)
@@ -65,6 +66,17 @@ export async function applyAssessmentDecision(
   }
 
   const score: number = candidate.ccatScore;
+
+  // Phase 2 — record the deterministic CCAT gate as its own decision.
+  await logDecision(db, {
+    candidateId: candidate.id,
+    decisionType: 'assessment_gate',
+    outcome: score >= ASSESSMENT_PASS_THRESHOLD ? 'passed' : 'rejected',
+    score,
+    decidedByType: 'deterministic',
+    reason: `CCAT score ${score} ${score >= ASSESSMENT_PASS_THRESHOLD ? 'met' : 'below'} the pass threshold of ${ASSESSMENT_PASS_THRESHOLD}.`,
+    inputs: { ccatScore: score, threshold: ASSESSMENT_PASS_THRESHOLD },
+  });
 
   const jd = candidate.jdId
     ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })

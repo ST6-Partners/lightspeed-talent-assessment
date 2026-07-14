@@ -17,6 +17,7 @@ import { db } from '../db.js';
 import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { analyzeInterviewTranscript, synthesizeInterviewTranscript, type InterviewFeedback } from './ai.js';
 import { emailInterviewFeedbackInterviewer } from './email.js';
+import { logDecision } from './decisionLog.js';
 
 function appBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -120,6 +121,23 @@ export async function processInterviewFeedback(input: ProcessInterviewInput): Pr
       updatedAt: new Date(),
     } as any)
     .where(eq(candidates.id, candidate.id));
+
+  // Phase 2 — record the interview-feedback analysis with AI provenance.
+  // This is advisory (never an automated reject), so outcome is 'scored'.
+  await logDecision(db, {
+    candidateId: candidate.id,
+    decisionType: 'interview_feedback',
+    outcome: 'scored',
+    score: feedback.interviewScore,
+    decidedByType: 'ai',
+    decidedBy: input.changedBy ?? null,
+    model: feedback.provenance?.model ?? null,
+    requestedModel: feedback.provenance?.requestedModel ?? null,
+    promptId: feedback.provenance?.promptId ?? null,
+    promptVersion: feedback.provenance?.promptVersion ?? null,
+    reason: `Interview analyzed: score ${feedback.interviewScore}/100 (advisory; informs the human scorecard, not an automated decision).`,
+    inputs: { interviewScore: feedback.interviewScore, transcriptSource },
+  });
 
   // ── Emails ────────────────────────────────────────────────
   let emailedInterviewer = false;

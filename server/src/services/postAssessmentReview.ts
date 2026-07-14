@@ -24,6 +24,7 @@ import { valueReviews, candidateValueScores, companyValues } from '../db/schema/
 import { computeEppScans } from './eppScans.js';
 import { generateInterviewQuestions, screenResumeRequirements } from './ai.js';
 import { dispatchStageEmail, emailInterviewerReport, emailAssessmentFailedHR } from './email.js';
+import { logDecision } from './decisionLog.js';
 
 // Both EPP match and company-values match must be at or above this to advance.
 export const MATCH_PASS_THRESHOLD = 70;
@@ -71,9 +72,10 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
   } else if (candidate.resumeText && required) {
     try {
       const req = await screenResumeRequirements(candidate.resumeText, required);
+      const resumeScorePct = req.totalCount ? Math.round((req.metCount / req.totalCount) * 100) : null;
       if (req.totalCount) {
         await db.update(candidates).set({
-          resumeReviewScore: Math.round((req.metCount / req.totalCount) * 100),
+          resumeReviewScore: resumeScorePct,
           resumeReviewNotes: req.summary,
           updatedAt: new Date(),
         }).where(eq(candidates.id, candidateId));
@@ -82,6 +84,20 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
         resumeFailed = true;
         resumeMissing = req.missing;
       }
+      // Phase 2 — record the resume screen with its AI provenance.
+      await logDecision(db, {
+        candidateId,
+        decisionType: 'resume_screen',
+        outcome: req.mode === 'ai' && req.missing.length > 0 ? 'failed' : 'passed',
+        score: resumeScorePct,
+        decidedByType: req.mode === 'ai' ? 'ai' : 'deterministic',
+        model: req.provenance?.model ?? null,
+        requestedModel: req.provenance?.requestedModel ?? null,
+        promptId: req.provenance?.promptId ?? null,
+        promptVersion: req.provenance?.promptVersion ?? null,
+        reason: req.summary,
+        inputs: { mode: req.mode, metCount: req.metCount, totalCount: req.totalCount, missing: req.missing },
+      });
     } catch (err) {
       console.error('[PostReview] resume screen failed:', err);
     }
@@ -104,6 +120,15 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
 
   if (fails.length) {
     const reason = `Auto-review after assessment did not meet: ${fails.join('; ')}.`;
+    // Phase 2 — record the combined review gate (deterministic over EPP + values + resume).
+    await logDecision(db, {
+      candidateId,
+      decisionType: 'post_assessment_review',
+      outcome: 'rejected',
+      decidedByType: 'deterministic',
+      reason,
+      inputs: { eppMatch, valuesMatch, threshold: MATCH_PASS_THRESHOLD, resumeFailed, resumeMissing, fails },
+    });
     await db.update(candidates)
       .set({ currentStage: 'Rejected', rejectionReason: reason, updatedAt: new Date() })
       .where(eq(candidates.id, candidateId));
@@ -130,6 +155,15 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
   // EPP + company-values + resume gate; the Work Sample comes AFTER Values Review
   // (its link is sent when they're advanced into Work Sample). Tailored questions
   // (a Claude call) + emails run in the background so the advance returns instantly.
+  // Phase 2 — record the combined review gate passing.
+  await logDecision(db, {
+    candidateId,
+    decisionType: 'post_assessment_review',
+    outcome: 'passed',
+    decidedByType: 'deterministic',
+    reason: `Auto-review passed: EPP match ${eppMatch}%, company-values match ${valuesMatch}% (threshold ${MATCH_PASS_THRESHOLD}%), resume requirements met.`,
+    inputs: { eppMatch, valuesMatch, threshold: MATCH_PASS_THRESHOLD },
+  });
   await db.update(candidates)
     .set({ currentStage: 'Values Review', updatedAt: new Date() })
     .where(eq(candidates.id, candidateId));
