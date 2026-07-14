@@ -1148,3 +1148,89 @@ ${resumeText}`;
     return keywordSkillsFit(job, resumeText);
   }
 }
+
+// ── Capability scorecard recommendation ────────────────────
+// Suggests a 1-5 score per Capability category from the candidate's
+// interview feedback. Sandbox-safe: returns a labelled placeholder when
+// no ANTHROPIC_API_KEY is set.
+
+export interface CapabilityRecInput {
+  firstName: string;
+  lastName: string;
+  jobTitle?: string;
+  items: Array<{ id: string; name: string; teachability: string; description?: string | null }>;
+  interviewFeedback: string;
+}
+export interface CapabilityRecItem { capabilityItemId: string; score: number; rationale: string; }
+export interface CapabilityRecResult { mode: 'ai' | 'placeholder'; items: CapabilityRecItem[]; }
+
+const TEACHABILITY_LABEL: Record<string, string> = {
+  hard_to_teach: 'hard to teach',
+  compound: 'compound',
+  learnable: 'learnable',
+};
+
+function placeholderCapabilityRec(input: CapabilityRecInput): CapabilityRecResult {
+  return {
+    mode: 'placeholder',
+    items: input.items.map((it) => ({
+      capabilityItemId: it.id,
+      score: 3,
+      rationale: `Sandbox draft (no scoring model connected). "${it.name}" is ${TEACHABILITY_LABEL[it.teachability] ?? it.teachability}. Connect a model to get a suggestion grounded in the interview notes.`,
+    })),
+  };
+}
+
+export async function recommendCapabilityScores(input: CapabilityRecInput): Promise<CapabilityRecResult> {
+  if (!input.items.length) return { mode: 'placeholder', items: [] };
+
+  if (SANDBOX) {
+    console.log('[AI SANDBOX] recommendCapabilityScores | placeholder draft (no ANTHROPIC_API_KEY)');
+    return placeholderCapabilityRec(input);
+  }
+
+  const system = `You are helping a hiring team at Lightspeed Systems (K-12 edtech) suggest a 1-5 score for each CAPABILITY category on a candidate scorecard, based ONLY on the interview feedback provided.
+Scale: 1 = major concern, 2 = below the bar, 3 = meets the bar, 4 = strong, 5 = outstanding.
+Cite the feedback for each score. Do NOT invent evidence and do NOT speculate about protected characteristics.
+Each category carries a teachability code (hard_to_teach / compound / learnable): weigh gaps in hard-to-teach categories more heavily, and be more forgiving of gaps in learnable ones.
+If the feedback says little about a category, suggest 3 and note that the evidence is thin.
+This is an AI draft to inform a human reviewer — never a final decision.
+Return ONLY JSON: { "items": [ { "id": "<the exact id given>", "score": 1-5, "rationale": "one line citing the feedback" } ] }`;
+
+  const itemList = input.items
+    .map((it) => `- id=${it.id} | ${it.name} (${it.teachability})${it.description ? ` — ${it.description}` : ''}`)
+    .join('\n');
+
+  const user = `Candidate: ${input.firstName} ${input.lastName}
+Role: ${input.jobTitle ?? 'Unknown'}
+
+--- CAPABILITY CATEGORIES (score each) ---
+${itemList}
+
+--- INTERVIEW FEEDBACK ---
+${input.interviewFeedback || '(no interview feedback on file yet)'}`;
+
+  try {
+    const raw = await callClaude(system, user);
+    const fenced = raw.replace(/```json|```/g, '');
+    const parsed = JSON.parse(fenced.slice(fenced.indexOf('{'), fenced.lastIndexOf('}') + 1));
+    const clamp = (n: any) => Math.max(1, Math.min(5, Math.round(Number(n) || 3)));
+    const byId: Record<string, { score: number; rationale: string }> = {};
+    if (Array.isArray(parsed.items)) {
+      parsed.items.forEach((r: any) => {
+        if (r && typeof r.id === 'string') byId[r.id] = { score: clamp(r.score), rationale: String(r.rationale ?? '') };
+      });
+    }
+    return {
+      mode: 'ai',
+      items: input.items.map((it) => ({
+        capabilityItemId: it.id,
+        score: byId[it.id]?.score ?? 3,
+        rationale: byId[it.id]?.rationale ?? 'No specific evidence in the feedback — suggested a neutral 3.',
+      })),
+    };
+  } catch (err) {
+    console.error('[AI] recommendCapabilityScores failed — returning placeholder:', err);
+    return placeholderCapabilityRec(input);
+  }
+}

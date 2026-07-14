@@ -8,6 +8,9 @@ import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { companyValues, candidateValueScores, valueReviews } from '../db/schema/values.js';
 import { capabilityItems, candidateCapabilityScores } from '../db/schema/capability.js';
+import { candidates, jobDescriptions } from '../db/schema/hiring.js';
+import { candidateInterviews } from '../db/schema/interviews.js';
+import { recommendCapabilityScores } from '../services/ai.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { employees } from '../db/schema/employees.js';
 import { auditChange } from '../services/audit.js';
@@ -144,5 +147,33 @@ export const valuesRouter = router({
       });
       await auditChange(ctx.db, ctx.user.id, reviewId, 'value_reviews', input.reviewId ? 'update' : 'create');
       return { ok: true, reviewId };
+    }),
+
+  // ── AI recommendation for the Capability section ──
+  // Suggests a 1-5 per capability item from the candidate's interview feedback.
+  // Sandbox-safe: returns a labelled placeholder when no ANTHROPIC_API_KEY is set.
+  capabilityRecommendation: protectedProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const jd = candidate.jdId
+        ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null;
+      const items = (await ctx.db.query.capabilityItems.findMany({ orderBy: [asc(capabilityItems.sortOrder)] }))
+        .filter((i: any) => i.active);
+      const rounds = await ctx.db.select().from(candidateInterviews)
+        .where(eq(candidateInterviews.candidateId, input.candidateId))
+        .orderBy(asc(candidateInterviews.sortOrder));
+      const parts: string[] = [];
+      rounds.forEach((r: any) => { if (r.feedbackHr) parts.push(`[${r.roundName}]\n${r.feedbackHr}`); });
+      if (!parts.length && (candidate as any).interviewFeedbackHr) parts.push((candidate as any).interviewFeedbackHr);
+      return recommendCapabilityScores({
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        jobTitle: jd?.jobTitle,
+        items: items.map((i: any) => ({ id: i.id, name: i.name, teachability: i.teachability, description: i.description })),
+        interviewFeedback: parts.join('\n\n'),
+      });
     }),
 });

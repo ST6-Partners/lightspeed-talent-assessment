@@ -29,6 +29,9 @@ export default function ScoreValues() {
   const [currentReviewId, setCurrentReviewId] = useState<string | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [capScores, setCapScores] = useState<Record<string, number>>({});
+  const [capAiShown, setCapAiShown] = useState(false);
+  const [capSuggest, setCapSuggest] = useState<Record<string, { score: number; rationale: string }>>({});
+  const [capRecMode, setCapRecMode] = useState<'ai' | 'placeholder' | null>(null);
   const [aiShown, setAiShown] = useState(false); // AI scorecard shown (filled) vs cleared
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
@@ -40,6 +43,7 @@ export default function ScoreValues() {
   const { data: candidates } = trpc.candidates.list.useQuery();
   const { data: values } = trpc.values.list.useQuery();
   const { data: capItems } = trpc.values.listCapabilityItems.useQuery();
+  const capRecMutation = trpc.values.capabilityRecommendation.useMutation();
   const { data: reviewers } = trpc.values.listReviewers.useQuery();
   const eppQuery = trpc.values.getCandidateEpp.useQuery({ candidateId }, { enabled: !!candidateId });
   const reviewsQuery = trpc.values.getCandidateReviews.useQuery({ candidateId }, { enabled: !!candidateId });
@@ -85,15 +89,15 @@ export default function ScoreValues() {
     const cid = params.get('id');
     const rid = params.get('round');
     if (cid) {
-      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setAiShown(false);
+      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setAiShown(false);
       setInterviewId(rid ?? ''); setBaseline(snap('', today(), rid ?? '', {}));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectCandidate = (id: string) => {
-    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setInterviewId(''); setAiShown(false); setBaseline(snap('', today(), '', {}));
+    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setInterviewId(''); setAiShown(false); setBaseline(snap('', today(), '', {}));
   };
-  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setAiShown(false); setBaseline(snap('', today(), interviewId, {})); };
+  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setAiShown(false); setBaseline(snap('', today(), interviewId, {})); };
   const loadReview = (r: any) => {
     setCurrentReviewId(r.id);
     setReviewerId(r.reviewerId ?? '');
@@ -104,7 +108,7 @@ export default function ScoreValues() {
     setScores(m);
     const cm: Record<string, number> = {};
     (r.capabilityScores ?? []).forEach((s: any) => { cm[s.capabilityItemId] = s.score; });
-    setCapScores(cm);
+    setCapScores(cm); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null);
     setBaseline(snap(r.reviewerId ?? '', new Date(r.reviewedAt).toISOString().slice(0, 10), r.interviewId ?? '', m, cm));
   };
 
@@ -124,6 +128,19 @@ export default function ScoreValues() {
 
   const setScore = (valueId: string, score: number) => setScores((p) => ({ ...p, [valueId]: score }));
   const setCapScore = (id: string, score: number) => setCapScores((p) => ({ ...p, [id]: score }));
+  const toggleCapabilityRecommendation = () => {
+    if (capAiShown) { setCapScores({}); setCapSuggest({}); setCapRecMode(null); setCapAiShown(false); return; }
+    if (!candidateId) return;
+    capRecMutation.mutate({ candidateId }, {
+      onSuccess: (res: any) => {
+        const sc: Record<string, number> = {};
+        const sg: Record<string, { score: number; rationale: string }> = {};
+        (res?.items ?? []).forEach((it: any) => { sc[it.capabilityItemId] = it.score; sg[it.capabilityItemId] = { score: it.score, rationale: it.rationale }; });
+        setCapScores((prev) => ({ ...prev, ...sc }));
+        setCapSuggest(sg); setCapRecMode(res?.mode ?? null); setCapAiShown(true);
+      },
+    });
+  };
   const toggleExpand = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
   const pillarAvg = (pillar: string) => {
@@ -352,13 +369,26 @@ export default function ScoreValues() {
 
           {(capItems ?? []).length > 0 && (
             <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5 mb-4">
-              <div className="flex items-baseline justify-between mb-1">
+              <div className="flex items-baseline justify-between mb-1 gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-ls-ink">Capability</h3>
                   <p className="text-xs text-ls-ink-3">Can this person do the job? Score each 1–5. Values stays its own section above.</p>
                 </div>
-                <span className="text-xs text-ls-ink-3">avg <b className="text-ls-ink">{capAvg ?? '—'}</b></span>
+                <div className="flex items-center gap-3 flex-none">
+                  {currentReviewId === null && (
+                    <button onClick={toggleCapabilityRecommendation} disabled={capRecMutation.isLoading || !candidateId}
+                      title={capAiShown ? 'Showing AI suggestion — click to clear it' : 'Suggest scores from the interview feedback'}
+                      className={`text-xs inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-50 ${capAiShown ? 'border-ls-cyan text-ls-primary bg-ls-primary-50' : 'border-ls-line text-ls-ink-2 hover:border-ls-cyan'}`}>
+                      {capRecMutation.isLoading ? <Sparkles size={14} className="animate-pulse" /> : capAiShown ? <Eye size={14} /> : <EyeOff size={14} />}
+                      {capRecMutation.isLoading ? 'Thinking…' : 'AI Recommendation'}
+                    </button>
+                  )}
+                  <span className="text-xs text-ls-ink-3">avg <b className="text-ls-ink">{capAvg ?? '—'}</b></span>
+                </div>
               </div>
+              {capAiShown && capRecMode === 'placeholder' && (
+                <div className="text-[11px] text-ls-watch mb-2">Sandbox draft — no AI model connected. Set ANTHROPIC_API_KEY for a suggestion grounded in the interview notes.</div>
+              )}
               {(capItems ?? []).map((it: any) => {
                 const cur = capScores[it.id];
                 const t = TEACH[it.teachability] ?? { label: it.teachability, cls: 'bg-ls-bg-2 text-ls-ink-2' };
@@ -386,6 +416,12 @@ export default function ScoreValues() {
                         })}
                       </div>
                     </div>
+                    {capAiShown && capSuggest[it.id] && (
+                      <div className="mt-1.5 text-[11px] text-ls-ink-3 flex items-start gap-1">
+                        <Sparkles size={11} className="text-ls-primary mt-0.5 flex-none" />
+                        <span><b className="text-ls-primary">Suggests {capSuggest[it.id].score}</b> — {capSuggest[it.id].rationale}</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
