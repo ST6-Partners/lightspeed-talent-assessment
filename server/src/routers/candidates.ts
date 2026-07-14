@@ -806,8 +806,8 @@ export const candidatesRouter = router({
         decision = 'flagged';
         reason = 'Advisory only — set the AI key (ANTHROPIC_API_KEY) for the resume gate to auto-decide.';
       } else if (requirements.missing.length > 0) {
-        decision = 'rejected';
-        reason = `Missing required qualification(s): ${requirements.missing.join('; ')}.`;
+        decision = 'flagged';
+        reason = `Missing required qualification(s): ${requirements.missing.join('; ')} — flagged for human review (not auto-rejected).`;
       } else {
         decision = 'advanced';
       }
@@ -928,8 +928,8 @@ export const candidatesRouter = router({
         decision = 'rejected';
         reason = 'Requires international sponsorship, which Lightspeed does not offer.';
       } else if (requirements.mode === 'ai' && requirements.missing.length > 0) {
-        decision = 'rejected';
-        reason = `Missing required qualification(s): ${requirements.missing.join('; ')}.`;
+        decision = 'review';
+        reason = `Missing required qualification(s): ${requirements.missing.join('; ')} — flagged for human review (not auto-rejected).`;
       } else if (!trustworthy) {
         decision = 'review';
         reason = 'Advisory only — set the AI key (ANTHROPIC_API_KEY) for the screen to auto-decide.';

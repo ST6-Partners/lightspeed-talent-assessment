@@ -31,7 +31,7 @@ export const MATCH_PASS_THRESHOLD = 70;
 
 export type ReviewResult =
   | { decision: 'passed'; eppMatch: number; valuesMatch: number }
-  | { decision: 'rejected'; reason: string; eppMatch: number | null; valuesMatch: number | null }
+  | { decision: 'held'; eppMatch: number; valuesMatch: number }
   | { decision: 'skipped'; reason: string };
 
 
@@ -112,109 +112,95 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
     updatedAt: new Date(),
   }).where(eq(candidates.id, candidateId));
 
-  // 3) Gate.
-  const fails: string[] = [];
-  if (resumeFailed) fails.push(resumeMissing.length ? `resume missing required: ${resumeMissing.join('; ')}` : 'resume screening');
-  if (eppMatch < MATCH_PASS_THRESHOLD) fails.push(`EPP match ${eppMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
-  if (valuesMatch < MATCH_PASS_THRESHOLD) fails.push(`company-values match ${valuesMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
+  // 3) Bar check — ADVISORY only. There is no automatic rejection here anymore.
+  //    The only fully-automated reject in the funnel is the CCAT cutoff. Candidates
+  //    at/above the 70% bar auto-advance; candidates below it still move into the
+  //    human review queue (Values Review), flagged for a person to decide.
+  const shortfalls: string[] = [];
+  if (resumeFailed) shortfalls.push(resumeMissing.length ? `resume missing required: ${resumeMissing.join('; ')}` : 'resume screening');
+  if (eppMatch < MATCH_PASS_THRESHOLD) shortfalls.push(`EPP match ${eppMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
+  if (valuesMatch < MATCH_PASS_THRESHOLD) shortfalls.push(`company-values match ${valuesMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
+  const metBar = shortfalls.length === 0;
 
-  if (fails.length) {
-    const reason = `Auto-review after assessment did not meet: ${fails.join('; ')}.`;
-    // Phase 2 — record the combined review gate (deterministic over EPP + values + resume).
-    await logDecision(db, {
-      candidateId,
-      decisionType: 'post_assessment_review',
-      outcome: 'rejected',
-      decidedByType: 'deterministic',
-      reason,
-      inputs: { eppMatch, valuesMatch, threshold: MATCH_PASS_THRESHOLD, resumeFailed, resumeMissing, fails },
-    });
-    await db.update(candidates)
-      .set({ currentStage: 'Rejected', rejectionReason: reason, updatedAt: new Date() })
-      .where(eq(candidates.id, candidateId));
-    await db.insert(candidateStageHistory).values({
-      candidateId, fromStage, toStage: 'Rejected', changedBy: null, reason,
-    });
-    // Emails in the background so the caller (stage advance) returns immediately.
-    void (async () => {
-      try {
-        await dispatchStageEmail('Rejected', fromStage, {
-          firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-        });
-        await emailAssessmentFailedHR({
-          firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-          ccatScore: candidate.ccatScore ?? 0, threshold: MATCH_PASS_THRESHOLD,
-        });
-      } catch (err) { console.error('[PostReview] rejection emails failed:', err); }
-    })();
-    console.log(`[PostReview] ${candidate.email} rejected — ${reason}`);
-    return { decision: 'rejected', reason, eppMatch, valuesMatch };
-  }
+  // Always move to Values Review (the human review stage). Never auto-reject.
+  await db.update(candidates)
+    .set({
+      currentStage: 'Values Review',
+      screenRecommendation: metBar ? 'advance' : 'review',
+      ...(metBar ? {} : {
+        companyValuesNotes: `Below auto-advance bar (${shortfalls.join('; ')}). Flagged for human review — not auto-rejected.`,
+      }),
+      updatedAt: new Date(),
+    })
+    .where(eq(candidates.id, candidateId));
 
-  // 4) PASS — move to Values Review immediately (fast). The candidate cleared the
-  // EPP + company-values + resume gate; the Work Sample comes AFTER Values Review
-  // (its link is sent when they're advanced into Work Sample). Tailored questions
-  // (a Claude call) + emails run in the background so the advance returns instantly.
-  // Phase 2 — record the combined review gate passing.
   await logDecision(db, {
     candidateId,
     decisionType: 'post_assessment_review',
-    outcome: 'passed',
+    outcome: metBar ? 'passed' : 'pending_review',
+    score: Math.min(eppMatch, valuesMatch),
     decidedByType: 'deterministic',
-    reason: `Auto-review passed: EPP match ${eppMatch}%, company-values match ${valuesMatch}% (threshold ${MATCH_PASS_THRESHOLD}%), resume requirements met.`,
-    inputs: { eppMatch, valuesMatch, threshold: MATCH_PASS_THRESHOLD },
+    reason: metBar
+      ? `Met the auto-advance bar: EPP ${eppMatch}%, company-values ${valuesMatch}% (threshold ${MATCH_PASS_THRESHOLD}%), resume requirements met — auto-advanced to Values Review.`
+      : `Below the auto-advance bar (${shortfalls.join('; ')}). Advanced to Values Review for human review — not auto-rejected.`,
+    inputs: { eppMatch, valuesMatch, threshold: MATCH_PASS_THRESHOLD, resumeFailed, resumeMissing, metBar },
   });
-  await db.update(candidates)
-    .set({ currentStage: 'Values Review', updatedAt: new Date() })
-    .where(eq(candidates.id, candidateId));
+
   await db.insert(candidateStageHistory).values({
     candidateId, fromStage, toStage: 'Values Review', changedBy: null,
-    reason: `Auto-review passed (EPP ${eppMatch}%, company-values ${valuesMatch}%) — sent to Values Review`,
+    reason: metBar
+      ? `Auto-advanced: met the bar (EPP ${eppMatch}%, company-values ${valuesMatch}%).`
+      : `Advanced for human review: below the bar (${shortfalls.join('; ')}) — not auto-rejected.`,
   });
 
-  void (async () => {
-    try {
-      await dispatchStageEmail('Values Review', fromStage, {
-        firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-      });
+  // Candidate "moving forward" comms + interviewer prep run ONLY when the candidate
+  // cleared the bar automatically. Below-bar candidates wait for a human decision,
+  // so we neither email them nor generate an interviewer brief yet.
+  if (metBar) {
+    void (async () => {
+      try {
+        await dispatchStageEmail('Values Review', fromStage, {
+          firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
+        });
 
-      const eppTraits = await db
-        .select({ trait: candidateEppScores.trait, percentile: candidateEppScores.percentile })
-        .from(candidateEppScores).where(eq(candidateEppScores.candidateId, candidateId));
-      let valueScores: Array<{ value: string; score: number }> = [];
-      const latestReview = (await db
-        .select({ id: valueReviews.id }).from(valueReviews)
-        .where(eq(valueReviews.candidateId, candidateId))
-        .orderBy(desc(valueReviews.reviewedAt)).limit(1))[0];
-      if (latestReview) {
-        valueScores = await db
-          .select({ value: companyValues.name, score: candidateValueScores.score })
-          .from(candidateValueScores)
-          .innerJoin(companyValues, eq(candidateValueScores.valueId, companyValues.id))
-          .where(eq(candidateValueScores.reviewId, latestReview.id));
-      }
-      const questions = await generateInterviewQuestions({
-        firstName: candidate.firstName, lastName: candidate.lastName, jobTitle,
-        eppProfile: candidate.eppProfile, eppValuesMatchScore: eppMatch, eppTraits,
-        companyValuesMatchScore: valuesMatch, companyValuesNotes: candidate.companyValuesNotes,
-        valueScores, resumeReviewNotes: candidate.resumeReviewNotes, resumeReviewScore: candidate.resumeReviewScore,
-        workSampleScore: candidate.workSampleScore, ccatScore: candidate.ccatScore,
-      });
-      await db.update(candidates).set({ interviewQuestions: questions, updatedAt: new Date() }).where(eq(candidates.id, candidateId));
+        const eppTraits = await db
+          .select({ trait: candidateEppScores.trait, percentile: candidateEppScores.percentile })
+          .from(candidateEppScores).where(eq(candidateEppScores.candidateId, candidateId));
+        let valueScores: Array<{ value: string; score: number }> = [];
+        const latestReview = (await db
+          .select({ id: valueReviews.id }).from(valueReviews)
+          .where(eq(valueReviews.candidateId, candidateId))
+          .orderBy(desc(valueReviews.reviewedAt)).limit(1))[0];
+        if (latestReview) {
+          valueScores = await db
+            .select({ value: companyValues.name, score: candidateValueScores.score })
+            .from(candidateValueScores)
+            .innerJoin(companyValues, eq(candidateValueScores.valueId, companyValues.id))
+            .where(eq(candidateValueScores.reviewId, latestReview.id));
+        }
+        const questions = await generateInterviewQuestions({
+          firstName: candidate.firstName, lastName: candidate.lastName, jobTitle,
+          eppProfile: candidate.eppProfile, eppValuesMatchScore: eppMatch, eppTraits,
+          companyValuesMatchScore: valuesMatch, companyValuesNotes: candidate.companyValuesNotes,
+          valueScores, resumeReviewNotes: candidate.resumeReviewNotes, resumeReviewScore: candidate.resumeReviewScore,
+          workSampleScore: candidate.workSampleScore, ccatScore: candidate.ccatScore,
+        });
+        await db.update(candidates).set({ interviewQuestions: questions, updatedAt: new Date() }).where(eq(candidates.id, candidateId));
 
-      const interviewerEmail = candidate.interviewerEmail || process.env.HR_EMAIL || 'jade.friedman@lsscorp.net';
-      await emailInterviewerReport({
-        interviewerEmail, interviewerName: candidate.interviewerName ?? 'Interviewer',
-        candidateFirstName: candidate.firstName, candidateLastName: candidate.lastName, jobTitle: jobTitle ?? 'the role',
-        ccatScore: candidate.ccatScore, eppMatch, valuesMatch,
-        resumeReviewScore: candidate.resumeReviewScore, workSampleScore: candidate.workSampleScore,
-        eppTraits, valueScores, questions,
-      });
-    } catch (err) { console.error('[PostReview] background pass tasks failed:', err); }
-  })();
+        const interviewerEmail = candidate.interviewerEmail || process.env.HR_EMAIL || 'jade.friedman@lsscorp.net';
+        await emailInterviewerReport({
+          interviewerEmail, interviewerName: candidate.interviewerName ?? 'Interviewer',
+          candidateFirstName: candidate.firstName, candidateLastName: candidate.lastName, jobTitle: jobTitle ?? 'the role',
+          ccatScore: candidate.ccatScore, eppMatch, valuesMatch,
+          resumeReviewScore: candidate.resumeReviewScore, workSampleScore: candidate.workSampleScore,
+          eppTraits, valueScores, questions,
+        });
+      } catch (err) { console.error('[PostReview] background advance tasks failed:', err); }
+    })();
+  }
 
-  console.log(`[PostReview] ${candidate.email} passed — EPP ${eppMatch}% / values ${valuesMatch}%; Work Sample set, brief queued`);
-  return { decision: 'passed', eppMatch, valuesMatch };
+  console.log(`[PostReview] ${candidate.email} ${metBar ? 'auto-advanced (met bar)' : 'advanced for human review (below bar)'} — EPP ${eppMatch}% / values ${valuesMatch}%`);
+  return { decision: metBar ? 'passed' : 'held', eppMatch, valuesMatch };
 }
 
 // Seed the candidate's resume text at application time (resume arrives with the
