@@ -22,6 +22,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db.js';
 import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { emailInterviewBookedCandidate, emailBookingStalledHR } from './email.js';
+import { prepInterviewQuestions } from './interviewPrep.js';
 
 export function isCalendlyConfigured(): boolean {
   return Boolean(process.env.CALENDLY_WEBHOOK_SIGNING_KEY);
@@ -133,6 +134,9 @@ export async function applyCalendlyEvent(event: string, payload: any): Promise<{
         reason: `Candidate booked via Calendly${start ? ` for ${start.toISOString()}` : ''}`,
       });
     }
+
+    // Tailored interview questions are generated once the interview is scheduled.
+    void prepInterviewQuestions(db, candidate.id).catch((err) => console.error('[Calendly] interview question prep failed:', err));
 
     await emailInterviewBookedCandidate({
       email: candidate.email,

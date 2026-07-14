@@ -20,6 +20,7 @@
 import { eq } from 'drizzle-orm';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { companyValues } from '../db/schema/values.js';
+import { candidates, jobDescriptions } from '../db/schema/hiring.js';
 
 export interface CompanyValueBreakdownItem {
   value: string;
@@ -35,6 +36,8 @@ export interface EppScansResult {
   scoredValues: number;
   totalValues: number;
   breakdown: CompanyValueBreakdownItem[];
+  roleScoped: boolean;                 // true = scored against the JD's selected values
+  roleValueNames: string[];            // value names used for the match
 }
 
 function avg(nums: number[]): number {
@@ -51,12 +54,26 @@ export async function computeEppScans(db: any, candidateId: string): Promise<Epp
   }
   const traitCount = Object.keys(eppByTrait).length;
   if (traitCount === 0) {
-    return { hasEpp: false, traitCount: 0, eppMatch: null, companyValuesMatch: null, scoredValues: 0, totalValues: 0, breakdown: [] };
+    return { hasEpp: false, traitCount: 0, eppMatch: null, companyValuesMatch: null, scoredValues: 0, totalValues: 0, breakdown: [], roleScoped: false, roleValueNames: [] };
   }
 
   const eppMatch = avg(Object.values(eppByTrait));
 
-  const values = await db.query.companyValues.findMany({ where: eq(companyValues.active, true) });
+  // Which company values define "fit for this role"? The JD's selected eppValues
+  // (company value names). Fall back to all active values when the JD lists none
+  // (or when none of its names match an active value).
+  const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
+  const jd = candidate?.jdId
+    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+    : null;
+  const jdValueNames: string[] = Array.isArray((jd as any)?.eppValues) ? ((jd as any).eppValues as string[]) : [];
+
+  const activeValues = await db.query.companyValues.findMany({ where: eq(companyValues.active, true) });
+  const scopedValues = jdValueNames.length
+    ? (activeValues as Array<{ name: string }>).filter((v) => jdValueNames.includes(v.name))
+    : [];
+  const roleScoped = scopedValues.length > 0;
+  const values = roleScoped ? scopedValues : activeValues;
   const breakdown: CompanyValueBreakdownItem[] = [];
   const perValueAverages: number[] = [];
   for (const v of values as Array<{ name: string; eppDimensions: unknown }>) {
@@ -76,6 +93,8 @@ export async function computeEppScans(db: any, candidateId: string): Promise<Epp
     scoredValues: perValueAverages.length,
     totalValues: (values as unknown[]).length,
     breakdown,
+    roleScoped,
+    roleValueNames: (values as Array<{ name: string }>).map((v) => v.name),
   };
 }
 
@@ -100,4 +119,26 @@ export async function ingestEppResults(
       });
   }
   return computeEppScans(db, candidateId);
+}
+
+
+// Human-readable role-fit notes: how the candidate does/doesn't fit the role,
+// value by value, from their EPP percentiles. Deterministic (no AI) so it is
+// transparent and defensible.
+export function buildRoleFitNotes(scans: EppScansResult): string {
+  if (!scans.hasEpp) return 'No EPP results on file yet — role fit will populate once assessment results arrive.';
+  const scope = scans.roleScoped
+    ? `the values selected for this role (${scans.roleValueNames.join(', ')})`
+    : 'all active company values (no role-specific values are set on this job description)';
+  const lines: string[] = [`Role fit — the candidate's EPP results scored against ${scope}.`, ''];
+  for (const b of scans.breakdown) {
+    if (b.avgPercentile == null) { lines.push(`- ${b.value}: no EPP data for the mapped traits`); continue; }
+    const tier = b.avgPercentile >= 70 ? 'strong fit'
+      : b.avgPercentile >= 55 ? 'moderate fit'
+      : 'below the bar — probe in the interview';
+    lines.push(`- ${b.value}: ${b.avgPercentile}% — ${tier}`);
+  }
+  lines.push('');
+  lines.push(`Overall role-values match: ${scans.companyValuesMatch != null ? scans.companyValuesMatch + '%' : 'n/a'} across ${scans.scoredValues} of ${scans.roleValueNames.length || scans.totalValues} value(s).`);
+  return lines.join('\n');
 }

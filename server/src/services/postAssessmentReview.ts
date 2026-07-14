@@ -8,10 +8,9 @@
 //      prior screen result if there's no text).
 //   3. Gate: reject if resume screening fails a required qual, or
 //      EPP match < 70, or company-values match < 70.
-//   4. On pass: generate the 30% tailored questions, advance to
-//      Work Sample (work sample now sits AFTER this gate), email
-//      the candidate their work-sample link, and email the
-//      interviewer a summary report + questions via SendGrid.
+//   4. On pass: advance to Values Review and email the candidate.
+//      Tailored interview questions are generated later, once the
+//      interview is scheduled (see services/interviewPrep.ts).
 //
 // No EPP results on file → returns 'skipped' so the caller falls
 // back to the legacy Work Sample advance.
@@ -20,10 +19,9 @@
 import { eq, desc } from 'drizzle-orm';
 import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { candidateEppScores } from '../db/schema/epp.js';
-import { valueReviews, candidateValueScores, companyValues } from '../db/schema/values.js';
-import { computeEppScans } from './eppScans.js';
-import { generateInterviewQuestions, screenResumeRequirements } from './ai.js';
-import { dispatchStageEmail, emailInterviewerReport, emailAssessmentFailedHR } from './email.js';
+import { computeEppScans, buildRoleFitNotes } from './eppScans.js';
+import { screenResumeRequirements } from './ai.js';
+import { dispatchStageEmail, emailAssessmentFailedHR } from './email.js';
 import { logDecision } from './decisionLog.js';
 
 // Both EPP match and company-values match must be at or above this to advance.
@@ -107,7 +105,7 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
   await db.update(candidates).set({
     eppValuesMatchScore: eppMatch,
     companyValuesMatchScore: valuesMatch,
-    companyValuesNotes: `Auto-review after assessment: EPP match ${eppMatch}/100, company-values match ${valuesMatch}/100 across ${scans.scoredValues}/${scans.totalValues} values.`,
+    companyValuesNotes: buildRoleFitNotes(scans),
     screenedAt: new Date(),
     updatedAt: new Date(),
   }).where(eq(candidates.id, candidateId));
@@ -116,7 +114,7 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
   const fails: string[] = [];
   if (resumeFailed) fails.push(resumeMissing.length ? `resume missing required: ${resumeMissing.join('; ')}` : 'resume screening');
   if (eppMatch < MATCH_PASS_THRESHOLD) fails.push(`EPP match ${eppMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
-  if (valuesMatch < MATCH_PASS_THRESHOLD) fails.push(`company-values match ${valuesMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
+  if (valuesMatch < MATCH_PASS_THRESHOLD) fails.push(`role-values match ${valuesMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
 
   if (fails.length) {
     const reason = `Auto-review after assessment did not meet: ${fails.join('; ')}.`;
@@ -172,46 +170,9 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
     reason: `Auto-review passed (EPP ${eppMatch}%, company-values ${valuesMatch}%) — sent to Values Review`,
   });
 
-  void (async () => {
-    try {
-      await dispatchStageEmail('Values Review', fromStage, {
-        firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-      });
-
-      const eppTraits = await db
-        .select({ trait: candidateEppScores.trait, percentile: candidateEppScores.percentile })
-        .from(candidateEppScores).where(eq(candidateEppScores.candidateId, candidateId));
-      let valueScores: Array<{ value: string; score: number }> = [];
-      const latestReview = (await db
-        .select({ id: valueReviews.id }).from(valueReviews)
-        .where(eq(valueReviews.candidateId, candidateId))
-        .orderBy(desc(valueReviews.reviewedAt)).limit(1))[0];
-      if (latestReview) {
-        valueScores = await db
-          .select({ value: companyValues.name, score: candidateValueScores.score })
-          .from(candidateValueScores)
-          .innerJoin(companyValues, eq(candidateValueScores.valueId, companyValues.id))
-          .where(eq(candidateValueScores.reviewId, latestReview.id));
-      }
-      const questions = await generateInterviewQuestions({
-        firstName: candidate.firstName, lastName: candidate.lastName, jobTitle,
-        eppProfile: candidate.eppProfile, eppValuesMatchScore: eppMatch, eppTraits,
-        companyValuesMatchScore: valuesMatch, companyValuesNotes: candidate.companyValuesNotes,
-        valueScores, resumeReviewNotes: candidate.resumeReviewNotes, resumeReviewScore: candidate.resumeReviewScore,
-        workSampleScore: candidate.workSampleScore, ccatScore: candidate.ccatScore,
-      });
-      await db.update(candidates).set({ interviewQuestions: questions, updatedAt: new Date() }).where(eq(candidates.id, candidateId));
-
-      const interviewerEmail = candidate.interviewerEmail || process.env.HR_EMAIL || 'jade.friedman@lsscorp.net';
-      await emailInterviewerReport({
-        interviewerEmail, interviewerName: candidate.interviewerName ?? 'Interviewer',
-        candidateFirstName: candidate.firstName, candidateLastName: candidate.lastName, jobTitle: jobTitle ?? 'the role',
-        ccatScore: candidate.ccatScore, eppMatch, valuesMatch,
-        resumeReviewScore: candidate.resumeReviewScore, workSampleScore: candidate.workSampleScore,
-        eppTraits, valueScores, questions,
-      });
-    } catch (err) { console.error('[PostReview] background pass tasks failed:', err); }
-  })();
+  void dispatchStageEmail('Values Review', fromStage, {
+    firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
+  }).catch((err) => console.error('[PostReview] Values Review email failed:', err));
 
   console.log(`[PostReview] ${candidate.email} passed — EPP ${eppMatch}% / values ${valuesMatch}%; Work Sample set, brief queued`);
   return { decision: 'passed', eppMatch, valuesMatch };

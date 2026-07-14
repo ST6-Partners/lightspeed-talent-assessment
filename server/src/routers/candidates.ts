@@ -38,6 +38,7 @@ import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, S
 import { createOfferAgreement } from '../services/adobeSign.js';
 import { getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
+import { prepInterviewQuestions } from '../services/interviewPrep.js';
 import { seedCandidateResume, seedAssessmentResults, simulateUpstreamScores } from '../services/postAssessmentReview.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
 import { walkLeadershipChain } from '../services/orgChain.js';
@@ -606,62 +607,7 @@ export const candidatesRouter = router({
         // Auto-create the per-round interview records from the role's plan
         // (idempotent — no-op if rounds already exist or no plan is defined).
         seedRoundsFromPlan(input.id).catch((err) => console.error('[advance] auto-seed interview rounds failed:', err));
-        (async () => {
-          try {
-            // Pull assessment data to tailor questions: EPP per-trait percentiles,
-            // company-values per-value scores, CCAT, and resume review.
-            const eppTraits = await ctx.db
-              .select({ trait: candidateEppScores.trait, percentile: candidateEppScores.percentile })
-              .from(candidateEppScores)
-              .where(eq(candidateEppScores.candidateId, input.id));
-            let valueScores: Array<{ value: string; score: number }> = [];
-            const latestReview = (await ctx.db
-              .select({ id: valueReviews.id })
-              .from(valueReviews)
-              .where(eq(valueReviews.candidateId, input.id))
-              .orderBy(desc(valueReviews.reviewedAt))
-              .limit(1))[0];
-            if (latestReview) {
-              valueScores = await ctx.db
-                .select({ value: companyValues.name, score: candidateValueScores.score })
-                .from(candidateValueScores)
-                .innerJoin(companyValues, eq(candidateValueScores.valueId, companyValues.id))
-                .where(eq(candidateValueScores.reviewId, latestReview.id));
-            }
-            const questions = await generateInterviewQuestions({
-              firstName: existing.firstName,
-              lastName: existing.lastName,
-              jobTitle: jobTitle ?? undefined,
-              eppProfile: (existing as any).eppProfile,
-              eppValuesMatchScore: (existing as any).eppValuesMatchScore,
-              eppTraits,
-              companyValuesMatchScore: (existing as any).companyValuesMatchScore,
-              companyValuesNotes: (existing as any).companyValuesNotes,
-              valueScores,
-              resumeReviewNotes: (existing as any).resumeReviewNotes,
-              resumeReviewScore: (existing as any).resumeReviewScore,
-              workSampleScore: (existing as any).workSampleScore,
-              ccatScore: (existing as any).ccatScore,
-            });
-
-            // Store questions on candidate record
-            await ctx.db.update(candidates)
-              .set({ interviewQuestions: questions, updatedAt: new Date() } as any)
-              .where(eq(candidates.id, input.id));
-
-            // Email questions to the interviewer (fallback to HR so they never get lost).
-            await emailInterviewerQuestions({
-              interviewerEmail: (existing as any).interviewerEmail || process.env.HR_EMAIL || 'jade.friedman@lsscorp.net',
-              interviewerName: (existing as any).interviewerName ?? 'Interviewer',
-              candidateFirstName: existing.firstName,
-              candidateLastName: existing.lastName,
-              jobTitle: jobTitle ?? 'the role',
-              questions,
-            });
-          } catch (err) {
-            console.error('[AI] Interview question generation failed:', err);
-          }
-        })();
+        prepInterviewQuestions(ctx.db, input.id).catch((err) => console.error('[advance] interview question prep failed:', err));
       }
 
       } // end forward-only side effects

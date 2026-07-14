@@ -537,7 +537,7 @@ export default function Candidates() {
             {[
               { label: 'CCAT Score', value: selected.ccatScore },
               { label: 'EPP Match', value: selected.eppValuesMatchScore != null ? `${selected.eppValuesMatchScore}%` : null },
-              { label: 'Values Match', value: (selected as any).companyValuesMatchScore != null ? `${(selected as any).companyValuesMatchScore}%` : null },
+              { label: 'Values Match', value: (selected as any).companyValuesMatchScore != null ? `${(selected as any).companyValuesMatchScore}%` : null, hint: 'How well the candidate fits this role, scored against the EPP values selected for this job.' },
               { label: 'Work Sample', value: selected.workSampleScore },
               { label: 'Resume Review', value: selected.resumeReviewScore },
               { label: 'Interview Score', value: (selected as any).interviewScore },
@@ -548,6 +548,13 @@ export default function Candidates() {
               </div>
             ))}
           </div>
+
+          {/* Role fit (values) — how the candidate does/doesn't fit this role on the JD's EPP values */}
+          {(selected as any).companyValuesNotes && (
+            <Section title="Role Fit (values)">
+              <div className="text-xs text-gray-700 whitespace-pre-wrap">{(selected as any).companyValuesNotes}</div>
+            </Section>
+          )}
 
           {/* Work Sample */}
           <Section title="Work Sample">
