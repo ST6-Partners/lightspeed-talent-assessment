@@ -706,18 +706,30 @@ export interface WorkSampleCriterion {
 function placeholderWorkSampleScore(input: WorkSampleScoreInput): WorkSampleScoreResult {
   const hasRubric = !!(input.scoringGuideWork || input.scoringGuideAi);
   return {
-    overallScore: 72,
-    workQualityScore: 72,
-    aiSkillScore: 70,
+    overallScore: 74,
+    workQualityScore: 76,
+    aiSkillScore: 71,
     summary:
-      'Draft work-sample score generated in sandbox mode (no scoring model connected). ' +
-      (hasRubric ? 'Rubric was on file. ' : 'No rubric was configured for this task. ') +
-      'Numbers are placeholders — connect a model and re-score before relying on this.',
-    strengths: ['Submission received and readable.'],
-    concerns: ['Sandbox draft — not a real evaluation.'],
+      'Sandbox draft (no scoring model connected). This is an illustrative per-criterion breakdown that shows the ' +
+      'shape of a real evaluation. ' +
+      (hasRubric ? 'A rubric was on file for this task. ' : 'No rubric was configured for this task. ') +
+      'Numbers and reasons are placeholders. Connect a model and re-score before relying on this.',
+    strengths: [
+      'Submission received and readable.',
+      'Response is organized and easy to follow.',
+      'Candidate showed the prompts and iterations they used.',
+    ],
+    concerns: [
+      'Sandbox draft, not a real evaluation.',
+      'Connect a scoring model and re-score for grounded, submission-specific reasons.',
+    ],
     rubricUsed: hasRubric,
     criteria: [
-      { dimension: 'work', criterion: 'Sandbox placeholder — connect a model for a real per-criterion breakdown', score: 72, reason: 'No scoring model connected.' },
+      { dimension: 'work', criterion: 'Understood the task and scoped the problem', score: 78, reason: 'Placeholder. A live scorer would cite how the submission framed the task.' },
+      { dimension: 'work', criterion: 'Quality and correctness of the work', score: 75, reason: 'Placeholder. A live scorer would cite the substance of the work delivered.' },
+      { dimension: 'work', criterion: 'Communication and structure', score: 77, reason: 'Placeholder. A live scorer would cite clarity and organization.' },
+      { dimension: 'ai', criterion: 'Prompt quality and iteration', score: 72, reason: 'Placeholder. A live scorer would cite the prompts and iterations shown.' },
+      { dimension: 'ai', criterion: 'Judgment on AI output', score: 70, reason: 'Placeholder. A live scorer would cite where the candidate corrected the model.' },
     ],
     mode: 'placeholder',
   };

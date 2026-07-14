@@ -252,6 +252,35 @@ const BACKFILL_STAGE_ORDER = [
   'Interview Scheduled', 'Interviewed', 'Offered', 'Hired',
 ];
 
+// The old one-line note that earlier builds wrote for seeded candidates.
+const LEGACY_WS_STUB = 'Simulated work-sample score (test data).';
+
+// Full simulated work-sample breakdown for seeded/hand-advanced candidates that
+// have no real submission. Mirrors the layout of a real AI score (formatNotes in
+// workSampleScoring.ts) so the scoring-breakdown dropdown always renders the full
+// per-criterion view. Every line is clearly marked as simulated test data.
+function simulatedWorkSampleBreakdown(overall: number): string {
+  const clamp = (n: number) => Math.max(0, Math.min(100, n));
+  const wq = clamp(overall + 2);
+  const ai = clamp(overall - 4);
+  const pass = overall >= MATCH_PASS_THRESHOLD ? 'PASS' : 'FAIL';
+  const lines: string[] = [];
+  lines.push('SIMULATED SAMPLE - test data, not a real evaluation of this candidate.');
+  lines.push(`AI work-sample score: ${overall}/100 (work quality ${wq}, AI skill ${ai}) · illustrative sample breakdown`);
+  lines.push(`RESULT: ${pass} (pass mark ${MATCH_PASS_THRESHOLD})`);
+  lines.push('', 'This candidate has no real work-sample submission on file. The breakdown below shows the full per-criterion view a real AI score produces. Send a work sample and re-score for a grounded, submission-specific result.');
+  lines.push('', 'Breakdown:');
+  lines.push(`- [work] Understood the task and scoped the problem - ${clamp(overall + 4)}/100: Sample reason. A real score cites the submission.`);
+  lines.push(`- [work] Quality and correctness of the work - ${overall}/100: Sample reason. A real score cites the work delivered.`);
+  lines.push(`- [work] Communication and structure - ${clamp(overall + 1)}/100: Sample reason. A real score cites clarity and organization.`);
+  lines.push(`- [AI use] Prompt quality and iteration - ${clamp(overall - 3)}/100: Sample reason. A real score cites the prompts shown.`);
+  lines.push(`- [AI use] Judgment on AI output - ${clamp(overall - 6)}/100: Sample reason. A real score cites where the candidate corrected the model.`);
+  lines.push('', 'Strengths:', '- Sample strength. A real score is grounded in the submission.');
+  lines.push('', 'Concerns:', '- SIMULATED sample, not a real candidate evaluation.');
+  lines.push('', `[Simulated ${new Date().toISOString().slice(0, 10)} - test data]`);
+  return lines.join('\n');
+}
+
 export function simulateUpstreamScores(candidate: any, toStage: string): Record<string, any> {
   const idx = (st: string) => BACKFILL_STAGE_ORDER.indexOf(st);
   const target = idx(toStage);
@@ -273,8 +302,12 @@ export function simulateUpstreamScores(candidate: any, toStage: string): Record<
   }
   // Work Sample stage -> auto-scored work sample.
   if (target >= idx('Work Sample') && candidate.workSampleScore == null) {
-    patch.workSampleScore = rand(62, 34); // 62-95
-    if (candidate.workSampleNotes == null) patch.workSampleNotes = 'Simulated work-sample score (test data).';
+    const wsScore = rand(62, 34); // 62-95
+    patch.workSampleScore = wsScore;
+    // Write a FULL breakdown (same layout as a real AI score) so the work-sample
+    // dropdown always shows the complete per-criterion view, clearly marked as
+    // simulated sample data. Replaces the old one-line stub.
+    if (candidate.workSampleNotes == null) patch.workSampleNotes = simulatedWorkSampleBreakdown(wsScore);
   }
   // Interviewed (finalist) -> interview score + reference confidence.
   if (target >= idx('Interviewed')) {
@@ -290,6 +323,12 @@ export async function backfillTestScores(db: any): Promise<number> {
   for (const c of rows as any[]) {
     if (c.currentStage === 'Rejected') continue;
     const patch = simulateUpstreamScores(c, c.currentStage);
+    // One-time upgrade: candidates seeded by earlier builds carry the old one-line
+    // stub. Replace it with the full simulated breakdown so the scoring dropdown
+    // shows the complete per-criterion view for existing data too.
+    if (c.workSampleNotes === LEGACY_WS_STUB && c.workSampleScore != null) {
+      patch.workSampleNotes = simulatedWorkSampleBreakdown(c.workSampleScore);
+    }
     if (Object.keys(patch).length) {
       patch.updatedAt = new Date();
       await db.update(candidates).set(patch).where(eq(candidates.id, c.id));
