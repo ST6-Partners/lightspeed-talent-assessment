@@ -15,6 +15,7 @@ import { candidateEppScores } from '../db/schema/epp.js';
 import { valueReviews, candidateValueScores, companyValues } from '../db/schema/values.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
+import { logDecision } from '../services/decisionLog.js';
 import { analyzeInterviewTranscript } from '../services/ai.js';
 import { processInterviewFeedback } from '../services/interviewFeedback.js';
 import { seedRoundsFromPlan, autofillSampleRounds } from '../services/interviewRounds.js';
@@ -1065,6 +1066,22 @@ export const candidatesRouter = router({
       await ctx.db.update(candidates)
         .set({ referenceCheckNotes: report, referenceCheckScore: result.confidence, updatedAt: new Date() })
         .where(eq(candidates.id, input.id));
+
+      // Phase 2 — record the reference-check synthesis with AI provenance (advisory).
+      await logDecision(ctx.db, {
+        candidateId: input.id,
+        decisionType: 'reference_check',
+        outcome: 'scored',
+        score: result.confidence,
+        decidedByType: result.mode === 'ai' ? 'ai' : 'deterministic',
+        decidedBy: ctx.user.id,
+        model: result.provenance?.model ?? null,
+        requestedModel: result.provenance?.requestedModel ?? null,
+        promptId: result.provenance?.promptId ?? null,
+        promptVersion: result.provenance?.promptVersion ?? null,
+        reason: `Reference report synthesized: ${result.recommendation} (confidence ${result.confidence}). AI draft to verify, not an automated decision.`,
+        inputs: { recommendation: result.recommendation, confidence: result.confidence, mode: result.mode },
+      });
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'reference_check', 'candidates', { candidateId: input.id }).catch(() => {});

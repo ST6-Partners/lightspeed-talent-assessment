@@ -52,6 +52,9 @@ export { titles } from './titles.js';
 // EPP (1 table)
 export { candidateEppScores } from './epp.js';
 
+// Decision Log (1 table) — Phase 2 decision provenance & transparency
+export { decisionLog } from './decisions.js';
+
 // Email (1 table) — inbound/test inbox
 export { inboundEmails } from './email.js';
 

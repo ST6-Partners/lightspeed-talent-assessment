@@ -15,6 +15,7 @@ import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema
 import { resolveDeptWorkSample } from './workSampleResolver.js';
 import { scoreWorkSample, type WorkSampleScoreResult } from './ai.js';
 import { getWorkSampleScoringConfig } from './workSampleConfig.js';
+import { logDecision } from './decisionLog.js';
 
 // Stages early enough that an auto-reject is appropriate (never touch someone
 // already advanced to interviews or beyond, or already Hired/Rejected).
@@ -71,6 +72,28 @@ export async function scoreAndStoreWorkSample(db: any, candidateId: string): Pro
   const cfg = await getWorkSampleScoringConfig(db);
   const pass = result.overallScore >= cfg.passThreshold;
   const autoRejected = cfg.autoRejectEnabled && !pass && AUTO_REJECT_STAGES.includes(candidate.currentStage);
+
+  // Phase 2 — record the work-sample scoring decision with AI provenance.
+  await logDecision(db, {
+    candidateId,
+    decisionType: 'work_sample',
+    outcome: autoRejected ? 'rejected' : (pass ? 'passed' : 'scored'),
+    score: result.overallScore,
+    decidedByType: result.mode === 'ai' ? 'ai' : 'deterministic',
+    model: result.provenance?.model ?? null,
+    requestedModel: result.provenance?.requestedModel ?? null,
+    promptId: result.provenance?.promptId ?? null,
+    promptVersion: result.provenance?.promptVersion ?? null,
+    reason: result.summary || `Work sample scored ${result.overallScore}/100 (pass mark ${cfg.passThreshold}).`,
+    inputs: {
+      overallScore: result.overallScore,
+      workQualityScore: result.workQualityScore,
+      aiSkillScore: result.aiSkillScore,
+      passThreshold: cfg.passThreshold,
+      rubricUsed: result.rubricUsed,
+      mode: result.mode,
+    },
+  });
 
   await db.update(candidates)
     .set({
