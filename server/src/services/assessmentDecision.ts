@@ -91,8 +91,7 @@ export async function applyAssessmentDecision(
     // has no EPP results, it returns 'skipped' and we fall back to the legacy
     // Work Sample advance below.
     const review = await runPostAssessmentReview(db, candidate.id);
-    if (review.decision === 'passed') return { decision: 'advanced', score };
-    if (review.decision === 'rejected') return { decision: 'rejected', score };
+    if (review.decision === 'passed' || review.decision === 'held') return { decision: 'advanced', score };
     // review.decision === 'skipped' -> legacy path below
     // Ensure a work-sample token/link exists so the advancement
     // email carries the candidate's work sample link.

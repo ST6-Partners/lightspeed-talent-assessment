@@ -33,7 +33,7 @@ function formatNotes(
   );
   lines.push(
     `RESULT: ${meta.pass ? 'PASS' : 'FAIL'} (pass mark ${meta.threshold})` +
-    `${meta.autoRejected ? ' — candidate auto-rejected' : ''}`,
+    `${meta.pass ? '' : ' — flagged for human review (not auto-rejected)'}`,
   );
   if (r.summary) lines.push('', r.summary);
   if (r.criteria && r.criteria.length) {
@@ -71,13 +71,16 @@ export async function scoreAndStoreWorkSample(db: any, candidateId: string): Pro
 
   const cfg = await getWorkSampleScoringConfig(db);
   const pass = result.overallScore >= cfg.passThreshold;
-  const autoRejected = cfg.autoRejectEnabled && !pass && AUTO_REJECT_STAGES.includes(candidate.currentStage);
+  // Auto-reject removed: below-mark work samples are flagged for human review, never auto-rejected.
+  const autoRejected = false;
+  const flaggedForReview = !pass && AUTO_REJECT_STAGES.includes(candidate.currentStage);
+  void cfg.autoRejectEnabled;
 
   // Phase 2 — record the work-sample scoring decision with AI provenance.
   await logDecision(db, {
     candidateId,
     decisionType: 'work_sample',
-    outcome: autoRejected ? 'rejected' : (pass ? 'passed' : 'scored'),
+    outcome: pass ? 'passed' : (flaggedForReview ? 'pending_review' : 'scored'),
     score: result.overallScore,
     decidedByType: result.mode === 'ai' ? 'ai' : 'deterministic',
     model: result.provenance?.model ?? null,
@@ -103,22 +106,6 @@ export async function scoreAndStoreWorkSample(db: any, candidateId: string): Pro
     })
     .where(eq(candidates.id, candidateId));
 
-  if (autoRejected) {
-    await db.update(candidates)
-      .set({
-        currentStage: 'Rejected',
-        rejectionReason: `Work sample below pass mark (${result.overallScore} < ${cfg.passThreshold})`,
-        updatedAt: new Date(),
-      })
-      .where(eq(candidates.id, candidateId));
-    await db.insert(candidateStageHistory).values({
-      candidateId,
-      fromStage: candidate.currentStage,
-      toStage: 'Rejected',
-      changedBy: null,
-      reason: `Auto-rejected: work sample ${result.overallScore} below pass mark ${cfg.passThreshold} (automated)`,
-    });
-  }
-
+  // No stage change on a low score — the work sample is advisory and a human decides.
   return result;
 }
