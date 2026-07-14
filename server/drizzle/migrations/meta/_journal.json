@@ -386,6 +386,13 @@
       "when": 1960000025000,
       "tag": "0052_decision_log",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1960000026000,
+      "tag": "0053_candidate_rankings",
+      "breakpoints": true
     }
   ]
 }

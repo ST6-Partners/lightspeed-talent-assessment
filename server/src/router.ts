@@ -39,6 +39,7 @@ import { internalOpeningsRouter } from './routers/internalOpenings.js';
 import { schedulingRouter } from './routers/scheduling.js';
 import { interviewsRouter } from './routers/interviews.js';
 import { decisionsRouter } from './routers/decisions.js';
+import { rankingRouter } from './routers/ranking.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -69,6 +70,7 @@ export const appRouter = router({
   scheduling: schedulingRouter,
   interviews: interviewsRouter,
   decisions: decisionsRouter,
+  ranking: rankingRouter,
   departments: departmentsRouter,
   tasks: assessmentTasksRouter,
   packages: assessmentPackagesRouter,

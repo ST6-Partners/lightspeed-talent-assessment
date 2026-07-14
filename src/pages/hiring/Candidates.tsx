@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
@@ -72,6 +72,7 @@ export default function Candidates() {
   const advanceMutation = trpc.candidates.advanceStage.useMutation({
     onSuccess: () => refetch(),
   });
+  const navigate = useNavigate();
   const rejectMutation = trpc.candidates.reject.useMutation({
     onSuccess: () => { refetch(); setRejectingId(null); setRejectReason(''); },
   });
@@ -433,6 +434,14 @@ export default function Candidates() {
                           {g.hm && <span>{g.hm}</span>}
                         </div>
                       </div>
+                      {g.jdId !== 'none' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); navigate(`/hiring/ranking/${g.jdId}`); }}
+                          className="flex-none text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium hover:bg-blue-50"
+                        >
+                          Rank candidates
+                        </button>
+                      )}
                     </div>
                     <div className="flex gap-2 mt-3 ml-6">
                       {FUNNEL_STAGES.map((st) => {

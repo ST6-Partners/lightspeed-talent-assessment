@@ -1186,3 +1186,79 @@ ${input.interviewFeedback || '(no interview feedback on file yet)'}`;
     return placeholderCapabilityRec(input);
   }
 }
+
+// ============================================================
+// CANDIDATE RANKING (advisory) — order the pool against a role.
+// Never a decision, never an exclusion. Personality/EPP is deliberately
+// NOT used here (that stays a separate, human-reviewed step). The fitScore
+// is internal ordering only and is never shown to users.
+// ============================================================
+
+const RANKING_MODEL = 'claude-sonnet-4-6';
+
+export interface RankFitInput {
+  firstName: string;
+  lastName: string;
+  roleTitle: string;
+  criteria: string;
+  candidateMaterial: string;
+}
+
+export interface RankFitResult {
+  sortScore: number;
+  recommendation: string;
+  strengths: string[];
+  concerns: string[];
+  model: string;
+}
+
+function placeholderRankFit(_input: RankFitInput): RankFitResult {
+  return {
+    sortScore: 60,
+    recommendation: 'Sandbox draft — connect an AI key to rank against the role.',
+    strengths: ['Resume received and readable.'],
+    concerns: ['Sandbox draft, not a real evaluation.'],
+    model: 'placeholder',
+  };
+}
+
+export async function rankCandidateFit(input: RankFitInput): Promise<RankFitResult> {
+  if (SANDBOX) {
+    console.log('[AI SANDBOX] rankCandidateFit | placeholder (no ANTHROPIC_API_KEY)');
+    return placeholderRankFit(input);
+  }
+
+  const system = `You are ranking ONE candidate's fit for a role for a hiring team at Lightspeed Systems (K-12 edtech).
+Judge ONLY role fit: the role brief plus what the hiring manager said they want, against the candidate's background.
+Do NOT use or infer personality, protected characteristics, or demographics. This is an ADVISORY suggestion to help a
+human decide what order to review candidates in — never a decision, never an exclusion.
+Give an internal fitScore 0-100 used only to order candidates (it is NOT shown to anyone), a one-line recommendation,
+a few concrete strengths, and a few things to probe in the interview. Ground every point in the candidate's material.
+If the role brief is thin, say what's missing and keep your confidence low.
+Return ONLY JSON: { "fitScore": 0-100, "recommendation": "one line", "strengths": ["..."], "concerns": ["..."] }`;
+
+  const user = `ROLE: ${input.roleTitle}
+
+--- WHAT THIS ROLE NEEDS (job description + hiring-manager intent) ---
+${input.criteria || 'not provided'}
+
+--- CANDIDATE: ${input.firstName} ${input.lastName} ---
+${input.candidateMaterial || '(no resume on file)'}`;
+
+  try {
+    const meta = await callClaudeMeta(system, user, RANKING_MODEL);
+    const fenced = meta.text.replace(/```json|```/g, '');
+    const parsed = JSON.parse(fenced.slice(fenced.indexOf('{'), fenced.lastIndexOf('}') + 1));
+    const clamp = (n: any) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
+    return {
+      sortScore: clamp(parsed.fitScore),
+      recommendation: String(parsed.recommendation ?? ''),
+      strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String).slice(0, 5) : [],
+      concerns: Array.isArray(parsed.concerns) ? parsed.concerns.map(String).slice(0, 5) : [],
+      model: meta.model,
+    };
+  } catch (err) {
+    console.error('[AI] rankCandidateFit failed — returning placeholder:', err);
+    return placeholderRankFit(input);
+  }
+}

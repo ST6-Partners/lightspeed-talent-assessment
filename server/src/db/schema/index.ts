@@ -34,6 +34,8 @@ export {
   candidates,
   candidateStageHistory,
   emailLog,
+  rankingRuns,
+  candidateRankings,
   candidateStageEnum,
   requisitionStatusEnum,
   jdStatusEnum,

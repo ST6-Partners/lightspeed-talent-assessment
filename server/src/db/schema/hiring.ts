@@ -230,3 +230,32 @@ export const emailLog = pgTable('email_log', {
   sentAt: timestamp('sent_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ── candidate ranking (advisory — never auto-advances or rejects) ──
+// The AI orders candidates who passed the hard cutoff against the role
+// (job description + hiring-manager intake intent). A human decides.
+
+export const rankingRuns = pgTable('ranking_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  jdId: uuid('jd_id').references(() => jobDescriptions.id, { onDelete: 'cascade' }).notNull(),
+  reqId: uuid('req_id'),
+  totalRanked: integer('total_ranked').notNull().default(0),
+  criteriaSummary: text('criteria_summary'),
+  limitedData: boolean('limited_data').notNull().default(false),
+  model: varchar('model', { length: 100 }),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const candidateRankings = pgTable('candidate_rankings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  runId: uuid('run_id').references(() => rankingRuns.id, { onDelete: 'cascade' }).notNull(),
+  jdId: uuid('jd_id').references(() => jobDescriptions.id, { onDelete: 'cascade' }).notNull(),
+  candidateId: uuid('candidate_id').references(() => candidates.id, { onDelete: 'cascade' }).notNull(),
+  rank: integer('rank').notNull(),
+  sortScore: integer('sort_score').notNull().default(0),
+  recommendation: text('recommendation'),
+  strengths: jsonb('strengths').default([]),
+  concerns: jsonb('concerns').default([]),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
