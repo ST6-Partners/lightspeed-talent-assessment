@@ -12,12 +12,14 @@
 // ============================================================
 import { eq, sql } from 'drizzle-orm';
 import {
+  candidates,
   jobDescriptions,
   jobRequisitions,
   candidateRankings,
   rankingRuns,
 } from '../db/schema/hiring.js';
 import { rankCandidateFit } from './ai.js';
+import { buildSeededResume } from './postAssessmentReview.js';
 
 const MAX_POOL = 60;
 const CONCURRENCY = 5;
@@ -74,9 +76,17 @@ function buildCriteria(jd: any, req: any): Criteria {
   };
 }
 
-function materialFrom(c: any): string {
+async function ensureMaterial(db: any, c: any, jd: any): Promise<string> {
+  let resume = textOr(c.resume_text);
+  if (!resume) {
+    // Test-data convenience: if a pooled candidate has no resume on file, seed a
+    // realistic one so the ranking has something to reason about. Persists so it's
+    // stable across re-ranks. (Seeded resumes are detected as pre-passed elsewhere.)
+    resume = buildSeededResume(c.first_name, c.last_name, jd);
+    await db.update(candidates).set({ resumeText: resume }).where(eq(candidates.id, c.id)).catch(() => {});
+  }
   return [
-    textOr(c.resume_text),
+    resume,
     textOr(c.screen_summary) && `Screen notes: ${textOr(c.screen_summary)}`,
     textOr(c.resume_review_notes) && `Resume review: ${textOr(c.resume_review_notes)}`,
     textOr(c.skills_fit_notes) && `Skills fit: ${textOr(c.skills_fit_notes)}`,
@@ -127,12 +137,13 @@ export async function rankRoleCandidates(db: any, jdId: string, userId: string |
   `)) as any).rows as any[];
 
   const scored = await mapLimit(poolRows, CONCURRENCY, async (c: any) => {
+    const material = await ensureMaterial(db, c, jd);
     const r = await rankCandidateFit({
       firstName: c.first_name,
       lastName: c.last_name,
       roleTitle: textOr(jd.jobTitle, 'role'),
       criteria: crit.criteria,
-      candidateMaterial: materialFrom(c),
+      candidateMaterial: material,
     });
     return { c, r };
   });
@@ -190,12 +201,13 @@ export async function rankOneCandidateIntoRole(db: any, candidateId: string, use
     const req = jd.reqId ? await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) }) : null;
     const crit = buildCriteria(jd, req);
 
+    const material = await ensureMaterial(db, c, jd);
     const r = await rankCandidateFit({
       firstName: c.first_name,
       lastName: c.last_name,
       roleTitle: textOr(jd.jobTitle, 'role'),
       criteria: crit.criteria,
-      candidateMaterial: materialFrom(c),
+      candidateMaterial: material,
     });
 
     const run = await ensureRun(db, jd, crit, userId, r.model);

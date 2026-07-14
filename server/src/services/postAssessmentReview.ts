@@ -168,29 +168,65 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
 // seeded only when the candidate reaches the Assessment stage (seedAssessmentResults).
 const EPP_TRAITS = ['Achievement','Assertiveness','Competitiveness','Conscientiousness','Cooperativeness','Extroversion','Managerial','Motivation','Openness','Patience','Self-Confidence','Stress Tolerance'];
 
+// Deterministic hash so a given candidate always gets the same seeded profile.
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; }
+  return h;
+}
+
+// A few realistic, DIFFERENTIATED archetypes so the ranking has signal to sort on.
+// Each keeps the "RELEVANT QUALIFICATIONS & EXPERIENCE" marker (via qualsBlock) so
+// the resume screen treats it as a seeded pass — this never triggers the auto-reject.
+const RESUME_ARCHETYPES = [
+  {
+    summary: 'a senior operator with 13+ years leading go-to-market and P&L for SaaS and edtech businesses, including multi-region expansion across North America, EMEA, and APAC.',
+    experience: ['General Manager, International at a K-12 edtech SaaS company — owned a $40M P&L and grew the region 3x in three years.', 'VP of Sales at a B2B SaaS scale-up — built and led a 90-person org across 4 countries.', 'Repeatedly hired, coached, and retained high-performing leadership benches.'],
+    skills: 'P&L ownership, international go-to-market, org design, forecasting, cross-cultural leadership, board reporting.',
+    education: 'MBA; B.A. in Economics.',
+  },
+  {
+    summary: 'a commercial leader with 9 years in B2B SaaS sales leadership and a strong culture-building track record, with some international exposure but limited K-12 experience.',
+    experience: ['Director of Sales at a mid-market SaaS company — led a 55-person team to 120% of quota.', 'Regional Sales Manager — expanded into two new European markets.', 'Known for onboarding and developing first-time managers.'],
+    skills: 'sales leadership, pipeline management, enablement, hiring, quota planning, CRM analytics.',
+    education: 'B.S. in Business Administration.',
+  },
+  {
+    summary: 'a capable mid-level manager with 5 years of experience in an adjacent industry, an owner mindset, and a clear upward trajectory into broader leadership.',
+    experience: ['Regional Manager at a logistics-tech firm — owned a regional quota and a team of 12.', 'Team Lead — improved retention and process efficiency with data-informed decisions.', 'Strong individual results; scope smaller than this senior role.'],
+    skills: 'team leadership, operations, analytics, customer success, process improvement.',
+    education: 'B.A. in Management.',
+  },
+  {
+    summary: 'a high-potential, earlier-career candidate with 3 years of strong individual results who is stepping up into people leadership for the first time.',
+    experience: ['Senior Account Executive — top performer, exceeded quota three years running.', 'Led a small cross-functional pod on a new-market pilot.', 'Limited formal management experience; strong drive and coachability.'],
+    skills: 'consultative selling, relationship building, adaptability, communication, initiative.',
+    education: 'B.A. in Communications.',
+  },
+];
+
+export function buildSeededResume(firstName: string, lastName: string, jd: any): string {
+  const arch = RESUME_ARCHETYPES[hashString(`${firstName} ${lastName}`) % RESUME_ARCHETYPES.length];
+  let qualsBlock = '';
+  const req = ((jd as any)?.requiredQualifications ?? '').toString().trim();
+  const pref = ((jd as any)?.preferredQualifications ?? '').toString().trim();
+  if (req) qualsBlock += '\n\nRELEVANT QUALIFICATIONS & EXPERIENCE\n' + req;
+  if (pref) qualsBlock += '\n' + pref;
+  return (
+    'PROFESSIONAL SUMMARY\n' + firstName + ' ' + lastName + ' is ' + arch.summary + '\n\n' +
+    'EXPERIENCE\n' + arch.experience.map((e) => '- ' + e).join('\n') + '\n\n' +
+    'SKILLS\n- ' + arch.skills +
+    qualsBlock + '\n\n' +
+    'EDUCATION\n- ' + arch.education
+  );
+}
+
 export async function seedCandidateResume(db: any, candidateId: string, candidate: any): Promise<void> {
   if (candidate.resumeText) return;
-
-  // If the candidate is tied to a role, weave that role's required (and preferred)
-  // qualifications into the seeded resume so the resume screen finds them met.
-  // Otherwise a generic resume fails every role's required-quals check and the
-  // candidate gets auto-rejected before CCAT/EPP/values ever matter.
-  let qualsBlock = '';
-  if (candidate.jdId) {
-    const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) });
-    const req = ((jd as any)?.requiredQualifications ?? '').toString().trim();
-    const pref = ((jd as any)?.preferredQualifications ?? '').toString().trim();
-    if (req) qualsBlock += '\n\nRELEVANT QUALIFICATIONS & EXPERIENCE\n' + req;
-    if (pref) qualsBlock += '\n' + pref;
-  }
-
-  const resumeText =
-    'PROFESSIONAL SUMMARY\n' + candidate.firstName + ' ' + candidate.lastName +
-    ' is a results-driven professional with 6+ years of experience delivering high-quality work in fast-paced environments. Strong communicator and collaborator with a track record of ownership and measurable impact.\n\n' +
-    'EXPERIENCE\n- Led cross-functional projects from concept to delivery.\n- Improved process efficiency and quality through data-informed decisions.\n- Mentored teammates and contributed to a high-standards culture.\n\n' +
-    'SKILLS\n- Communication, problem-solving, collaboration, project management, data analysis, adaptability.' +
-    qualsBlock + '\n\n' +
-    'EDUCATION\n- B.S. in a relevant field.';
+  const jd = candidate.jdId
+    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+    : null;
+  const resumeText = buildSeededResume(candidate.firstName, candidate.lastName, jd);
   await db.update(candidates).set({ resumeText, updatedAt: new Date() }).where(eq(candidates.id, candidateId));
 }
 

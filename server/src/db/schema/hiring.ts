@@ -140,6 +140,7 @@ export const candidates = pgTable('candidates', {
   phone: varchar('phone', { length: 50 }),
   linkedinUrl: text('linkedin_url'),
   resumeUrl: text('resume_url'),
+  resumeText: text('resume_text'),
   source: varchar('source', { length: 100 }),
   currentStage: candidateStageEnum('current_stage').notNull().default('Applied'),
   rejectionReason: text('rejection_reason'),

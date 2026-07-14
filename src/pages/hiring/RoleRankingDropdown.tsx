@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, RefreshCw, Info, AlertTriangle } from 'lucide-react';
+import { ChevronDown, RefreshCw, Info, AlertTriangle, Sparkles } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 function initials(first?: string, last?: string): string {
@@ -27,19 +27,25 @@ export default function RoleRankingDropdown({ jdId }: { jdId: string }) {
   };
 
   return (
-    <div className="border-t border-gray-100">
+    <div className="border-t border-blue-100 bg-blue-50/40">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-gray-50"
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-blue-50 transition-colors"
       >
-        <span className="flex items-center gap-2 text-sm font-medium text-gray-700">
-          <ChevronDown size={15} className={`text-gray-400 transition-transform ${open ? '' : '-rotate-90'}`} />
+        <span className="flex items-center gap-2 text-sm font-semibold text-ls-primary">
+          <Sparkles size={16} className="text-ls-primary" />
           Candidate ranking
           {open && total > 0 && (
-            <span className="text-xs text-gray-400 font-normal">top {Math.min(15, total)} of {total}</span>
+            <span className="text-xs text-blue-400 font-normal">top {Math.min(15, total)} of {total}</span>
           )}
         </span>
-        <span className="text-[11px] uppercase tracking-wide text-green-600 bg-green-50 rounded px-1.5 py-0.5">Live</span>
+        <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1 text-[11px] font-medium text-green-700 bg-green-100 rounded-full px-2 py-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            LIVE
+          </span>
+          <ChevronDown size={16} className={`text-ls-primary transition-transform ${open ? '' : '-rotate-90'}`} />
+        </span>
       </button>
 
       {open && (
