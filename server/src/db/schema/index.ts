@@ -45,6 +45,9 @@ export { candidateReferences } from './hiring.js';
 
 // Company Values (2 tables)
 export { companyValues, candidateValueScores, valueReviews, valuePillarEnum } from './values.js';
+
+// Capability (2 tables) — the "Capability" scorecard section + teachability coding
+export { capabilityItems, candidateCapabilityScores, teachabilityEnum } from './capability.js';
 export { employees } from './employees.js';
 export { departments } from './departments.js';
 export { titles } from './titles.js';

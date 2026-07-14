@@ -7,6 +7,7 @@ import { eq, asc, desc, inArray } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
 import { companyValues, candidateValueScores, valueReviews } from '../db/schema/values.js';
+import { capabilityItems, candidateCapabilityScores } from '../db/schema/capability.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { employees } from '../db/schema/employees.js';
 import { auditChange } from '../services/audit.js';
@@ -27,6 +28,10 @@ export const valuesRouter = router({
   // ── Values CRUD ──
   list: protectedProcedure.query(async ({ ctx }) =>
     ctx.db.query.companyValues.findMany({ orderBy: [asc(companyValues.sortOrder)] })),
+
+  // ── Capability items (the "Capability" scorecard section) ──
+  listCapabilityItems: protectedProcedure.query(async ({ ctx }) =>
+    ctx.db.query.capabilityItems.findMany({ orderBy: [asc(capabilityItems.sortOrder)] })),
 
   create: protectedProcedure.input(ValueInput).mutation(async ({ ctx, input }) => {
     const [v] = await ctx.db.insert(companyValues).values({ ...input }).returning();
@@ -76,6 +81,8 @@ export const valuesRouter = router({
       emps.forEach((e: any) => { empName[e.id] = e.name; });
       const scoreRows = await ctx.db.select().from(candidateValueScores)
         .where(inArray(candidateValueScores.reviewId, reviews.map((r: any) => r.id)));
+      const capRows = await ctx.db.select().from(candidateCapabilityScores)
+        .where(inArray(candidateCapabilityScores.reviewId, reviews.map((r: any) => r.id)));
       return reviews.map((r: any) => ({
         id: r.id,
         reviewerId: r.reviewerId,
@@ -83,6 +90,7 @@ export const valuesRouter = router({
         interviewId: r.interviewId ?? null,
         reviewedAt: r.reviewedAt,
         scores: scoreRows.filter((s: any) => s.reviewId === r.id).map((s: any) => ({ valueId: s.valueId, score: s.score, notes: s.notes })),
+        capabilityScores: capRows.filter((s: any) => s.reviewId === r.id).map((s: any) => ({ capabilityItemId: s.capabilityItemId, score: s.score, notes: s.notes })),
       }));
     }),
 
@@ -98,6 +106,11 @@ export const valuesRouter = router({
         score: z.number().int().min(1).max(5),
         notes: z.string().optional(),
       })),
+      capabilityScores: z.array(z.object({
+        capabilityItemId: z.string().uuid(),
+        score: z.number().int().min(1).max(5),
+        notes: z.string().optional(),
+      })).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const reviewedAt = input.reviewedAt ? new Date(input.reviewedAt) : new Date();
@@ -118,6 +131,14 @@ export const valuesRouter = router({
           await tx.insert(candidateValueScores).values(
             input.scores.map((s) => ({ reviewId: rid!, valueId: s.valueId, score: s.score, notes: s.notes })),
           );
+        }
+        if (input.capabilityScores) {
+          await tx.delete(candidateCapabilityScores).where(eq(candidateCapabilityScores.reviewId, rid!));
+          if (input.capabilityScores.length) {
+            await tx.insert(candidateCapabilityScores).values(
+              input.capabilityScores.map((s) => ({ reviewId: rid!, capabilityItemId: s.capabilityItemId, score: s.score, notes: s.notes })),
+            );
+          }
         }
         return rid!;
       });

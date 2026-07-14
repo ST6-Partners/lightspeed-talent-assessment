@@ -11,9 +11,16 @@ const PILLAR_COLORS: Record<string, string> = {
   'Customer-Obsessed': 'text-teal-700',
   'Results-Focused': 'text-ls-primary',
 };
+const TEACH: Record<string, { label: string; cls: string }> = {
+  hard_to_teach: { label: 'Hard to teach', cls: 'bg-red-50 text-red-700' },
+  compound: { label: 'Compound', cls: 'bg-amber-50 text-amber-700' },
+  learnable: { label: 'Learnable', cls: 'bg-emerald-50 text-emerald-700' },
+};
 const today = () => new Date().toISOString().slice(0, 10);
-const snap = (rv: string, dt: string, iv: string, sc: Record<string, number>) =>
-  JSON.stringify([rv, dt, iv, Object.entries(sc).filter(([, v]) => typeof v === 'number').sort((a, b) => (a[0] < b[0] ? -1 : 1))]);
+const snap = (rv: string, dt: string, iv: string, sc: Record<string, number>, cap: Record<string, number> = {}) =>
+  JSON.stringify([rv, dt, iv,
+    Object.entries(sc).filter(([, v]) => typeof v === 'number').sort((a, b) => (a[0] < b[0] ? -1 : 1)),
+    Object.entries(cap).filter(([, v]) => typeof v === 'number').sort((a, b) => (a[0] < b[0] ? -1 : 1))]);
 
 export default function ScoreValues() {
   const [candidateId, setCandidateId] = useState('');
@@ -21,6 +28,7 @@ export default function ScoreValues() {
   const [reviewedAt, setReviewedAt] = useState(today());
   const [currentReviewId, setCurrentReviewId] = useState<string | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
+  const [capScores, setCapScores] = useState<Record<string, number>>({});
   const [aiShown, setAiShown] = useState(false); // AI scorecard shown (filled) vs cleared
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
@@ -31,6 +39,7 @@ export default function ScoreValues() {
 
   const { data: candidates } = trpc.candidates.list.useQuery();
   const { data: values } = trpc.values.list.useQuery();
+  const { data: capItems } = trpc.values.listCapabilityItems.useQuery();
   const { data: reviewers } = trpc.values.listReviewers.useQuery();
   const eppQuery = trpc.values.getCandidateEpp.useQuery({ candidateId }, { enabled: !!candidateId });
   const reviewsQuery = trpc.values.getCandidateReviews.useQuery({ candidateId }, { enabled: !!candidateId });
@@ -40,7 +49,9 @@ export default function ScoreValues() {
       setSaved(true); setCurrentReviewId(r.reviewId);
       const sc: Record<string, number> = {};
       (variables?.scores ?? []).forEach((x: any) => { sc[x.valueId] = x.score; });
-      setBaseline(snap(variables?.reviewerId ?? '', variables?.reviewedAt ?? '', variables?.interviewId ?? '', sc));
+      const cs: Record<string, number> = {};
+      (variables?.capabilityScores ?? []).forEach((x: any) => { cs[x.capabilityItemId] = x.score; });
+      setBaseline(snap(variables?.reviewerId ?? '', variables?.reviewedAt ?? '', variables?.interviewId ?? '', sc, cs));
       reviewsQuery.refetch(); setTimeout(() => setSaved(false), 2500);
     },
   });
@@ -74,15 +85,15 @@ export default function ScoreValues() {
     const cid = params.get('id');
     const rid = params.get('round');
     if (cid) {
-      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setAiShown(false);
+      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setAiShown(false);
       setInterviewId(rid ?? ''); setBaseline(snap('', today(), rid ?? '', {}));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectCandidate = (id: string) => {
-    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setInterviewId(''); setAiShown(false); setBaseline(snap('', today(), '', {}));
+    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setInterviewId(''); setAiShown(false); setBaseline(snap('', today(), '', {}));
   };
-  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setAiShown(false); setBaseline(snap('', today(), interviewId, {})); };
+  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setAiShown(false); setBaseline(snap('', today(), interviewId, {})); };
   const loadReview = (r: any) => {
     setCurrentReviewId(r.id);
     setReviewerId(r.reviewerId ?? '');
@@ -91,7 +102,10 @@ export default function ScoreValues() {
     const m: Record<string, number> = {};
     r.scores.forEach((s: any) => { m[s.valueId] = s.score; });
     setScores(m);
-    setBaseline(snap(r.reviewerId ?? '', new Date(r.reviewedAt).toISOString().slice(0, 10), r.interviewId ?? '', m));
+    const cm: Record<string, number> = {};
+    (r.capabilityScores ?? []).forEach((s: any) => { cm[s.capabilityItemId] = s.score; });
+    setCapScores(cm);
+    setBaseline(snap(r.reviewerId ?? '', new Date(r.reviewedAt).toISOString().slice(0, 10), r.interviewId ?? '', m, cm));
   };
 
   // Deep link ?review=<id> from a round card: load that specific submitted scorecard.
@@ -109,6 +123,7 @@ export default function ScoreValues() {
   }, [values]);
 
   const setScore = (valueId: string, score: number) => setScores((p) => ({ ...p, [valueId]: score }));
+  const setCapScore = (id: string, score: number) => setCapScores((p) => ({ ...p, [id]: score }));
   const toggleExpand = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
   const pillarAvg = (pillar: string) => {
@@ -119,6 +134,10 @@ export default function ScoreValues() {
     const got = Object.values(scores).filter((n) => typeof n === 'number') as number[];
     return got.length ? (got.reduce((a, b) => a + b, 0) / got.length).toFixed(1) : null;
   }, [scores]);
+  const capAvg = useMemo(() => {
+    const got = Object.values(capScores).filter((n) => typeof n === 'number') as number[];
+    return got.length ? (got.reduce((a, b) => a + b, 0) / got.length).toFixed(1) : null;
+  }, [capScores]);
   const reviewOverall = (r: any) => {
     const got = r.scores.map((s: any) => s.score);
     return got.length ? (got.reduce((a: number, b: number) => a + b, 0) / got.length).toFixed(1) : '—';
@@ -131,12 +150,13 @@ export default function ScoreValues() {
       candidateId, reviewerId, reviewedAt,
       interviewId: interviewId || null,
       scores: Object.entries(scores).map(([valueId, score]) => ({ valueId, score })),
+      capabilityScores: Object.entries(capScores).map(([capabilityItemId, score]) => ({ capabilityItemId, score })),
     });
   };
 
   const isExisting = currentReviewId != null;
   const isDirty = snap(reviewerId, reviewedAt, interviewId, scores) !== baseline;
-  const canSave = !!reviewerId && Object.values(scores).some((n) => typeof n === 'number');
+  const canSave = !!reviewerId && (Object.values(scores).some((n) => typeof n === 'number') || Object.values(capScores).some((n) => typeof n === 'number'));
 
   return (
     <div className="max-w-3xl">
@@ -329,6 +349,55 @@ export default function ScoreValues() {
               })}
             </div>
           ))}
+
+          {(capItems ?? []).length > 0 && (
+            <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5 mb-4">
+              <div className="flex items-baseline justify-between mb-1">
+                <div>
+                  <h3 className="text-sm font-bold text-ls-ink">Capability</h3>
+                  <p className="text-xs text-ls-ink-3">Can this person do the job? Score each 1–5. Values stays its own section above.</p>
+                </div>
+                <span className="text-xs text-ls-ink-3">avg <b className="text-ls-ink">{capAvg ?? '—'}</b></span>
+              </div>
+              {(capItems ?? []).map((it: any) => {
+                const cur = capScores[it.id];
+                const t = TEACH[it.teachability] ?? { label: it.teachability, cls: 'bg-ls-bg-2 text-ls-ink-2' };
+                return (
+                  <div key={it.id} className="py-2.5 border-t border-ls-line first:border-t-0">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-ls-ink flex items-center gap-2 flex-wrap">
+                          {it.name}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${t.cls}`}>{t.label}</span>
+                        </div>
+                        <div className="text-xs text-ls-ink-3">{it.description}</div>
+                      </div>
+                      <div className="flex gap-1.5 flex-none">
+                        {[1, 2, 3, 4, 5].map((n) => {
+                          const on = cur === n;
+                          return (
+                            <button key={n} onClick={() => setCapScore(it.id, n)} aria-pressed={on} aria-label={`${it.name} score ${n}`}
+                              className={`w-8 h-8 rounded-lg border text-[13px] font-semibold flex items-center justify-center transition-colors ${
+                                on ? 'ls-accent-grad text-white border-transparent'
+                                : 'bg-white text-ls-ink-2 border-ls-line hover:border-ls-cyan'}`}>
+                              {n}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="mt-3 pt-3 border-t border-ls-line flex items-center gap-4 flex-wrap text-[11px] text-ls-ink-3">
+                <span>Teachability:</span>
+                <span className="text-red-700">Hard to teach</span>
+                <span className="text-amber-700">Compound</span>
+                <span className="text-emerald-700">Learnable</span>
+                <span className="text-ls-ink-3">Assessments (CCAT, EPP) shown on the Assessments tab — reference, not scored here.</span>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-3 mt-5">
             {(!isExisting || isDirty) ? (
