@@ -747,6 +747,7 @@ const DECISION_LABELS: Record<string, string> = {
   interview_questions: 'Interview questions',
   interview_feedback: 'Interview feedback',
   reference_check: 'Reference check',
+  manual_stage_change: 'Manual stage change',
 };
 
 function outcomeClasses(outcome: string): string {

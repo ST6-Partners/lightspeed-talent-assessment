@@ -560,6 +560,17 @@ export const candidatesRouter = router({
         reason: input.reason,
       });
 
+      // Phase 2 — record the manual human stage change in the decision log.
+      await logDecision(ctx.db, {
+        candidateId: input.id,
+        decisionType: 'manual_stage_change',
+        outcome: fwd ? 'advanced' : 'moved',
+        decidedByType: 'human',
+        decidedBy: ctx.user.id,
+        reason: input.reason || `Manually moved from ${existing.currentStage} to ${input.toStage}.`,
+        inputs: { fromStage: existing.currentStage, toStage: input.toStage, direction: fwd ? 'forward' : 'backward' },
+      });
+
       // Forward-only side effects: stage emails, work-sample link, interviewer questions.
       if (fwd) {
       const jobTitle = await getJobTitle(ctx.db, existing.jdId);
@@ -709,6 +720,17 @@ export const candidatesRouter = router({
         toStage: 'Rejected',
         changedBy: ctx.user.id,
         reason: input.reason,
+      });
+
+      // Phase 2 — record the manual human rejection in the decision log.
+      await logDecision(ctx.db, {
+        candidateId: input.id,
+        decisionType: 'manual_stage_change',
+        outcome: 'rejected',
+        decidedByType: 'human',
+        decidedBy: ctx.user.id,
+        reason: input.reason,
+        inputs: { fromStage: existing.currentStage, toStage: 'Rejected' },
       });
 
       // Fire rejection email (non-blocking)
