@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2 } from 'lucide-react';
+import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import RoleRankingDropdown from './RoleRankingDropdown';
 
@@ -544,8 +544,8 @@ export default function Candidates() {
               { label: 'Resume Review', value: selected.resumeReviewScore },
               { label: 'Interview Score', value: (selected as any).interviewScore },
             ].map(({ label, value, hint }: any) => (
-              <div key={label} className="bg-gray-50 rounded p-2" title={hint}>
-                <div className="text-xs text-gray-500">{label}{hint && <span className="text-gray-300"> ⓘ</span>}</div>
+              <div key={label} className={`bg-gray-50 rounded p-2 ${hint ? 'cursor-help' : ''}`} title={hint}>
+                <div className="text-xs text-gray-500 flex items-center gap-1">{label}{hint && <Info size={13} className="text-ls-primary shrink-0" aria-label={hint} />}</div>
                 <div className="text-sm font-medium text-gray-900">{value ?? '—'}</div>
               </div>
             ))}
