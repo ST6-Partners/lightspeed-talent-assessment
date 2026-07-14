@@ -32,7 +32,7 @@ import {
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
 import { scoreSkillsFit } from '../services/ai.js';
-import { computeEppScans, ingestEppResults } from '../services/eppScans.js';
+import { computeEppScans, ingestEppResults, buildRoleFitNotes } from '../services/eppScans.js';
 import { draftTransitionPlan } from '../services/ai.js';
 import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, STANDARD_INTERNAL_OFFER_CLAUSES, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
 import { createOfferAgreement } from '../services/adobeSign.js';
@@ -961,9 +961,7 @@ export const candidatesRouter = router({
         skillsFitNotes: skills.summary,
         ...(eppMatch != null ? { eppValuesMatchScore: eppMatch } : {}),
         ...(companyValuesMatch != null ? { companyValuesMatchScore: companyValuesMatch } : {}),
-        companyValuesNotes: eppScans.hasEpp
-          ? `Company-values match ${companyValuesMatch}/100 across ${eppScans.scoredValues}/${eppScans.totalValues} values; EPP match ${eppMatch}/100 across ${eppScans.traitCount} traits.`
-          : 'No EPP results on file yet.',
+        companyValuesNotes: buildRoleFitNotes(eppScans),
         screenScore: composite,
         screenRecommendation: recommendation,
         screenSummary,
@@ -1813,10 +1811,11 @@ export const candidatesRouter = router({
         return { skipped: true, reason: 'No EPP results on file — run after Criteria Corp EPP results are received (Refresh scores).' };
       }
 
-      // Persist both EPP-derived scores.
+      // Persist both EPP-derived scores + the role-fit notes.
       await ctx.db.update(candidates).set({
         ...(scans.eppMatch != null ? { eppValuesMatchScore: scans.eppMatch } : {}),
         ...(scans.companyValuesMatch != null ? { companyValuesMatchScore: scans.companyValuesMatch } : {}),
+        companyValuesNotes: buildRoleFitNotes(scans),
         updatedAt: new Date(),
       }).where(eq(candidates.id, input.id));
 
