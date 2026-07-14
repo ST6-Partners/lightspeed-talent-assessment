@@ -171,6 +171,9 @@ export default function Candidates() {
         <td className="px-4 py-3 text-gray-500">{c.email}</td>
         <td className="px-4 py-3">
           <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STAGE_COLORS[c.currentStage] ?? ''}`}>{c.currentStage}</span>
+          {c.screenRecommendation === 'review' && c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && (
+            <span className="ml-1.5 inline-flex items-center px-2 py-0.5 text-xs rounded-full font-medium bg-amber-100 text-amber-700" title="Below the auto-advance bar — awaiting human review in the Review tab">Review</span>
+          )}
         </td>
         <td className="px-4 py-3 text-gray-500">{c.ccatScore ?? '\u2014'}</td>
         <td className="px-4 py-3 text-gray-500">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '\u2014'}</td>
