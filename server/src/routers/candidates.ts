@@ -578,6 +578,16 @@ export const candidatesRouter = router({
       reason: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
+      // 'Not Selected' is a role-level disposition (role closed/filled), not an
+      // individual move. It is only ever set by the requisition-close/dispose flow
+      // (which sends the courtesy email). Refuse to set it manually so it can never
+      // be reached without that email + reporting context.
+      if (input.toStage === 'Not Selected') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '"Not Selected" is applied automatically when a role closes or fills — it can\'t be set manually. To reject an individual candidate, use Reject.',
+        });
+      }
       const existing = await ctx.db.query.candidates.findFirst({
         where: eq(candidates.id, input.id),
       });
