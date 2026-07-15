@@ -17,7 +17,7 @@ import { ataSeedRoles } from '../data/ataSeedRoles.js';
 import { interviewQuestions } from '../db/schema/intake.js';
 import { assessmentTasks } from '../db/schema/assessmentTasks.js';
 import { departments } from '../db/schema/departments.js';
-import { generateRoleJD, generateStandardQuestions, standardQuestionSet, generateWorkSampleTask } from '../services/ai.js';
+import { generateRoleJD, generateStandardQuestions, standardQuestionSet, generateWorkSampleTask, sharpenIntakeField } from '../services/ai.js';
 import { approverEmail, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
 import { emailApprovalRejected, emailApprovalSentBack } from '../services/email.js';
 import { users } from '../db/schema/core.js';
@@ -474,6 +474,18 @@ async function saveIntakeEdits(db: DrizzleClient, token: string, fields: Record<
 }
 
 export const intakeRouter = router({
+  // Advisory: sharpen a vague intake answer into specific, job-relevant signal.
+  // Suggestion only — never writes to the form.
+  sharpenField: protectedProcedure
+    .input(z.object({
+      label: z.string().min(1),
+      value: z.string(),
+      roleContext: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      return sharpenIntakeField(input.label, input.value, input.roleContext);
+    }),
+
   // Latest reviewer note for a requisition that was sent back for edits (or
   // rejected), so the Intake + Requisitions edit views can surface "what to change".
   changesRequestedNote: protectedProcedure
