@@ -14,6 +14,7 @@ import { db } from '../db.js';
 import { candidates, candidateStageHistory, emailLog, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { approvals } from '../db/schema/intake.js';
 import { registerJob, type JobResult } from './job-runner.js';
+import { rankNewApplicants } from './candidateRanking.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { sendEmail, emailBookingReminderCandidate, emailBookingStalledHR } from './email.js';
 import { computeHiringAlerts, renderAlertDigest } from './hiring-alerts.js';
@@ -429,6 +430,15 @@ async function runPostingWindowFlip(): Promise<JobResult> {
 }
 
 export function registerHiringJobs(): void {
+  registerJob({
+    name:           'rank-new-applicants',
+    label:          'Rank New Applicants',
+    description:    'Backstop for live ranking: scores any in-pool applicant that is missing a ranking for an actively-ranked role.',
+    color:          '#8b5cf6',
+    jobType:        'cron',
+    cronExpression: '* * * * *',   // every minute
+    handler:        async (): Promise<JobResult> => rankNewApplicants(db),
+  });
   registerJob({
     name:           'assessment-reminder',
     label:          'Assessment Reminder',

@@ -13,13 +13,13 @@ const DROPPED = ['Rejected', 'Hired', 'Offered'] as const;
 
 export const rankingRouter = router({
   rankRole: protectedProcedure
-    .input(z.object({ jdId: z.string().uuid() }))
+    .input(z.object({ jdId: z.string().uuid(), criteriaOverride: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
-      return rankRoleCandidates(ctx.db, input.jdId, ctx.user.id);
+      return rankRoleCandidates(ctx.db, input.jdId, ctx.user.id, input.criteriaOverride ?? null);
     }),
 
   getForRole: protectedProcedure
-    .input(z.object({ jdId: z.string().uuid() }))
+    .input(z.object({ jdId: z.string().uuid(), limit: z.number().int().min(1).max(200).optional() }))
     .query(async ({ ctx, input }) => {
       const [run] = await ctx.db
         .select()
@@ -37,6 +37,7 @@ export const rankingRouter = router({
         .select({
           id: candidateRankings.id,
           candidateId: candidateRankings.candidateId,
+          hadResume: candidateRankings.hadResume,
           recommendation: candidateRankings.recommendation,
           strengths: candidateRankings.strengths,
           concerns: candidateRankings.concerns,
@@ -49,7 +50,7 @@ export const rankingRouter = router({
         .innerJoin(candidates, eq(candidates.id, candidateRankings.candidateId))
         .where(inPool)
         .orderBy(desc(candidateRankings.sortScore))
-        .limit(15);
+        .limit(input.limit ?? 15);
 
       const [{ n }] = (await ctx.db
         .select({ n: sql<number>`count(*)::int` })
@@ -57,10 +58,27 @@ export const rankingRouter = router({
         .innerJoin(candidates, eq(candidates.id, candidateRankings.candidateId))
         .where(inPool)) as any;
 
+      // Candidates in the pool that don't have a ranking yet (being scored).
+      // Only surfaced once a role is actively ranked (a run exists).
+      let pending: any[] = [];
+      if (run) {
+        pending = (((await ctx.db.execute(sql`
+          SELECT c.id AS "candidateId", c.first_name AS "firstName", c.last_name AS "lastName",
+                 c.email AS email, c.current_stage AS "currentStage"
+          FROM candidates c
+          WHERE c.jd_id = ${input.jdId}
+            AND c.current_stage NOT IN ('Rejected', 'Hired', 'Offered')
+            AND c.id NOT IN (SELECT candidate_id FROM candidate_rankings WHERE jd_id = ${input.jdId})
+          ORDER BY c.created_at DESC
+          LIMIT 25
+        `)) as any).rows) as any[];
+      }
+
       return {
         run: run ?? null,
         total: n ?? rankings.length,
         rankings,
+        pending,
       };
     }),
 });
