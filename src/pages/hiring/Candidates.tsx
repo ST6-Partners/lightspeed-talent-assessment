@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info, Archive, Bookmark } from 'lucide-react';
+import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info, Archive } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import RoleRankingDropdown from './RoleRankingDropdown';
 
@@ -93,8 +93,6 @@ export default function Candidates() {
   const deleteMutation = trpc.candidates.delete.useMutation({
     onSuccess: () => { refetch(); setSelectedId(null); },
   });
-  const addToPoolMutation = trpc.talentPool.add.useMutation({ onSuccess: () => refetch() });
-  const removeFromPoolMutation = trpc.talentPool.remove.useMutation({ onSuccess: () => refetch() });
   const doDelete = (id: string) => {
     deleteMutation.mutate({ id });
   };
@@ -208,13 +206,6 @@ export default function Candidates() {
                 <Ban size={15} />
               </button>
             )}
-            <button
-              onClick={() => (c.inTalentPool ? removeFromPoolMutation.mutate({ candidateId: c.id }) : addToPoolMutation.mutate({ candidateId: c.id }))}
-              disabled={addToPoolMutation.isLoading || removeFromPoolMutation.isLoading}
-              className={`p-1 transition-colors ${c.inTalentPool ? 'text-ls-primary' : 'text-gray-400 hover:text-ls-primary'}`}
-              title={c.inTalentPool ? 'In talent pool — click to remove' : 'Add to talent pool'}>
-              <Bookmark size={15} className={c.inTalentPool ? 'fill-current' : ''} />
-            </button>
             <button onClick={() => doDelete(c.id)} disabled={deleteMutation.isLoading} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Delete (build tool)">
               <Trash2 size={15} />
             </button>

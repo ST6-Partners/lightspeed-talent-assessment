@@ -41,7 +41,6 @@ import { interviewsRouter } from './routers/interviews.js';
 import { decisionsRouter } from './routers/decisions.js';
 import { rankingRouter } from './routers/ranking.js';
 import { eeoRouter } from './routers/eeo.js';
-import { talentPoolRouter } from './routers/talentPool.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -74,7 +73,6 @@ export const appRouter = router({
   decisions: decisionsRouter,
   ranking: rankingRouter,
   eeo: eeoRouter,
-  talentPool: talentPoolRouter,
   departments: departmentsRouter,
   tasks: assessmentTasksRouter,
   packages: assessmentPackagesRouter,
