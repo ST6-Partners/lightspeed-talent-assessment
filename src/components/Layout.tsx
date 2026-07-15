@@ -162,9 +162,11 @@ export default function Layout() {
             >
               <Bot className="w-5 h-5" />
             </button>
-            <Link to="/admin/settings" title="Settings" className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors">
-              <Settings className="w-5 h-5" />
-            </Link>
+            {['admin', 'sysadmin'].includes((user as any)?.role) && (
+              <Link to="/admin/settings" title="Settings" className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors">
+                <Settings className="w-5 h-5" />
+              </Link>
+            )}
             <button
               onClick={() => setShowFeedback(true)}
               className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors"

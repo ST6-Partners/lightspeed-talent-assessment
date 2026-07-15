@@ -5,6 +5,7 @@
 // ============================================================
 
 import { useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Settings } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 import {
@@ -208,11 +209,17 @@ function TabRow({ label, tabs, activeSection, onSelect }: TabRowProps) {
 export default function AdminSettings() {
   const [activeSection, setActiveSection] = useState('gettingstarted');
 
-  // In a real app, these come from auth context (DD-012 four-tier role model)
-  // For the template, show all tiers — adopter configures per their role model
-  const showAnalytics = true;
-  const showConfig = true;
-  const showSystem = true;
+  // Role-gated tiers (DD-012 four-tier role model). Analytics/Config require
+  // admin; System (Backups, Database, User Management) requires sysadmin.
+  const { data: me } = trpc.auth.me.useQuery();
+  const rank = ({ user: 1, manager: 2, admin: 3, sysadmin: 4 } as Record<string, number>)[(me as any)?.role] ?? 0;
+  const showAnalytics = rank >= 3;
+  const showConfig = rank >= 3;
+  const showSystem = rank >= 4;
+
+  // Only admins+ may open Settings at all. Non-admins are redirected even if
+  // they reach the URL directly. (me undefined = still loading; wait.)
+  if (me && rank < 3) return <Navigate to="/hiring/candidates" replace />;
 
   return (
     <div style={s.container}>
