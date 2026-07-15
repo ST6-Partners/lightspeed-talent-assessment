@@ -40,7 +40,7 @@ export default function Candidates() {
     if (c) { setSelectedId(c); setSearchParams({}, { replace: true }); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [showRejected, setShowRejected] = useState(false);
+  const [openClosed, setOpenClosed] = useState<Record<string, boolean>>({});
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     jdId: '', firstName: '', lastName: '', email: '',
@@ -131,26 +131,38 @@ export default function Candidates() {
   const FUNNEL_STAGES = ['Applied', 'Assessment', 'Values Review', 'Work Sample', 'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered', 'Hired'] as const;
   const toggleRole = (jdId: string) => setCollapsedRoles((m) => ({ ...m, [jdId]: !m[jdId] }));
 
+  const CLOSED_STAGES = ['Rejected', 'Not Selected'];
+  const matchesInternal = (c: any) =>
+    internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal);
+
+  // Active applicants (drives the top stat cards).
   const visibleCandidates = ((candidates ?? []) as any[]).filter((c: any) =>
-    (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal)) &&
-    c.currentStage !== 'Rejected' && c.currentStage !== 'Not Selected'
+    matchesInternal(c) && !CLOSED_STAGES.includes(c.currentStage)
   );
   const jdById: Record<string, any> = {};
   for (const j of (jobDescriptions ?? []) as any[]) jdById[j.id] = j;
   const reqById: Record<string, any> = {};
   for (const r of (requisitions ?? []) as any[]) reqById[r.id] = r;
+
+  // Group EVERY candidate (active + closed) by role, so a filled/closed role
+  // still shows a card with its own closed-out list.
   const groupMap = new Map<string, any[]>();
-  for (const c of visibleCandidates) {
+  for (const c of ((candidates ?? []) as any[]).filter(matchesInternal)) {
     const key = c.jdId ?? 'none';
     if (!groupMap.has(key)) groupMap.set(key, []);
     groupMap.get(key)!.push(c);
   }
-  const roleGroups = Array.from(groupMap.entries()).map(([jdId, cands]) => {
+  const roleGroups = Array.from(groupMap.entries()).map(([jdId, all]) => {
+    const cands = all.filter((c: any) => !CLOSED_STAGES.includes(c.currentStage));
+    const closed = all
+      .filter((c: any) => CLOSED_STAGES.includes(c.currentStage))
+      .sort((a: any, b: any) => String(a.currentStage).localeCompare(String(b.currentStage)));
     const counts: Record<string, number> = {};
     for (const c of cands) counts[c.currentStage] = (counts[c.currentStage] ?? 0) + 1;
     return {
       jdId,
       cands,
+      closed,
       counts,
       title: jdId === 'none' ? 'Unassigned role' : getJdTitle(jdId),
       dept: jdId === 'none' ? '' : (deptByReq[jdById[jdId]?.reqId] ?? ''),
@@ -399,7 +411,7 @@ export default function Candidates() {
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Open roles</div>
-            <div className="text-2xl font-bold text-gray-900 mt-1">{roleGroups.filter((g) => g.jdId !== 'none').length}</div>
+            <div className="text-2xl font-bold text-gray-900 mt-1">{roleGroups.filter((g) => g.jdId !== 'none' && g.cands.length > 0).length}</div>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">In pipeline</div>
@@ -447,8 +459,8 @@ export default function Candidates() {
                       })}
                     </div>
                   </div>
-                  {!collapsed && g.jdId !== 'none' && <RoleRankingDropdown jdId={g.jdId} />}
-                  {!collapsed && (
+                  {!collapsed && g.jdId !== 'none' && g.cands.length > 0 && <RoleRankingDropdown jdId={g.jdId} />}
+                  {!collapsed && g.cands.length > 0 && (
                     <div className="border-t border-gray-100 overflow-x-auto">
                       <table className="w-full">
                         <thead>
@@ -469,64 +481,53 @@ export default function Candidates() {
                       </table>
                     </div>
                   )}
+                  {!collapsed && g.closed.length > 0 && (
+                    <div className="border-t border-gray-100 px-4 py-3">
+                      <button
+                        onClick={() => setOpenClosed((m) => ({ ...m, [g.jdId]: !m[g.jdId] }))}
+                        className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-gray-700"
+                      >
+                        <ChevronDown size={14} className={openClosed[g.jdId] ? '' : '-rotate-90'} />
+                        Closed out ({g.closed.length})
+                      </button>
+                      {openClosed[g.jdId] && (
+                        <div className="mt-2 overflow-x-auto">
+                          <table className="w-full">
+                            <tbody>
+                              {g.closed.map((c: any) => (
+                                <tr key={c.id} className="border-b border-gray-50 text-sm">
+                                  <td className="px-2 py-2 font-medium text-gray-700">{c.firstName} {c.lastName}</td>
+                                  <td className="px-2 py-2">
+                                    <span className={`inline-flex px-2 py-0.5 text-[11px] rounded-full ${STAGE_COLORS[c.currentStage] ?? 'bg-gray-100 text-gray-600'}`}>
+                                      {c.currentStage}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-2 text-gray-400 text-xs">{c.email}</td>
+                                  <td className="px-2 py-2 text-gray-400 text-xs">{c.rejectionReason ?? ''}</td>
+                                  <td className="px-2 py-2 text-right">
+                                    <button
+                                      onClick={() => doDelete(c.id)}
+                                      disabled={deleteMutation.isLoading}
+                                      className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                      title="Delete (build tool)"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* Closed-out candidates — Rejected + Not Selected in one collapsed list,
-            out of the active pipeline. Each row is labeled with which ending it was:
-            Rejected (a person declined them) vs Not Selected (the role closed/filled). */}
-        {(() => {
-          const closedOut = ((candidates ?? []) as any[]).filter((c: any) =>
-            (c.currentStage === 'Rejected' || c.currentStage === 'Not Selected') &&
-            (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))
-          ).sort((a: any, b: any) => String(a.currentStage).localeCompare(String(b.currentStage)));
-          if (closedOut.length === 0) return null;
-          return (
-            <div className="mt-6">
-              <button
-                onClick={() => setShowRejected(!showRejected)}
-                className="flex items-center gap-2 text-sm font-medium text-gray-500 mb-2 hover:text-gray-700"
-              >
-                <ChevronDown size={16} className={showRejected ? '' : '-rotate-90'} />
-                Rejected &amp; Not Selected ({closedOut.length})
-              </button>
-              {showRejected && (
-                <div className="bg-white rounded-lg border border-gray-200">
-                  <table className="w-full">
-                    <tbody>
-                      {closedOut.map((c: any) => (
-                        <tr key={c.id} className="border-b border-gray-50 text-sm">
-                          <td className="px-4 py-2 font-medium text-gray-700">{c.firstName} {c.lastName}</td>
-                          <td className="px-4 py-2">
-                            <span className={`inline-flex px-2 py-0.5 text-[11px] rounded-full ${STAGE_COLORS[c.currentStage] ?? 'bg-gray-100 text-gray-600'}`}>
-                              {c.currentStage}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2 text-gray-400 text-xs">{c.email}</td>
-                          <td className="px-4 py-2 text-gray-400 text-xs">{getJdTitle(c.jdId ?? null)}</td>
-                          <td className="px-4 py-2 text-gray-400 text-xs">{c.rejectionReason ?? ''}</td>
-                          <td className="px-4 py-2 text-right">
-                            <button
-                              onClick={() => doDelete(c.id)}
-                              disabled={deleteMutation.isLoading}
-                              className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                              title="Delete (build tool)"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          );
-        })()}
       </div>
 
       {/* Detail panel */}
