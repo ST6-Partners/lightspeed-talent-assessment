@@ -9,7 +9,7 @@ import { router, protectedProcedure } from '../trpc.js';
 import { candidateRankings, rankingRuns, candidates } from '../db/schema/hiring.js';
 import { rankRoleCandidates } from '../services/candidateRanking.js';
 
-const DROPPED = ['Rejected', 'Hired', 'Offered', 'Not Selected'] as const;
+const DROPPED = ['Applied', 'Assessment', 'Rejected', 'Hired', 'Offered', 'Not Selected'] as const;
 
 export const rankingRouter = router({
   rankRole: protectedProcedure
@@ -67,7 +67,7 @@ export const rankingRouter = router({
                  c.email AS email, c.current_stage AS "currentStage"
           FROM candidates c
           WHERE c.jd_id = ${input.jdId}
-            AND c.current_stage NOT IN ('Rejected', 'Hired', 'Offered', 'Not Selected')
+            AND c.current_stage NOT IN ('Applied', 'Assessment', 'Rejected', 'Hired', 'Offered', 'Not Selected')
             AND c.id NOT IN (SELECT candidate_id FROM candidate_rankings WHERE jd_id = ${input.jdId})
           ORDER BY c.created_at DESC
           LIMIT 25
