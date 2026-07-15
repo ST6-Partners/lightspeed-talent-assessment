@@ -206,10 +206,6 @@ export const candidates = pgTable('candidates', {
   managerAware: boolean('manager_aware').notNull().default(false),
   internalEmployee: varchar('internal_employee', { length: 200 }),
   leadershipAwareness: text('leadership_awareness'),
-  // ── Talent pool (keep-warm) ──
-  // Flags a strong-but-not-selected candidate so they can be surfaced and
-  // re-engaged for a future role. Independent of currentStage — a candidate
-  // in 'Not Selected' or 'Rejected' can still be pooled.
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
