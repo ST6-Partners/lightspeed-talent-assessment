@@ -342,6 +342,78 @@ async function notifyOfferApprover(
   } catch (err) { console.error('[offer-approval] inbox record failed:', err); }
 }
 
+// Advance a candidate from the Review queue to the NEXT funnel stage (and clear
+// the review flag). Mirrors the forward-move side effects of advanceStage (work-
+// sample link on entering Work Sample, interview seeding on Interview Scheduled,
+// stage email, auto-close-on-fill). If there is no real next stage, it just clears
+// the flag. Clearing the flag never blocks a later gate from re-flagging.
+const REVIEW_TERMINAL_STAGES = ['Rejected', 'Hired', 'Not Selected'];
+async function advanceFromReview(db: any, userId: string | null, existing: any, reason: string): Promise<any> {
+  const seq = STAGES as readonly string[];
+  const idx = seq.indexOf(existing.currentStage);
+  const next = idx >= 0 ? seq[idx + 1] : undefined;
+  const moving = !!next && !REVIEW_TERMINAL_STAGES.includes(next);
+  const toStage = moving ? (next as string) : existing.currentStage;
+
+  const backfill = moving ? simulateUpstreamScores(existing, toStage) : {};
+  const [candidate] = await db.update(candidates)
+    .set({ currentStage: toStage, screenRecommendation: 'advance', ...backfill, updatedAt: new Date() })
+    .where(eq(candidates.id, existing.id))
+    .returning();
+
+  if (moving) {
+    await db.insert(candidateStageHistory).values({
+      candidateId: existing.id, fromStage: existing.currentStage, toStage, changedBy: userId, reason,
+    });
+  }
+  await logDecision(db, {
+    candidateId: existing.id,
+    decisionType: 'manual_stage_change',
+    outcome: 'advanced',
+    decidedByType: 'human',
+    decidedBy: userId,
+    reason,
+    inputs: { from: 'review_queue', fromStage: existing.currentStage, toStage, moved: moving },
+  });
+
+  if (moving) {
+    const jobTitle = await getJobTitle(db, existing.jdId);
+    const jd = existing.jdId
+      ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, existing.jdId) })
+      : null;
+    let workSampleUrl: string | undefined;
+    let workSampleInstructions: string | undefined = jd?.workSampleInstructions ?? undefined;
+    if (toStage === 'Work Sample') {
+      const token = existing.workSampleToken ?? randomUUID();
+      if (!existing.workSampleToken) {
+        await db.update(candidates).set({ workSampleToken: token, updatedAt: new Date() }).where(eq(candidates.id, existing.id));
+      }
+      workSampleUrl = `${appBaseUrl()}/work-sample/${token}`;
+      const resolved = await resolveDeptWorkSample(db, existing);
+      if (resolved) {
+        workSampleInstructions = `<strong>${resolved.title}</strong><br/><br/>` + resolved.instructions.replace(/\n/g, '<br/>');
+      }
+    }
+    dispatchStageEmail(toStage, existing.currentStage, {
+      firstName: existing.firstName, lastName: existing.lastName, email: existing.email, jobTitle,
+      workSampleInstructions, workSampleUrl,
+      interviewerName: existing.interviewerName, interviewerEmail: existing.interviewerEmail,
+    }).catch(() => {});
+    if (toStage === 'Interviewed') {
+      autofillSampleRounds(existing.id).catch((err: any) => console.error('[review-advance] autofill sample rounds failed:', err));
+    }
+    if (toStage === 'Interview Scheduled') {
+      seedRoundsFromPlan(existing.id).catch((err: any) => console.error('[review-advance] seed rounds failed:', err));
+      prepInterviewQuestions(db, existing.id).catch((err: any) => console.error('[review-advance] question prep failed:', err));
+    }
+    if (toStage === 'Hired' && existing.jdId) {
+      try { await maybeAutoCloseFilledReq(db, existing.jdId, userId); }
+      catch (err) { console.error('[review-advance] auto-close-on-fill failed:', err); }
+    }
+  }
+  return candidate;
+}
+
 export const candidatesRouter = router({
   // Timeline / SLA alerts (flowchart node X): stalled candidates + overdue reqs.
   // Computed on the fly — no stored state.
@@ -730,16 +802,8 @@ export const candidatesRouter = router({
         return candidate;
       }
 
-      const reason = input.reason || 'Approved after human review — cleared the below-bar flag to proceed.';
-      const [candidate] = await ctx.db.update(candidates)
-        .set({ screenRecommendation: 'advance', updatedAt: new Date() })
-        .where(eq(candidates.id, input.id))
-        .returning();
-      await logDecision(ctx.db, {
-        candidateId: input.id, decisionType: 'manual_stage_change', outcome: 'advanced',
-        decidedByType: 'human', decidedBy: ctx.user.id, reason,
-        inputs: { from: 'review_queue', stage: existing.currentStage },
-      });
+      const reason = input.reason || 'Approved after human review — advanced to the next stage.';
+      const candidate = await advanceFromReview(ctx.db, ctx.user.id, existing, reason);
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'review_advance', 'candidates', { candidateId: input.id }).catch(() => {});
       return candidate;
@@ -980,6 +1044,11 @@ export const candidatesRouter = router({
         companyValuesNotes: buildRoleFitNotes(eppScans),
         screenScore: composite,
         screenRecommendation: recommendation,
+        ...(recommendation === 'review' ? {
+          reviewFlagCount: candidate.screenRecommendation === 'review'
+            ? (candidate.reviewFlagCount ?? 0)
+            : (candidate.reviewFlagCount ?? 0) + 1,
+        } : {}),
         screenSummary,
         screenedAt: new Date(),
         updatedAt: new Date(),

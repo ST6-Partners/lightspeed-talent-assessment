@@ -92,6 +92,9 @@ export default function ReviewQueue() {
               <button onClick={() => setSelectedId(null)} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
             </div>
             <div className="text-xs text-gray-500 mb-4">{selected.email} · {getJdTitle(selected.jdId ?? null)} · {selected.currentStage}</div>
+            {selected.reviewFlagCount > 1 && (
+              <div className="text-xs text-red-700 mb-4 -mt-3">Flagged for review {selected.reviewFlagCount}× — an earlier rejection recommendation was overridden and a later gate flagged again.</div>
+            )}
 
             <div className="text-xs font-medium text-gray-600 mb-1">Why this candidate did not auto-advance</div>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-900 mb-4">
@@ -210,6 +213,7 @@ function RoleReviewSection({ group, selectedId, onSelect }: {
             {rankNum != null && <span className="text-[11px] font-medium text-gray-400 w-6 flex-none">#{rankNum}</span>}
             <span className="font-medium text-gray-900 truncate">{c.firstName} {c.lastName}</span>
             {flagged && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium flex-none">Needs review</span>}
+            {c.reviewFlagCount > 1 && <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-medium flex-none" title="Flagged for human review more than once, across gates">Flagged {c.reviewFlagCount}×</span>}
           </div>
           <span className="text-[11px] text-gray-400 flex-none">{c.currentStage}</span>
         </div>

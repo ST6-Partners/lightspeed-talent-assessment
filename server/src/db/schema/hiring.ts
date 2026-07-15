@@ -171,6 +171,8 @@ export const candidates = pgTable('candidates', {
   skillsFitNotes: text('skills_fit_notes'),
   screenScore: integer('screen_score'),
   screenRecommendation: text('screen_recommendation'),
+  // How many times the candidate has been flagged for human review (any gate).
+  reviewFlagCount: integer('review_flag_count').notNull().default(0),
   screenSummary: text('screen_summary'),
   screenedAt: timestamp('screened_at', { withTimezone: true }),
   companyValuesMatchScore: integer('company_values_match_score'),

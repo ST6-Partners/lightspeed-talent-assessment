@@ -102,6 +102,15 @@ export async function scoreAndStoreWorkSample(db: any, candidateId: string): Pro
     .set({
       workSampleScore: result.overallScore,
       workSampleNotes: formatNotes(result, { pass, threshold: cfg.passThreshold, autoRejected }),
+      // A below-mark work sample raises the review flag (so it shows in the Review
+      // queue) and bumps the count — a later gate can re-flag even if an earlier
+      // rejection recommendation was overridden. Never auto-rejects.
+      ...(flaggedForReview ? {
+        screenRecommendation: 'review',
+        reviewFlagCount: candidate.screenRecommendation === 'review'
+          ? (candidate.reviewFlagCount ?? 0)
+          : (candidate.reviewFlagCount ?? 0) + 1,
+      } : {}),
       updatedAt: new Date(),
     })
     .where(eq(candidates.id, candidateId));

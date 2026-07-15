@@ -421,6 +421,13 @@
       "when": 1960000030000,
       "tag": "0057_candidate_stage_phone_screen",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1960000031000,
+      "tag": "0058_candidate_review_flag_count",
+      "breakpoints": true
     }
   ]
 }

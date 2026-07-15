@@ -127,6 +127,10 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
       screenRecommendation: metBar ? 'advance' : 'review',
       ...(metBar ? {} : {
         companyValuesNotes: `Below auto-advance bar (${shortfalls.join('; ')}). Flagged for human review — not auto-rejected.`,
+        // Bump the review-flag count only on a fresh flag (not a re-run while still flagged).
+        reviewFlagCount: candidate.screenRecommendation === 'review'
+          ? (candidate.reviewFlagCount ?? 0)
+          : (candidate.reviewFlagCount ?? 0) + 1,
       }),
       updatedAt: new Date(),
     })
