@@ -680,7 +680,7 @@ export const intakeRouter = router({
         );
       }
 
-      trackActivity(ctx.db, ctx.user.id, 'save_intake', 'job_requisitions', { reqId }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'save_intake', 'job_requisitions', { reqId }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { id: reqId };
      } catch (e: any) {
        const reason = e?.cause?.message ?? e?.message ?? String(e);
@@ -740,7 +740,7 @@ export const intakeRouter = router({
       }
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_requisitions', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'submit_intake', 'job_requisitions', { reqId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'submit_intake', 'job_requisitions', { reqId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { id: input.id, status: 'Pending Approval', notifyErrors };
     }),
 
@@ -754,7 +754,7 @@ export const intakeRouter = router({
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
       await ctx.db.delete(jobRequisitions).where(eq(jobRequisitions.id, input.id));
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_requisitions', 'delete');
-      trackActivity(ctx.db, ctx.user.id, 'delete_intake', 'job_requisitions', { reqId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'delete_intake', 'job_requisitions', { reqId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { id: input.id };
     }),
 
@@ -874,7 +874,7 @@ export const intakeRouter = router({
         }
       }
       await auditChange(ctx.db, ctx.user.id, input.reqId, 'job_requisitions', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'approve_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'approve_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { id: input.reqId, fullyApproved: !restPending.length };
     }),
 
@@ -892,7 +892,7 @@ export const intakeRouter = router({
       await ctx.db.update(jobRequisitions).set({ status: 'Rejected', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
       await notifyIntakeRejected(ctx.db, input.reqId, target.approverRole, input.note);
       await auditChange(ctx.db, ctx.user.id, input.reqId, 'job_requisitions', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'reject_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'reject_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { id: input.reqId };
     }),
 
@@ -911,7 +911,7 @@ export const intakeRouter = router({
       await ctx.db.update(jobRequisitions).set({ status: 'Changes Requested', updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
       await notifyIntakeSentBack(ctx.db, input.reqId, target.approverRole, input.note);
       await auditChange(ctx.db, ctx.user.id, input.reqId, 'job_requisitions', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'send_back_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'send_back_intake', 'job_requisitions', { reqId: input.reqId, step: input.step }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { id: input.reqId };
     }),
 

@@ -139,7 +139,7 @@ async function runAssessmentReminder({ force = false }: { force?: boolean } = {}
       try {
         const subject = 'Reminder: Complete your assessment';
         await logEmail(candidate.id, candidate.email, 'assessment_reminder', subject, 'failed', err.message);
-      } catch {}
+      } catch (logErr) { console.warn('[hiring-scheduler] failed to record assessment-reminder email failure (non-blocking):', logErr); }
     }
   }
 
@@ -422,7 +422,7 @@ async function runPostingWindowFlip(): Promise<JobResult> {
     try {
       await db.update(jobRequisitions).set({ externalOpenedAt: new Date(), updatedAt: new Date() }).where(eq(jobRequisitions.id, r.id));
       await writeExternalOpenMarker(db, r.id, jobTitle, r.department, 'auto');
-      await emailPostingOpenedExternal(HIRING_TEAM_INBOX, { jobTitle, department: r.department, mode: 'auto' }).catch(() => {});
+      await emailPostingOpenedExternal(HIRING_TEAM_INBOX, { jobTitle, department: r.department, mode: 'auto' }).catch((err) => console.warn('[email] emailPostingOpenedExternal failed (non-blocking):', err));
       flipped++;
     } catch (err) { console.error('[posting-flip] failed:', err); }
   }

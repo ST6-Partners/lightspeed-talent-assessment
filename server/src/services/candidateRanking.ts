@@ -86,7 +86,7 @@ async function ensureMaterial(db: any, c: any, jd: any): Promise<{ material: str
     // realistic one so the ranking has something to reason about. Persists so it's
     // stable across re-ranks. (Seeded resumes are detected as pre-passed elsewhere.)
     resume = buildSeededResume(c.first_name, c.last_name, jd);
-    await db.update(candidates).set({ resumeText: resume }).where(eq(candidates.id, c.id)).catch(() => {});
+    await db.update(candidates).set({ resumeText: resume }).where(eq(candidates.id, c.id)).catch((err: unknown) => console.warn('[ranking] seeding resume text for pooled candidate failed (non-blocking):', err));
   }
   const material = [
     resume,

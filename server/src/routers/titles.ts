@@ -19,7 +19,7 @@ export const titlesRouter = router({
   create: protectedProcedure.input(Input).mutation(async ({ ctx, input }) => {
     const [row] = await ctx.db.insert(titles).values(input).returning();
     await auditChange(ctx.db, ctx.user.id, row.id, 'titles', 'create');
-    trackActivity(ctx.db, ctx.user.id, 'create_title', 'titles', { id: row.id }).catch(() => {});
+    trackActivity(ctx.db, ctx.user.id, 'create_title', 'titles', { id: row.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
     return row;
   }),
 

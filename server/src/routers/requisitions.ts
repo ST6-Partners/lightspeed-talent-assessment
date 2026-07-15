@@ -70,7 +70,7 @@ export const requisitionsRouter = router({
       }).returning();
 
       await auditChange(ctx.db, ctx.user.id, req.id, 'job_requisitions', 'create');
-      trackActivity(ctx.db, ctx.user.id, 'create_requisition', 'job_requisitions', { reqId: req.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'create_requisition', 'job_requisitions', { reqId: req.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return req;
     }),
 
@@ -106,7 +106,7 @@ export const requisitionsRouter = router({
       }
 
       await auditChange(ctx.db, ctx.user.id, id, 'job_requisitions', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'update_requisition', 'job_requisitions', { reqId: id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'update_requisition', 'job_requisitions', { reqId: id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return req;
     }),
 
@@ -123,7 +123,7 @@ export const requisitionsRouter = router({
       await ctx.db.delete(jobRequisitions).where(eq(jobRequisitions.id, input.id));
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_requisitions', 'delete');
-      trackActivity(ctx.db, ctx.user.id, 'delete_requisition', 'job_requisitions', { reqId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'delete_requisition', 'job_requisitions', { reqId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { id: input.id };
     }),
 });

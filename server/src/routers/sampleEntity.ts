@@ -48,7 +48,7 @@ export const sampleEntityRouter = router({
       }).returning();
 
       await auditChange(ctx.db, ctx.user.id, entity.id, 'sample_entities', 'create');
-      trackActivity(ctx.db, ctx.user.id, 'create_item', 'sample_entities', { entityId: entity.id, name: input.name }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'create_item', 'sample_entities', { entityId: entity.id, name: input.name }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return entity;
     }),
 
@@ -78,7 +78,7 @@ export const sampleEntityRouter = router({
 
       // Per-field audit (RCDO pattern)
       await auditFieldChanges(ctx.db, ctx.user.id, id, 'sample_entities', existing, updates);
-      trackActivity(ctx.db, ctx.user.id, 'update_item', 'sample_entities', { entityId: id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'update_item', 'sample_entities', { entityId: id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return entity;
     }),
 
@@ -102,7 +102,7 @@ export const sampleEntityRouter = router({
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'sample_entities', 'archive');
       // Track archive event for telemetry
-      trackActivity(ctx.db, ctx.user.id, 'archive_item', 'sample_entities', { entityId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'archive_item', 'sample_entities', { entityId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return entity;
     }),
 
@@ -128,7 +128,7 @@ export const sampleEntityRouter = router({
         newValue: null,
       });
       // Track restore event for telemetry
-      trackActivity(ctx.db, ctx.user.id, 'restore_item', 'sample_entities', { entityId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'restore_item', 'sample_entities', { entityId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return entity;
     }),
 

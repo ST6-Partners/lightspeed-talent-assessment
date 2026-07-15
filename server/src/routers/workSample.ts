@@ -119,7 +119,7 @@ export const workSampleRouter = router({
       });
 
       await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'send_work_sample', 'candidates', { candidateId: candidate.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'send_work_sample', 'candidates', { candidateId: candidate.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
 
       return { token, url };
     }),
@@ -148,7 +148,7 @@ export const workSampleRouter = router({
         .returning();
 
       await auditChange(ctx.db, ctx.user.id, id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'review_work_sample', 'candidates', { candidateId: id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'review_work_sample', 'candidates', { candidateId: id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return candidate;
     }),
 
@@ -164,7 +164,7 @@ export const workSampleRouter = router({
       }
       const result = await scoreAndStoreWorkSample(ctx.db, input.id);
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'score_work_sample', 'candidates', { candidateId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'score_work_sample', 'candidates', { candidateId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return result;
     }),
 

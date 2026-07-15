@@ -39,7 +39,7 @@ export async function announceRoleInternally(
 
   let sent = 0;
   for (const to of recipients) {
-    await sendEmail({ to, subject, html, templateId: 'internal_opening' }).catch(() => {});
+    await sendEmail({ to, subject, html, templateId: 'internal_opening' }).catch((err) => console.warn('[email] sendEmail failed (non-blocking):', err));
     sent++;
   }
   // One summary copy into the test inbox (not one per employee).

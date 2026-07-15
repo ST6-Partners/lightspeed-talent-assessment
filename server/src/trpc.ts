@@ -76,7 +76,7 @@ function touchActivity(userId: string) {
   db.update(users)
     .set({ lastActiveAt: new Date() })
     .where(eq(users.id, userId))
-    .catch(() => {});
+    .catch((err: unknown) => console.warn('[activity] lastActiveAt heartbeat update failed (non-blocking):', err));
 }
 
 // Protected procedure — requires authenticated session

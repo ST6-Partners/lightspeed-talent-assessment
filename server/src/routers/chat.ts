@@ -150,7 +150,7 @@ export const chatRouter = router({
       // Track the event
       trackActivity(ctx.db, ctx.user.id, 'chat_start', input.screenMode || 'general', {
         sessionId: session.id,
-      }).catch(() => {});
+      }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
 
       return { sessionId: session.id };
     }),
@@ -360,7 +360,7 @@ export const chatRouter = router({
         turnNumber: input.turnNumber,
         faqHits: relevantFaq.length,
         kbHits: relevantKnowledge.length,
-      }).catch(() => {});
+      }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
 
       return {
         response: responseText,
@@ -390,7 +390,7 @@ export const chatRouter = router({
 
       trackActivity(ctx.db, ctx.user.id, 'chat_reaction', input.reaction, {
         debugId: input.debugId,
-      }).catch(() => {});
+      }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
 
       return row ? { success: true } : { success: false };
     }),

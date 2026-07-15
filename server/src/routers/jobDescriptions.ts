@@ -75,7 +75,7 @@ export const jobDescriptionsRouter = router({
       const [jd] = await ctx.db.insert(jobDescriptions).values({ ...input, status: 'Published', publishedAt: new Date() } as any).returning();
 
       await auditChange(ctx.db, ctx.user.id, jd.id, 'job_descriptions', 'create');
-      trackActivity(ctx.db, ctx.user.id, 'create_job_description', 'job_descriptions', { jdId: jd.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'create_job_description', 'job_descriptions', { jdId: jd.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return jd;
     }),
 
@@ -94,7 +94,7 @@ export const jobDescriptionsRouter = router({
         .returning();
 
       await auditChange(ctx.db, ctx.user.id, id, 'job_descriptions', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'update_job_description', 'job_descriptions', { jdId: id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'update_job_description', 'job_descriptions', { jdId: id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return jd;
     }),
 
@@ -109,7 +109,7 @@ export const jobDescriptionsRouter = router({
       await ctx.db.delete(jobDescriptions).where(eq(jobDescriptions.id, input.id));
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_descriptions', 'delete');
-      trackActivity(ctx.db, ctx.user.id, 'delete_job_description', 'job_descriptions', { jdId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'delete_job_description', 'job_descriptions', { jdId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { id: input.id };
     }),
 
@@ -130,7 +130,7 @@ export const jobDescriptionsRouter = router({
         .returning();
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_descriptions', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'publish_job_description', 'job_descriptions', { jdId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'publish_job_description', 'job_descriptions', { jdId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return jd;
     }),
 
@@ -146,7 +146,7 @@ export const jobDescriptionsRouter = router({
       const jd = await approveJdAndOpenRole(ctx.db, input.id);
       if (!jd) throw new TRPCError({ code: 'NOT_FOUND' });
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_descriptions', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'approve_job_description', 'job_descriptions', { jdId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'approve_job_description', 'job_descriptions', { jdId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return jd;
     }),
 

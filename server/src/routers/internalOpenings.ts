@@ -45,8 +45,8 @@ export const internalOpeningsRouter = router({
       const jobTitle = jd?.jobTitle ?? `${req.department} role`;
       await ctx.db.update(jobRequisitions).set({ externalOpenedAt: new Date(), updatedAt: new Date() }).where(eq(jobRequisitions.id, input.reqId));
       await writeExternalOpenMarker(ctx.db, input.reqId, jobTitle, req.department, 'manual');
-      await emailPostingOpenedExternal(HIRING_TEAM_INBOX, { jobTitle, department: req.department, mode: 'manual' }).catch(() => {});
-      trackActivity(ctx.db, ctx.user.id, 'open_role_external', 'job_requisitions', { reqId: input.reqId }).catch(() => {});
+      await emailPostingOpenedExternal(HIRING_TEAM_INBOX, { jobTitle, department: req.department, mode: 'manual' }).catch((err) => console.warn('[email] emailPostingOpenedExternal failed (non-blocking):', err));
+      trackActivity(ctx.db, ctx.user.id, 'open_role_external', 'job_requisitions', { reqId: input.reqId }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { ok: true as const };
     }),
 
@@ -94,8 +94,8 @@ export const internalOpeningsRouter = router({
       const jobTitle = jd.jobTitle;
       const department = (req as any)?.department ?? null;
 
-      await emailApplicationReceived({ firstName, lastName, email: input.email, jobTitle }).catch(() => {});
-      await emailInternalApplicantHR({ firstName, lastName, email: input.email, jobTitle, currentRole: input.currentRole ?? null }).catch(() => {});
+      await emailApplicationReceived({ firstName, lastName, email: input.email, jobTitle }).catch((err) => console.warn('[email] emailApplicationReceived failed (non-blocking):', err));
+      await emailInternalApplicantHR({ firstName, lastName, email: input.email, jobTitle, currentRole: input.currentRole ?? null }).catch((err) => console.warn('[email] emailInternalApplicantHR failed (non-blocking):', err));
 
       // Immediately alert the applicant's manager + the standing leadership-awareness list
       // (overcommunicate, no blindside). Manual org-chart entry until HRIS lands.
@@ -104,18 +104,18 @@ export const internalOpeningsRouter = router({
       const leadershipList = (cfg.recipients ?? []).filter((e: string) => e && e.includes('@'));
       const notified: string[] = [];
       // Manager email is required, so their manager is always alerted on submit.
-      await emailInternalInterestAlert(input.managerEmail, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: true }).catch(() => {});
+      await emailInternalInterestAlert(input.managerEmail, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: true }).catch((err) => console.warn('[email] emailInternalInterestAlert failed (non-blocking):', err));
       notified.push(input.managerEmail);
       // Walk the org chart up from the manager to ELT and alert each level (no blindside).
       const chain = await walkLeadershipChain(ctx.db, input.managerEmail).catch(() => [] as string[]);
       for (const to of chain) {
         if (notified.includes(to)) continue;
-        await emailInternalInterestAlert(to, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: false }).catch(() => {});
+        await emailInternalInterestAlert(to, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: false }).catch((err) => console.warn('[email] emailInternalInterestAlert failed (non-blocking):', err));
         notified.push(to);
       }
       for (const to of leadershipList) {
         if (notified.includes(to)) continue;
-        await emailInternalInterestAlert(to, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: false }).catch(() => {});
+        await emailInternalInterestAlert(to, { applicantName, currentRole: input.currentRole ?? null, jobTitle, forManager: false }).catch((err) => console.warn('[email] emailInternalInterestAlert failed (non-blocking):', err));
         notified.push(to);
       }
       // Reflect awareness on the candidate record: manager notified => manager aware; store who was looped in.
@@ -154,7 +154,7 @@ export const internalOpeningsRouter = router({
         ] as any);
       } catch (err) { console.error('[applyInternal] inbox record failed:', err); }
 
-      trackActivity(ctx.db, null as any, 'express_interest_internal', 'candidates', { candidateId: candidate.id, jdId: input.jdId, notified: notified.length }).catch(() => {});
+      trackActivity(ctx.db, null as any, 'express_interest_internal', 'candidates', { candidateId: candidate.id, jdId: input.jdId, notified: notified.length }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { ok: true, notified: notified.length };
     }),
 });

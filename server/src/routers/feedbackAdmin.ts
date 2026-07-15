@@ -282,7 +282,7 @@ export const feedbackAdminRouter = router({
       }
 
       // Track feedback submission for telemetry
-      trackActivity(ctx.db, ctx.user.id, 'submit_feedback', input.type, { feedbackId: item.id, title: input.title }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'submit_feedback', input.type, { feedbackId: item.id, title: input.title }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
 
       return item;
     }),

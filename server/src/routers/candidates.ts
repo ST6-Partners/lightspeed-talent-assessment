@@ -176,7 +176,7 @@ async function deliverOfferToCandidate(db: any, userId: string | null, candidate
   const jobTitle = offer.jobTitle;
   const letterHtml = renderOfferLetter(offer);
 
-  await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle, letterHtml }).catch(() => {});
+  await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle, letterHtml }).catch((err) => console.warn('[email] emailOfferLetter failed (non-blocking):', err));
 
   const offerSubject = `Your offer from Lightspeed Systems${jobTitle ? ` \u2014 ${jobTitle}` : ''}`;
   try {
@@ -207,7 +207,7 @@ async function deliverOfferToCandidate(db: any, userId: string | null, candidate
 
   if (userId) {
     await auditChange(db, userId, candidate.id, 'candidates', 'update');
-    trackActivity(db, userId, 'send_offer', 'candidates', { candidateId: candidate.id }).catch(() => {});
+    trackActivity(db, userId, 'send_offer', 'candidates', { candidateId: candidate.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
   }
   return { html: letterHtml, jobTitle };
 }
@@ -215,7 +215,7 @@ async function deliverOfferToCandidate(db: any, userId: string | null, candidate
 async function deliverInternalOfferToCandidate(db: any, userId: string | null, candidate: any, offer: InternalOfferLetterInput): Promise<{ html: string; newTitle: string }> {
   const newTitle = offer.comp.newTitle;
   const letterHtml = renderInternalOfferLetter(offer);
-  await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle: newTitle, letterHtml }).catch(() => {});
+  await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle: newTitle, letterHtml }).catch((err) => console.warn('[email] emailOfferLetter failed (non-blocking):', err));
   const offerSubject = `Your internal offer from Lightspeed Systems${newTitle ? ` — ${newTitle}` : ''}`;
   try {
     await db.insert(inboundEmails).values({
@@ -238,7 +238,7 @@ async function deliverInternalOfferToCandidate(db: any, userId: string | null, c
   }
   if (userId) {
     await auditChange(db, userId, candidate.id, 'candidates', 'update');
-    trackActivity(db, userId, 'send_internal_offer', 'candidates', { candidateId: candidate.id }).catch(() => {});
+    trackActivity(db, userId, 'send_internal_offer', 'candidates', { candidateId: candidate.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
   }
   return { html: letterHtml, newTitle };
 }
@@ -385,7 +385,7 @@ async function advanceFromReview(db: any, userId: string | null, existing: any, 
       firstName: existing.firstName, lastName: existing.lastName, email: existing.email, jobTitle,
       workSampleInstructions, workSampleUrl,
       interviewerName: existing.interviewerName, interviewerEmail: existing.interviewerEmail,
-    }).catch(() => {});
+    }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
     if (toStage === 'Interviewed') {
       autofillSampleRounds(existing.id).catch((err: any) => console.error('[review-advance] autofill sample rounds failed:', err));
     }
@@ -481,10 +481,10 @@ export const candidatesRouter = router({
         // SendGrid rejection email to the candidate.
         dispatchStageEmail('Rejected', 'Applied', {
           firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-        }).catch(() => {});
+        }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
 
         await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'create');
-        trackActivity(ctx.db, ctx.user.id, 'create_candidate', 'candidates', { candidateId: candidate.id, autoDeclined: 'sponsorship' }).catch(() => {});
+        trackActivity(ctx.db, ctx.user.id, 'create_candidate', 'candidates', { candidateId: candidate.id, autoDeclined: 'sponsorship' }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
         return { ...candidate, currentStage: 'Rejected' as const };
       }
 
@@ -495,8 +495,8 @@ export const candidatesRouter = router({
       rankOneCandidateIntoRole(ctx.db, candidate.id, ctx.user.id).catch((err) => console.error('[create] live ranking failed:', err));
 
       // Normal path — fire emails (non-blocking)
-      emailApplicationReceived({ ...candidateData, jobTitle }).catch(() => {});
-      emailNewApplicationHR({ ...candidateData, jobTitle }).catch(() => {});
+      emailApplicationReceived({ ...candidateData, jobTitle }).catch((err) => console.warn('[email] emailApplicationReceived failed (non-blocking):', err));
+      emailNewApplicationHR({ ...candidateData, jobTitle }).catch((err) => console.warn('[email] emailNewApplicationHR failed (non-blocking):', err));
 
       // Voluntary EEO self-ID: auto-offer at application time when enabled
       // (EEO_AUTO_INVITE=true). Off by default until the email wording is signed
@@ -517,7 +517,7 @@ export const candidatesRouter = router({
       }
 
       await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'create');
-      trackActivity(ctx.db, ctx.user.id, 'create_candidate', 'candidates', { candidateId: candidate.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'create_candidate', 'candidates', { candidateId: candidate.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return candidate;
     }),
 
@@ -530,7 +530,7 @@ export const candidatesRouter = router({
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
       await ctx.db.delete(candidates).where(eq(candidates.id, input.id));
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'delete');
-      trackActivity(ctx.db, ctx.user.id, 'delete_candidate', 'candidates', { candidateId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'delete_candidate', 'candidates', { candidateId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { id: input.id };
     }),
 
@@ -566,7 +566,7 @@ export const candidatesRouter = router({
       }
 
       await auditChange(ctx.db, ctx.user.id, id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'update_candidate', 'candidates', { candidateId: id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'update_candidate', 'candidates', { candidateId: id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return candidate;
     }),
 
@@ -608,7 +608,7 @@ export const candidatesRouter = router({
         }
         const reviewed = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
         await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-        trackActivity(ctx.db, ctx.user.id, 'advance_stage_review', 'candidates', { candidateId: input.id }).catch(() => {});
+        trackActivity(ctx.db, ctx.user.id, 'advance_stage_review', 'candidates', { candidateId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
         return reviewed;
       }
 
@@ -676,7 +676,7 @@ export const candidatesRouter = router({
         workSampleUrl,
         interviewerName: (existing as any).interviewerName,
         interviewerEmail: (existing as any).interviewerEmail,
-      }).catch(() => {});
+      }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
 
       // When advancing to Interview Scheduled:
       // 1. Generate tailored interview questions (AI)
@@ -713,7 +713,7 @@ export const candidatesRouter = router({
         candidateId: input.id,
         fromStage: existing.currentStage,
         toStage: input.toStage,
-      }).catch(() => {});
+      }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
 
       return candidate;
     }),
@@ -764,10 +764,10 @@ export const candidatesRouter = router({
         lastName: existing.lastName,
         email: existing.email,
         jobTitle,
-      }).catch(() => {});
+      }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'reject_candidate', 'candidates', { candidateId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'reject_candidate', 'candidates', { candidateId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return candidate;
     }),
 
@@ -801,16 +801,16 @@ export const candidatesRouter = router({
         });
         dispatchStageEmail('Rejected', existing.currentStage, {
           firstName: existing.firstName, lastName: existing.lastName, email: existing.email, jobTitle,
-        }).catch(() => {});
+        }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
         await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-        trackActivity(ctx.db, ctx.user.id, 'review_reject', 'candidates', { candidateId: input.id }).catch(() => {});
+        trackActivity(ctx.db, ctx.user.id, 'review_reject', 'candidates', { candidateId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
         return candidate;
       }
 
       const reason = input.reason || 'Approved after human review — advanced to the next stage.';
       const candidate = await advanceFromReview(ctx.db, ctx.user.id, existing, reason);
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'review_advance', 'candidates', { candidateId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'review_advance', 'candidates', { candidateId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return candidate;
     }),
 
@@ -920,7 +920,7 @@ export const candidatesRouter = router({
         movedToStage = 'Rejected';
         await dispatchStageEmail('Rejected', candidate.currentStage, {
           firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-        }).catch(() => {});
+        }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
       } else if (!terminal && decision === 'advanced' && idx >= 0 && idx <= 3) {
         // Advance one stage (only through Values Review; never auto-jump interview+).
         const nextStage = STAGE_ORDER[idx + 1];
@@ -937,14 +937,14 @@ export const candidatesRouter = router({
         movedToStage = nextStage;
         await dispatchStageEmail(nextStage, candidate.currentStage, {
           firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-        }).catch(() => {});
+        }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
       } else if (decision === 'advanced') {
         // Passed, but not in an early stage (or terminal): record only, no stage change.
         decision = 'flagged';
       }
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'screen_resume', 'candidates', { candidateId: input.id, decision }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'screen_resume', 'candidates', { candidateId: input.id, decision }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
 
       return { decision, reason, movedToStage, requirements, niceToHaves, notes };
     }),
@@ -1076,7 +1076,7 @@ export const candidatesRouter = router({
         movedToStage = 'Rejected';
         await dispatchStageEmail('Rejected', candidate.currentStage, {
           firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-        }).catch(() => {});
+        }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
       } else if (!terminal && decision === 'advanced' && idx >= 0 && idx <= 3) {
         const nextStage = STAGE_ORDER[idx + 1];
         await ctx.db.update(candidates)
@@ -1089,11 +1089,11 @@ export const candidatesRouter = router({
         movedToStage = nextStage;
         await dispatchStageEmail(nextStage, candidate.currentStage, {
           firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-        }).catch(() => {});
+        }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
       }
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'run_screen', 'candidates', { candidateId: input.id, decision, composite }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'run_screen', 'candidates', { candidateId: input.id, decision, composite }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
 
       return {
         recommendation, decision, reason, movedToStage,
@@ -1237,7 +1237,7 @@ export const candidatesRouter = router({
       // approver is notified as the chain advances in offerApprovalDecide.
       await notifyOfferApprover(ctx.db, row, chain, 0, candidate, 'external');
 
-      trackActivity(ctx.db, ctx.user.id, 'request_offer_approval', 'candidates', { candidateId: candidate.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'request_offer_approval', 'candidates', { candidateId: candidate.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       const approvalUrl = `/offer-approval/${row.id}`;
       return { ok: true, approvalId: row.id, approvalUrl, managerName, approvers: chain.length };
     }),
@@ -1459,7 +1459,7 @@ export const candidatesRouter = router({
         });
       } catch (err) { console.error('[adobesign] inbox record failed:', err); }
 
-      trackActivity(ctx.db, ctx.user.id, 'send_offer_adobesign', 'candidates', { candidateId: input.id, agreementId: result.agreementId }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'send_offer_adobesign', 'candidates', { candidateId: input.id, agreementId: result.agreementId }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { configured: true as const, agreementId: result.agreementId, status: result.status };
     }),
 
@@ -1537,7 +1537,7 @@ export const candidatesRouter = router({
 
       await notifyOfferApprover(ctx.db, row, chain, 0, candidate, 'internal');
 
-      trackActivity(ctx.db, ctx.user.id, 'request_internal_offer_approval', 'candidates', { candidateId: candidate.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'request_internal_offer_approval', 'candidates', { candidateId: candidate.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       const approvalUrl = `/offer-approval/${row.id}`;
       return { ok: true, approvalId: row.id, approvalUrl, managerName, approvers: chain.length };
     }),
@@ -1654,7 +1654,7 @@ export const candidatesRouter = router({
         });
       } catch (err) { console.error('[adobesign-internal] inbox record failed:', err); }
 
-      trackActivity(ctx.db, ctx.user.id, 'send_internal_offer_adobesign', 'candidates', { candidateId: input.id, agreementId: result.agreementId }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'send_internal_offer_adobesign', 'candidates', { candidateId: input.id, agreementId: result.agreementId }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { configured: true as const, agreementId: result.agreementId, status: result.status };
     }),
 
@@ -1675,7 +1675,7 @@ export const candidatesRouter = router({
 
       let sent = 0;
       for (const to of emails) {
-        await sendEmail({ to, subject, html: `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;">${body}</div>`, templateId: 'internal_awareness' }).catch(() => {});
+        await sendEmail({ to, subject, html: `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;">${body}</div>`, templateId: 'internal_awareness' }).catch((err) => console.warn('[email] sendEmail failed (non-blocking):', err));
         try {
           await ctx.db.insert(inboundEmails).values({
             fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
@@ -1686,7 +1686,7 @@ export const candidatesRouter = router({
         } catch (err) { console.error('[internal] inbox record failed:', err); }
         sent++;
       }
-      trackActivity(ctx.db, ctx.user.id, 'notify_leadership', 'candidates', { candidateId: input.id, sent }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'notify_leadership', 'candidates', { candidateId: input.id, sent }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { sent };
     }),
 
@@ -1734,7 +1734,7 @@ export const candidatesRouter = router({
       } catch (err) { console.error('[notifyManager] inbox record failed:', err); }
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'notify_manager', 'candidates', { candidateId: input.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'notify_manager', 'candidates', { candidateId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { ok: true };
     }),
 
@@ -1782,7 +1782,7 @@ export const candidatesRouter = router({
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'process_interview', 'candidates', {
         candidateId: input.id, transcriptSource: result.transcriptSource,
-      }).catch(() => {});
+      }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
 
       return {
         interviewScore: result.feedback.interviewScore,

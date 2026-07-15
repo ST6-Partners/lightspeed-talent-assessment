@@ -79,7 +79,7 @@ export function createTelemetryMiddleware() {
       if (now - last >= VIEW_THROTTLE_MS) {
         recentViews.set(throttleKey, now);
         // Fire and forget — don't block the request
-        trackActivity(ctx.db, ctx.user.id, 'page_view', screen).catch(() => {});
+        trackActivity(ctx.db, ctx.user.id, 'page_view', screen).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       }
     }
     return next();
