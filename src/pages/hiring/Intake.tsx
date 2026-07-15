@@ -55,40 +55,56 @@ function SharpenField({ label, value, onChange, rows, placeholder, roleContext }
   label: string; value: string; onChange: (v: string) => void; rows: number; placeholder?: string; roleContext?: string;
 }) {
   const [res, setRes] = useState<any>(null);
+  const [focused, setFocused] = useState(false);
   const sharpen = trpc.intake.sharpenField.useMutation({ onSuccess: (r) => setRes(r) });
+  const lastAnalyzed = useRef<string>('');
+  const timer = useRef<any>(null);
+
+  useEffect(() => {
+    if (!focused) return;
+    const v = value.trim();
+    if (v.length < 3) { setRes(null); lastAnalyzed.current = ''; return; }
+    if (v === lastAnalyzed.current) return;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      lastAnalyzed.current = v;
+      sharpen.mutate({ label, value: v, roleContext });
+    }, 1000);
+    return () => { if (timer.current) clearTimeout(timer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, focused]);
+
+  const show = focused || !!res;
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <label className={lbl}>{label}</label>
-        <button type="button"
-          onClick={() => { setRes(null); sharpen.mutate({ label, value, roleContext }); }}
-          disabled={!value.trim() || sharpen.isLoading}
-          className="text-xs text-ls-primary hover:underline disabled:opacity-40 disabled:no-underline mb-1">
-          {sharpen.isLoading ? 'Sharpening\u2026' : '\u2726 Sharpen with AI'}
-        </button>
-      </div>
-      <textarea rows={rows} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={inp} />
-      {res && (
+      <label className={lbl}>{label}</label>
+      <textarea rows={rows} value={value}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={inp} />
+      {show && (
         <div className="mt-1.5 border border-cyan-200 bg-cyan-50 rounded-md p-2.5 text-xs">
-          <div className="text-gray-600 mb-1">{res.assessment}</div>
-          {!res.alreadySpecific && (res.followUps?.length > 0) && (
+          <div className="flex items-center gap-1.5 text-ls-primary font-medium mb-1">
+            <span>\u2726 Help me write</span>
+            {sharpen.isLoading && <span className="text-gray-400 font-normal">analyzing\u2026</span>}
+          </div>
+          {!res && !sharpen.isLoading && <div className="text-gray-400">Keep typing \u2014 suggestions appear as you go.</div>}
+          {res && <div className="text-gray-600 mb-1">{res.assessment}</div>}
+          {res && !res.alreadySpecific && (res.followUps?.length > 0) && (
             <ul className="list-disc pl-4 mb-2 text-gray-600 space-y-0.5">
               {res.followUps.map((q: string, i: number) => <li key={i}>{q}</li>)}
             </ul>
           )}
-          {!res.alreadySpecific && (res.suggestions?.length > 0) && (
+          {res && !res.alreadySpecific && (res.suggestions?.length > 0) && (
             <div className="space-y-1">
               <div className="text-gray-500">Suggested wording (click to add):</div>
               {res.suggestions.map((sug: string, i: number) => (
-                <button key={i} type="button"
+                <button key={i} type="button" onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onChange(value.trim() ? value.trim() + '\n' + sug : sug)}
-                  className="block w-full text-left px-2 py-1 rounded bg-white border border-gray-200 hover:border-ls-cyan text-gray-700">
-                  + {sug}
-                </button>
+                  className="block w-full text-left px-2 py-1 rounded bg-white border border-gray-200 hover:border-ls-cyan text-gray-700">+ {sug}</button>
               ))}
             </div>
           )}
-          <button type="button" onClick={() => setRes(null)} className="mt-1.5 text-gray-400 hover:text-gray-600">Dismiss</button>
         </div>
       )}
     </div>
