@@ -442,6 +442,13 @@
       "when": 1960000033000,
       "tag": "0060_talent_pool",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1960000033000,
+      "tag": "0061_reorder_candidate_stage_enum",
+      "breakpoints": true
     }
   ]
 }

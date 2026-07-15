@@ -21,10 +21,11 @@ import { users } from './core.js';
 // ── Enums ──────────────────────────────────────────────────
 
 export const candidateStageEnum = pgEnum('candidate_stage', [
+  // Declaration order IS the funnel order (matched to the DB by migration 0061).
   'Applied',
   'Assessment',
-  'Work Sample',
   'Values Review',
+  'Work Sample',
   // Human recruiter phone screen (logistics + fit) before the interview loop.
   'Phone Screen',
   'Interview Scheduled',
