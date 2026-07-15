@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { eq, desc } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { randomUUID } from 'node:crypto';
+import { eeoResponses } from '../db/schema/eeo.js';
 import { router, protectedProcedure, publicProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions, emailLog } from '../db/schema/hiring.js';
 import { inboundEmails } from '../db/schema/email.js';
@@ -27,8 +28,7 @@ import {
   dispatchStageEmail,
   emailInterviewerQuestions,
   sendEmail,
-  emailOfferLetter,
-} from '../services/email.js';
+  emailOfferLetter, emailEeoSelfId } from '../services/email.js';
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
 import { scoreSkillsFit } from '../services/ai.js';
@@ -510,6 +510,24 @@ export const candidatesRouter = router({
       // Normal path — fire emails (non-blocking)
       emailApplicationReceived({ ...candidateData, jobTitle }).catch(() => {});
       emailNewApplicationHR({ ...candidateData, jobTitle }).catch(() => {});
+
+      // Voluntary EEO self-ID: auto-offer at application time when enabled
+      // (EEO_AUTO_INVITE=true). Off by default until the email wording is signed
+      // off. Best-effort and never blocks the application. The manual button on
+      // the Candidates screen works regardless of this flag.
+      if (process.env.EEO_AUTO_INVITE === 'true') {
+        void (async () => {
+          try {
+            const token = randomUUID();
+            const [row] = await ctx.db.insert(eeoResponses)
+              .values({ candidateId: candidate.id, token }).returning();
+            await emailEeoSelfId({
+              firstName: candidate.firstName, email: candidate.email, jobTitle,
+              surveyUrl: `${appBaseUrl()}/eeo-survey/${row.token}`,
+            });
+          } catch (err) { console.error('[create] auto EEO invite failed:', err); }
+        })();
+      }
 
       await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'create');
       trackActivity(ctx.db, ctx.user.id, 'create_candidate', 'candidates', { candidateId: candidate.id }).catch(() => {});
