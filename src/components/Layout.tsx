@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video, ShieldCheck } from 'lucide-react';
+import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video, ShieldCheck, ClipboardPen, Brain, CheckSquare } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import ChatDrawer from './ChatDrawer';
@@ -17,14 +17,14 @@ const topNav = [
 ];
 
 const talentNav = [
-  { path: '/hiring/intake', label: 'Intake', icon: ClipboardList },
+  { path: '/hiring/intake', label: 'Intake', icon: ClipboardPen },
   { path: '/hiring/requisitions', label: 'Requisitions', icon: ClipboardList },
   { path: '/hiring/candidates', label: 'Candidates', icon: Users },
   { path: '/hiring/review', label: 'Review', icon: ClipboardCheck },
   { path: '/hiring/internal', label: 'Internal Pipeline', icon: UserCheck },
-  { path: '/hiring/assessments', label: 'Assessments', icon: ClipboardCheck },
+  { path: '/hiring/assessments', label: 'Assessments', icon: Brain },
   { path: '/hiring/tasks', label: 'Work Sample', icon: Library },
-  { path: '/hiring/scorecards', label: 'Scorecards', icon: FileCheck },
+  { path: '/hiring/scorecards', label: 'Scorecards', icon: CheckSquare },
   { path: '/hiring/interviews', label: 'Interviews', icon: Video },
 ];
 
