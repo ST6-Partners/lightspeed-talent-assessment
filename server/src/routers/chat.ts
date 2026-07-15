@@ -115,7 +115,7 @@ function buildLiveDataTools(db: any) {
         const whereClause = conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``;
         const result = await db.execute(sql`
           SELECT first_name, last_name, email, phone, current_stage, source,
-                 ccat_score, work_sample_score, resume_review_score, reference_check_score, interview_score,
+                 ccat_score, work_sample_score, resume_review_score, interview_score,
                  created_at
           FROM candidates
           ${whereClause}

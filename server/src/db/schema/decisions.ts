@@ -26,7 +26,6 @@ export const decisionLog = pgTable('decision_log', {
   // What kind of decision this is.
   //   'assessment_gate' | 'post_assessment_review' | 'resume_screen'
   //   | 'work_sample' | 'interview_questions' | 'interview_feedback'
-  //   | 'reference_check'
   decisionType: varchar('decision_type', { length: 50 }).notNull(),
 
   // Outcome of the decision.
