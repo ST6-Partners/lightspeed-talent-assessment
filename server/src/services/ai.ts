@@ -10,7 +10,7 @@ import { PROMPTS } from './prompts.js';
 
 const SANDBOX = !process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? '';
-const MODEL = 'claude-3-5-sonnet-20241022';
+const MODEL = 'claude-sonnet-4-6';
 
 const LIGHTSPEED_VALUES = [
   'Integrity', 'Accountability', 'Collaboration', 'Innovation',
@@ -450,7 +450,7 @@ Overall a solid, well-run interview; the main opportunity is following up harder
 
 // Current Sonnet (ai.ts MODEL above is an older 3.5 snapshot; use the
 // same current model the feedback/chat paths use for this screen).
-const RESUME_SCREEN_MODEL = 'claude-sonnet-4-6';
+const RESUME_SCREEN_MODEL = MODEL;
 
 export interface RequirementCheck {
   requirement: string;
@@ -613,7 +613,7 @@ Return ONLY a JSON array. Each element:
 // does NOT advance or reject a candidate. If no rubric is configured
 // yet, it scores against the brief and says so, with lower confidence.
 // ============================================================
-const WORK_SAMPLE_MODEL = 'claude-sonnet-4-6';
+const WORK_SAMPLE_MODEL = MODEL;
 
 export interface WorkSampleScoreInput {
   firstName: string;
@@ -1007,7 +1007,7 @@ Effective date: ${input.effectiveDate ?? 'not set'}`;
 // notes): calibrate before letting them drive real decisions.
 // ============================================================
 
-const SKILLS_FIT_MODEL = 'claude-sonnet-4-6';
+const SKILLS_FIT_MODEL = MODEL;
 
 export interface SkillCheck {
   skill: string;
@@ -1195,7 +1195,7 @@ ${input.interviewFeedback || '(no interview feedback on file yet)'}`;
 // is internal ordering only and is never shown to users.
 // ============================================================
 
-const RANKING_MODEL = 'claude-sonnet-4-6';
+const RANKING_MODEL = MODEL;
 
 export interface RankFitInput {
   firstName: string;
