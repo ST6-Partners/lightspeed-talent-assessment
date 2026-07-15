@@ -85,10 +85,10 @@ function SharpenField({ label, value, onChange, rows, placeholder, roleContext }
       {show && (
         <div className="mt-1.5 border border-cyan-200 bg-cyan-50 rounded-md p-2.5 text-xs">
           <div className="flex items-center gap-1.5 text-ls-primary font-medium mb-1">
-            <span>\u2726 Help me write</span>
-            {sharpen.isLoading && <span className="text-gray-400 font-normal">analyzing\u2026</span>}
+            <span>Help me write</span>
+            {sharpen.isLoading && <span className="text-gray-400 font-normal">analyzing...</span>}
           </div>
-          {!res && !sharpen.isLoading && <div className="text-gray-400">Keep typing \u2014 suggestions appear as you go.</div>}
+          {!res && !sharpen.isLoading && <div className="text-gray-400">Keep typing, suggestions appear as you go.</div>}
           {res && <div className="text-gray-600 mb-1">{res.assessment}</div>}
           {res && !res.alreadySpecific && (res.followUps?.length > 0) && (
             <ul className="list-disc pl-4 mb-2 text-gray-600 space-y-0.5">
