@@ -73,6 +73,14 @@ export const PROMPTS = {
     lastRevised: '2026-07-14',
     changelog: ['1.1.0 — switched to Haiku + capped output for faster live re-evaluation.', '1.0.0 — initial registry entry.'],
   },
+  guidedIntake: {
+    id: 'guided-intake',
+    version: '1.0.0',
+    model: 'claude-3-5-haiku-20241022',
+    purpose: 'Run an adaptive hiring-manager intake interview: ask one job-relevant probing question at a time, probe vague answers, and extract concrete role-profile field values. Never asks about personality/culture-fit or protected-trait proxies.',
+    lastRevised: '2026-07-15',
+    changelog: ['1.0.0 — initial registry entry.'],
+  },
 } as const;
 
 export type PromptKey = keyof typeof PROMPTS;

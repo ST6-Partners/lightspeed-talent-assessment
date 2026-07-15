@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, X, Trash2, Pencil, Send } from 'lucide-react';
+import { Plus, X, Trash2, Pencil, Send, Sparkles } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import GuidedIntake from '../../components/GuidedIntake';
 
 const STATUS_COLORS: Record<string, string> = {
   Draft: 'bg-gray-100 text-gray-600',
@@ -119,6 +120,7 @@ export default function Intake() {
   const [form, setForm] = useState({ ...EMPTY });
   const [rounds, setRounds] = useState<Round[]>([]);
   const [team, setTeam] = useState<Person[]>([]);
+  const [showGuided, setShowGuided] = useState(false);
   const [awareness, setAwareness] = useState<Aware[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -446,6 +448,36 @@ export default function Intake() {
             <h3 className="text-sm font-semibold text-ls-primary mb-2">2A · Role profile &amp; search criteria</h3>
             <p className="text-xs text-gray-400 mb-2">Filled by the hiring manager — the full picture of who we’re looking for. Applies to every role.</p>
             <p className="text-xs text-gray-400 mb-3">Must-haves and nice-to-haves auto-fill from the selected JD (Section 2). They stay blank for a brand-new JD. Edit as needed.</p>
+
+            {!showGuided ? (
+              <div className="flex items-center gap-3 bg-ls-primary-50 border border-ls-primary-50 rounded-lg p-3 mb-4">
+                <Sparkles size={18} className="text-ls-primary shrink-0" />
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-ls-primary">Not sure what to write?</div>
+                  <div className="text-xs text-ls-ink-3">Answer a few quick questions and these fields fill in for you.</div>
+                </div>
+                <button type="button" onClick={() => setShowGuided(true)}
+                  className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 whitespace-nowrap">
+                  Start guided intake
+                </button>
+              </div>
+            ) : (
+              <GuidedIntake
+                roleContext={[form.department, form.roleChangeNote].filter(Boolean).join(' — ') || 'unspecified role'}
+                fields={{
+                  mustHaves: form.mustHaves,
+                  niceToHaves: form.niceToHaves,
+                  standoutSignals: form.standoutSignals,
+                  dealbreakers: form.dealbreakers,
+                  thriveProfile: form.thriveProfile,
+                  struggleProfile: form.struggleProfile,
+                  teamContext: form.teamContext,
+                }}
+                onApply={(u) => setForm((f) => ({ ...f, ...u }))}
+                onClose={() => setShowGuided(false)}
+              />
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <SharpenField label={"Must-haves (non-negotiables) — one per line"} value={form.mustHaves} onChange={(v) => setForm({ ...form, mustHaves: v })} rows={4} placeholder="e.g. 5+ years front-end&#10;Strong React/Redux, CSS" roleContext={form.department} />

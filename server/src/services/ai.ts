@@ -1330,3 +1330,113 @@ CURRENT ANSWER: ${value}`;
     return placeholderSharpen(value);
   }
 }
+
+// ============================================================
+// GUIDED INTAKE INTERVIEW (adaptive, field-filling)
+//
+// Runs the intake as a short conversation instead of a static form:
+// given the role, the current field values, and the transcript so far,
+// it returns the next single probing question (targeting the most
+// valuable thin/empty field, or probing deeper when the last answer was
+// vague) plus any concrete field values it extracted from the latest
+// answer. Same job-relevance + anti-proxy guardrails as sharpenIntake.
+// ============================================================
+
+export const INTAKE_FIELDS: { id: string; label: string }[] = [
+  { id: 'mustHaves', label: 'Must-haves (non-negotiables)' },
+  { id: 'niceToHaves', label: 'Nice-to-haves' },
+  { id: 'standoutSignals', label: 'What makes a candidate stand out' },
+  { id: 'dealbreakers', label: 'Dealbreakers' },
+  { id: 'thriveProfile', label: 'Who thrives here' },
+  { id: 'struggleProfile', label: 'Who tends to struggle' },
+  { id: 'teamContext', label: 'Team context — current challenges / growth stage' },
+];
+const INTAKE_FIELD_IDS = new Set(INTAKE_FIELDS.map((f) => f.id));
+
+export interface IntakeTurnInput {
+  roleContext: string;
+  fields: Record<string, string>;
+  transcript: { role: 'assistant' | 'user'; text: string }[];
+}
+export interface IntakeCapture { field: string; value: string }
+export interface IntakeTurnResult {
+  message: string;
+  targetField: string | null;
+  captures: IntakeCapture[];
+  done: boolean;
+}
+
+function sandboxIntakeTurn(input: IntakeTurnInput): IntakeTurnResult {
+  const askedCount = input.transcript.filter((t) => t.role === 'assistant').length;
+  const thin = INTAKE_FIELDS.filter((f) => !(input.fields[f.id] ?? '').trim());
+  const target = thin[0] ?? INTAKE_FIELDS[Math.min(askedCount, INTAKE_FIELDS.length - 1)];
+  const lastUser = [...input.transcript].reverse().find((t) => t.role === 'user');
+  const captures: IntakeCapture[] = [];
+  if (lastUser && askedCount > 0) {
+    const prev = INTAKE_FIELDS[Math.min(askedCount - 1, INTAKE_FIELDS.length - 1)];
+    captures.push({ field: prev.id, value: lastUser.text.trim() });
+  }
+  return {
+    message: `[Sandbox] For this role, tell me about "${target.label.toLowerCase()}" — be concrete about observable behaviors or outcomes. (Set ANTHROPIC_API_KEY for the real guided intake.)`,
+    targetField: target.id,
+    captures,
+    done: thin.length <= 1,
+  };
+}
+
+export async function intakeInterviewTurn(input: IntakeTurnInput): Promise<IntakeTurnResult> {
+  if (SANDBOX) {
+    console.log('[AI SANDBOX] intakeInterviewTurn');
+    return sandboxIntakeTurn(input);
+  }
+
+  const fieldList = INTAKE_FIELDS.map((f) => `- ${f.id}: ${f.label}`).join('\n');
+  const system = `You are a sharp technical recruiter running a live intake interview with a hiring manager to define an open role. Ask ONE probing question at a time to draw out what the manager actually wants, then convert their answers into concrete, job-relevant field content.
+
+You are filling these fields (use the exact id when you capture content):
+${fieldList}
+
+RULES:
+- Ask about the most valuable field that is still empty or thin. If the manager's LAST answer was vague (e.g. "strong communicator", "team player", "self-starter", "culture fit"), do NOT move on — ask a sharper follow-up on the SAME field that pushes for what they will actually do, for whom, how often, or how it's measured.
+- Keep each question to 1-3 sentences. Offer a concrete example when it helps.
+- From the manager's latest answer, extract any concrete content into "captures": field id + value phrased as observable job behaviors, deliverables, or outcomes. If a field naturally holds multiple items, join them with newlines. Only capture when the answer is specific; skip vague answers.
+- Set "done" to true only when every field has solid content or the manager clearly signals they are finished.
+CRITICAL GUARDRAILS: stay strictly job-relevant. NEVER ask about or capture personality traits, demeanor, "culture fit", age, gender, race, national origin, disability, religion, or anything that could proxy for a protected characteristic. Focus on skills, tasks, deliverables, and measurable outcomes.
+
+Return ONLY a JSON object:
+{ "message": "<the next question, or a brief wrap-up if done>", "targetField": "<field id or null>", "captures": [ { "field": "<field id>", "value": "<concrete text>" } ], "done": true|false }`;
+
+  const fieldsState = INTAKE_FIELDS
+    .map((f) => `- ${f.id}: ${(input.fields[f.id] ?? '').trim() ? (input.fields[f.id] ?? '').trim() : '(empty)'}`)
+    .join('\n');
+  const convo = input.transcript.length
+    ? input.transcript.map((t) => `${t.role === 'assistant' ? 'INTERVIEWER' : 'MANAGER'}: ${t.text}`).join('\n')
+    : '(no questions asked yet — produce the first question)';
+  const user = `ROLE: ${input.roleContext || 'unspecified'}
+
+CURRENT FIELD VALUES:
+${fieldsState}
+
+CONVERSATION SO FAR:
+${convo}`;
+
+  try {
+    const meta = await callClaudeMeta(system, user, PROMPTS.guidedIntake.model, 600);
+    const fenced = meta.text.replace(/```json|```/g, '');
+    const parsed = JSON.parse(fenced.slice(fenced.indexOf('{'), fenced.lastIndexOf('}') + 1));
+    const captures: IntakeCapture[] = Array.isArray(parsed.captures)
+      ? parsed.captures
+          .filter((c: any) => c && INTAKE_FIELD_IDS.has(c.field) && String(c.value ?? '').trim())
+          .map((c: any) => ({ field: String(c.field), value: String(c.value).trim() }))
+      : [];
+    return {
+      message: String(parsed.message ?? 'Anything else you want to capture about this role?'),
+      targetField: parsed.targetField && INTAKE_FIELD_IDS.has(parsed.targetField) ? parsed.targetField : null,
+      captures,
+      done: !!parsed.done,
+    };
+  } catch (err) {
+    console.error('[AI] intakeInterviewTurn failed — using sandbox turn:', err);
+    return sandboxIntakeTurn(input);
+  }
+}

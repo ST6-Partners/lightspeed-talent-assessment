@@ -17,7 +17,7 @@ import { ataSeedRoles } from '../data/ataSeedRoles.js';
 import { interviewQuestions } from '../db/schema/intake.js';
 import { assessmentTasks } from '../db/schema/assessmentTasks.js';
 import { departments } from '../db/schema/departments.js';
-import { generateRoleJD, generateStandardQuestions, standardQuestionSet, generateWorkSampleTask, sharpenIntakeField } from '../services/ai.js';
+import { generateRoleJD, generateStandardQuestions, standardQuestionSet, generateWorkSampleTask, sharpenIntakeField, intakeInterviewTurn } from '../services/ai.js';
 import { approverEmail, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
 import { emailApprovalRejected, emailApprovalSentBack } from '../services/email.js';
 import { users } from '../db/schema/core.js';
@@ -476,6 +476,19 @@ async function saveIntakeEdits(db: DrizzleClient, token: string, fields: Record<
 export const intakeRouter = router({
   // Advisory: sharpen a vague intake answer into specific, job-relevant signal.
   // Suggestion only — never writes to the form.
+  // Guided intake interview — one adaptive probing question + field captures per call.
+  interviewTurn: protectedProcedure
+    .input(z.object({
+      roleContext: z.string().max(400).optional(),
+      fields: z.record(z.string(), z.string()).optional(),
+      transcript: z.array(z.object({ role: z.enum(['assistant', 'user']), text: z.string().max(4000) })).max(80),
+    }))
+    .mutation(async ({ input }) => intakeInterviewTurn({
+      roleContext: input.roleContext ?? '',
+      fields: input.fields ?? {},
+      transcript: input.transcript,
+    })),
+
   sharpenField: protectedProcedure
     .input(z.object({
       label: z.string().min(1),
