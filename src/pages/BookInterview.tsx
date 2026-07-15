@@ -70,13 +70,35 @@ export default function BookInterview() {
       <Shell>
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
           <CheckCircle2 className="mx-auto mb-3 text-green-600" size={28} />
-          <h1 className="font-semibold text-gray-900 mb-1">Interview confirmed</h1>
+          <h1 className="font-semibold text-gray-900 mb-1">{data.mode === 'phone_screen' ? 'Call confirmed' : 'Interview confirmed'}</h1>
           <p className="text-sm text-gray-500">
-            Thanks{data.firstName ? `, ${data.firstName}` : ''} — your interview{data.jobTitle ? ` for ${data.jobTitle}` : ''} is booked{when ? ` for ${when}` : ''}. A calendar invite is on its way by email.
+            Thanks{data.firstName ? `, ${data.firstName}` : ''} — your {data.mode === 'phone_screen' ? 'call' : 'interview'}{data.jobTitle ? ` for ${data.jobTitle}` : ''} is booked{when ? ` for ${when}` : ''}. A calendar invite is on its way by email.{data.mode === 'phone_screen' ? " We'll call you at the number you provided." : ''}
           </p>
           {data.joinUrl ? (
             <a href={data.joinUrl} className="inline-block mt-4 text-sm text-ls-primary font-medium underline">Join link</a>
           ) : null}
+        </div>
+      </Shell>
+    );
+  }
+
+  if (data.mode === 'phone_screen') {
+    return (
+      <Shell>
+        <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
+          <Calendar className="mx-auto mb-3 text-ls-primary" size={28} />
+          <h1 className="text-xl font-bold text-gray-900">Schedule your call{data.jobTitle ? ` — ${data.jobTitle}` : ''}</h1>
+          <p className="text-gray-500 text-sm mt-1 mb-4">
+            Hi {data.firstName}, pick a time that works for you. Add the best phone number to reach you when you book — we'll call you at that number. No video or app needed.
+          </p>
+          {data.schedulingUrl ? (
+            <a href={data.schedulingUrl} target="_blank" rel="noreferrer"
+               className="inline-block px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600">
+              Pick a time for your call
+            </a>
+          ) : (
+            <p className="text-sm text-amber-600">Scheduling isn't set up yet. We'll email you as soon as it's ready.</p>
+          )}
         </div>
       </Shell>
     );

@@ -717,6 +717,7 @@ export default function Candidates() {
           {/* Decision history — Phase 2 provenance trail (model + prompt version + reason) */}
           <DecisionHistorySection key={`dh-${selected.id}`} candidateId={selected.id} />
           <EeoInviteSection key={`eeo-${selected.id}`} candidateId={selected.id} />
+          {selected.currentStage === 'Phone Screen' && <PhoneScreenSchedulingSection key={`ps-${selected.id}`} candidate={selected} onChanged={refetch} />}
 
         </div>
       )}
@@ -1590,6 +1591,42 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
           <div dangerouslySetInnerHTML={{ __html: html }} />
         </div>
       )}
+    </Section>
+  );
+}
+
+export function PhoneScreenSchedulingSection({ candidate, onChanged }: { candidate: any; onChanged?: () => void }) {
+  const status = trpc.scheduling.phoneScreenStatusFor.useQuery({ candidateId: candidate.id });
+  const open = trpc.scheduling.openPhoneScreen.useMutation({ onSuccess: () => { status.refetch(); onChanged?.(); } });
+  const s = status.data;
+  const scheduled = s?.scheduledAt ? new Date(s.scheduledAt) : null;
+  return (
+    <Section title="Screening call">
+      {scheduled ? (
+        <div className="text-sm text-green-700 font-medium">Call booked for {scheduled.toLocaleString()}</div>
+      ) : s?.opened ? (
+        <div className="text-sm text-gray-600 space-y-1">
+          <div>Booking link sent. Waiting on the candidate to pick a time.</div>
+          {s?.bookingUrl && <div className="text-xs">Candidate link: <a className="text-ls-primary underline" href={s.bookingUrl}>booking page</a></div>}
+          {!s?.phoneUrlSet && <div className="text-xs text-amber-600">No Zoom Scheduler link configured yet (set PHONE_SCREEN_SCHEDULING_URL) — the candidate page will say scheduling isn't ready.</div>}
+          <button onClick={() => open.mutate({ candidateId: candidate.id })} disabled={open.isLoading} className="mt-1 text-xs text-ls-primary font-medium">Re-send call link</button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-500">
+            Emails the candidate a link to book a short phone screen via the Zoom Scheduler (Outlook-connected).
+            It's a phone call — they add their number and we call them. No video link is sent.
+          </p>
+          {!s?.phoneUrlSet && <p className="text-xs text-amber-600">Set PHONE_SCREEN_SCHEDULING_URL to the Zoom Scheduler booking link to go live.</p>}
+          <button
+            onClick={() => open.mutate({ candidateId: candidate.id })}
+            disabled={open.isLoading}
+            className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50">
+            {open.isLoading ? 'Sending...' : 'Send screening-call link'}
+          </button>
+        </div>
+      )}
+      {open.error && <p className="text-sm text-red-600">{open.error.message}</p>}
     </Section>
   );
 }

@@ -1169,3 +1169,20 @@ export async function emailEeoSelfId(data: { firstName: string; email: string; j
     `),
   });
 }
+
+// Screening-call (phone) booking invite. A phone call — no video/meeting link.
+// The candidate books a time and provides their number; the recruiter calls them.
+export async function emailScreeningCallInvite(data: { email: string; firstName: string; jobTitle?: string; bookingUrl: string }) {
+  await sendEmail({
+    to: data.email,
+    templateId: 'screening_call_invite',
+    subject: `Schedule a quick call — ${data.jobTitle ?? 'Lightspeed Systems'}`,
+    html: wrap(`
+      ${h1('Let\'s set up a quick call')}
+      ${p(`Hi ${data.firstName},`)}
+      ${p(`We'd like to set up a short screening call${data.jobTitle ? ` about the <strong>${data.jobTitle}</strong> role` : ''}. Please pick a time that works for you and add the best phone number to reach you — <strong>we'll call you</strong> at that number. No video or app needed.`)}
+      ${button('Pick a time for your call', data.bookingUrl)}
+      ${p(`<span style="font-size:12px;color:#888;">If the button doesn't work, paste this link: ${data.bookingUrl}</span>`)}
+    `),
+  });
+}

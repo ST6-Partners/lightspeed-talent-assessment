@@ -193,6 +193,10 @@ export const candidates = pgTable('candidates', {
   interviewJoinUrl: text('interview_join_url'),                          // meeting join link (from Calendly, e.g. Zoom)
   calendlyEventUri: text('calendly_event_uri'),                          // Calendly scheduled_event uri
   calendlyCancelUrl: text('calendly_cancel_url'),                        // Calendly reschedule/cancel link
+  // Phone-screen scheduling (a phone-call Calendly event — no video link; recruiter calls the candidate)
+  phoneScreenBookingToken: varchar('phone_screen_booking_token', { length: 64 }),
+  phoneScreenBookingOpenedAt: timestamp('phone_screen_booking_opened_at', { withTimezone: true }),
+  phoneScreenScheduledAt: timestamp('phone_screen_scheduled_at', { withTimezone: true }),
   // AI-generated interview content
   interviewQuestions: jsonb('interview_questions'),
   interviewTranscript: text('interview_transcript'),

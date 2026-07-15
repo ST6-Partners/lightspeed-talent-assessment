@@ -19,8 +19,8 @@ import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { candidates, jobDescriptions } from '../db/schema/hiring.js';
-import { emailBookingInvite } from '../services/email.js';
-import { defaultSchedulingUrl, isCalendlyConfigured } from '../services/calendly.js';
+import { emailBookingInvite, emailScreeningCallInvite } from '../services/email.js';
+import { defaultSchedulingUrl, phoneScreenSchedulingUrl, isCalendlyConfigured } from '../services/calendly.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 
@@ -87,6 +87,47 @@ export const schedulingRouter = router({
       };
     }),
 
+  // ── PROTECTED: HR opens a PHONE-SCREEN call for a candidate ─
+  // Reuses the same self-booking mechanism as interviews, but points at the
+  // phone-call Calendly event and sends phone-framed copy (no video link).
+  openPhoneScreen: protectedProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      const token = candidate.phoneScreenBookingToken ?? randomUUID();
+      await ctx.db.update(candidates).set({
+        phoneScreenBookingToken: token,
+        phoneScreenBookingOpenedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, candidate.id));
+
+      const bookingUrl = `${appBaseUrl()}/book-interview/${token}`;
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      await emailScreeningCallInvite({
+        email: candidate.email, firstName: candidate.firstName, jobTitle, bookingUrl,
+      }).catch((err) => console.error('[scheduling.openPhoneScreen] invite failed:', err));
+
+      await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'open_phone_screen', 'candidates', { candidateId: candidate.id }).catch(() => {});
+      return { bookingUrl, phoneUrlSet: !!phoneScreenSchedulingUrl() };
+    }),
+
+  // ── PROTECTED: phone-screen booking state for the panel ────
+  phoneScreenStatusFor: protectedProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      return {
+        opened: !!candidate.phoneScreenBookingOpenedAt,
+        scheduledAt: candidate.phoneScreenScheduledAt,
+        bookingUrl: candidate.phoneScreenBookingToken ? `${appBaseUrl()}/book-interview/${candidate.phoneScreenBookingToken}` : null,
+        phoneUrlSet: !!phoneScreenSchedulingUrl(),
+      };
+    }),
+
   // ── PROTECTED: booking state for the candidate panel ───────
   statusFor: protectedProcedure
     .input(z.object({ candidateId: z.string().uuid() }))
@@ -108,22 +149,38 @@ export const schedulingRouter = router({
   getBookingContext: publicProcedure
     .input(z.object({ token: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      const candidate = await ctx.db.query.candidates.findFirst({
+      // The token may be an interview booking token OR a phone-screen token.
+      let candidate = await ctx.db.query.candidates.findFirst({
         where: eq(candidates.interviewBookingToken, input.token),
       });
+      let mode: 'interview' | 'phone_screen' = 'interview';
+      if (!candidate) {
+        candidate = await ctx.db.query.candidates.findFirst({
+          where: eq(candidates.phoneScreenBookingToken, input.token),
+        });
+        mode = 'phone_screen';
+      }
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This booking link is invalid or has expired.' });
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
-      const base = candidate.calendlySchedulingUrl ?? defaultSchedulingUrl();
+      const alreadyBooked = mode === 'phone_screen'
+        ? !!candidate.phoneScreenScheduledAt
+        : !!candidate.interviewScheduledAt;
+      // Interview: embed the Calendly widget (prefilled). Phone screen: link OUT to
+      // the Zoom Scheduler page (Outlook-connected) — no embed, no video link.
+      const interviewBase = candidate.calendlySchedulingUrl ?? defaultSchedulingUrl();
       return {
+        mode,
         firstName: candidate.firstName,
         jobTitle: jobTitle ?? null,
-        alreadyBooked: !!candidate.interviewScheduledAt,
-        scheduledAt: candidate.interviewScheduledAt,
-        joinUrl: candidate.interviewJoinUrl,
-        // Calendly link prefilled with the candidate + our tracking token.
-        calendlyUrl: base
-          ? prefillCalendlyUrl(base, `${candidate.firstName} ${candidate.lastName}`, candidate.email, input.token)
+        alreadyBooked,
+        scheduledAt: mode === 'phone_screen' ? candidate.phoneScreenScheduledAt : candidate.interviewScheduledAt,
+        joinUrl: mode === 'phone_screen' ? null : candidate.interviewJoinUrl,
+        // Embedded Calendly widget URL (interview mode only).
+        calendlyUrl: mode === 'interview' && interviewBase
+          ? prefillCalendlyUrl(interviewBase, `${candidate.firstName} ${candidate.lastName}`, candidate.email, input.token)
           : null,
+        // External booking link to open (phone-screen / Zoom Scheduler mode).
+        schedulingUrl: mode === 'phone_screen' ? (phoneScreenSchedulingUrl() || null) : null,
       };
     }),
 });
