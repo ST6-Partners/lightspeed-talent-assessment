@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { ShieldAlert, Lock } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import SearchSelect from '../../components/SearchSelect';
 
 const GREEN = '#1D9E75';
 const RED = '#E24B4A';
@@ -88,12 +89,15 @@ export default function Fairness() {
           <div style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Fairness check — assessment gate</div>
           <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>Who cleared the CCAT cutoff of 30, by group</div>
         </div>
-        <select value={effectiveJd} onChange={(e) => setJdId(e.target.value)}
-          style={{ fontSize: 13, padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 6 }}>
-          {(roles ?? []).map((r: any) => (
-            <option key={r.jdId} value={r.jdId}>{r.jobTitle} ({r.assessed})</option>
-          ))}
-        </select>
+        <div style={{ width: 280 }}>
+          <SearchSelect
+            value={effectiveJd}
+            onChange={setJdId}
+            placeholder="Search a role…"
+            emptyText="No matching roles"
+            options={(roles ?? []).map((r: any) => ({ value: r.jdId, label: `${r.jobTitle} (${r.assessed})` }))}
+          />
+        </div>
       </div>
 
       <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.7, margin: '14px 0 18px' }}>
