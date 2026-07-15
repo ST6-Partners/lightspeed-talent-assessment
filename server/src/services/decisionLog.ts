@@ -7,7 +7,7 @@
 // and errors are swallowed (logged to console only).
 // ============================================================
 
-import { decisionLog } from '../db/schema/decisions.js';
+import { decisionLog, decisionLogFailures } from '../db/schema/decisions.js';
 
 export type DecisionType =
   | 'assessment_gate'
@@ -51,22 +51,43 @@ export interface LogDecisionInput {
  * `db` is the drizzle instance (ctx.db).
  */
 export async function logDecision(db: any, input: LogDecisionInput): Promise<void> {
+  const values = {
+    candidateId: input.candidateId,
+    decisionType: input.decisionType,
+    outcome: input.outcome,
+    reason: input.reason,
+    score: input.score ?? null,
+    decidedByType: input.decidedByType ?? 'ai',
+    decidedBy: input.decidedBy ?? null,
+    model: input.model ?? null,
+    requestedModel: input.requestedModel ?? null,
+    promptId: input.promptId ?? null,
+    promptVersion: input.promptVersion ?? null,
+    inputs: input.inputs ?? null,
+  };
   try {
-    await db.insert(decisionLog).values({
-      candidateId: input.candidateId,
-      decisionType: input.decisionType,
-      outcome: input.outcome,
-      reason: input.reason,
-      score: input.score ?? null,
-      decidedByType: input.decidedByType ?? 'ai',
-      decidedBy: input.decidedBy ?? null,
-      model: input.model ?? null,
-      requestedModel: input.requestedModel ?? null,
-      promptId: input.promptId ?? null,
-      promptVersion: input.promptVersion ?? null,
-      inputs: input.inputs ?? null,
-    });
-  } catch (err) {
-    console.error('[decisionLog] failed to record decision (non-fatal):', err);
+    await db.insert(decisionLog).values(values);
+    return;
+  } catch (err1) {
+    // One quick retry — most write failures are transient blips.
+    try {
+      await db.insert(decisionLog).values(values);
+      return;
+    } catch (err2) {
+      console.error('[decisionLog] failed to record decision after retry (non-fatal):', err2);
+      // Dead-letter the payload so the gap is visible + recoverable instead of
+      // silently dropped. Wrapped so the safety net itself can never throw.
+      try {
+        await db.insert(decisionLogFailures).values({
+          candidateId: input.candidateId,
+          decisionType: input.decisionType,
+          outcome: input.outcome,
+          payload: values,
+          error: String((err2 as any)?.message ?? err2).slice(0, 2000),
+        });
+      } catch (err3) {
+        console.error('[decisionLog] ALSO failed to dead-letter the decision — this gap is silent:', err3);
+      }
+    }
   }
 }

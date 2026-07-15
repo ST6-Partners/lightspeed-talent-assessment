@@ -72,10 +72,11 @@ export default function Fairness() {
   const { data: roles } = trpc.eeo.auditRoles.useQuery();
   const [jdId, setJdId] = useState<string>('');
   const effectiveJd = jdId || roles?.[0]?.jdId || '';
-  const { data: audit, isLoading } = trpc.eeo.audit.useQuery(
+  const { data: audit, isLoading, refetch } = trpc.eeo.audit.useQuery(
     { jdId: effectiveJd },
     { enabled: !!effectiveJd },
   );
+  const retryWrites = trpc.decisions.retryFailures.useMutation({ onSuccess: () => refetch() });
 
   const lowResponse = audit && audit.responseRate < 50;
   const flagged = audit
@@ -120,6 +121,21 @@ export default function Fairness() {
             <div><span style={{ color: '#6b7280' }}>Answered the voluntary survey</span> <span style={{ fontWeight: 600 }}>{audit.responseRate}%</span></div>
             <div><span style={{ color: '#6b7280' }}>Groups flagged</span> <span style={{ fontWeight: 600, color: flagged ? RED : '#111827' }}>{flagged}</span></div>
           </div>
+
+          {audit.integrityGap > 0 && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fef2f2', color: '#991b1b', borderRadius: 6, padding: '10px 12px', marginBottom: 18, fontSize: 13, lineHeight: 1.6 }}>
+              <ShieldAlert size={18} style={{ marginTop: 1, flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>
+                {audit.integrityGap} assessment decision{audit.integrityGap > 1 ? 's' : ''} for this role could not be recorded, so this audit may be missing those candidates. Replay the dropped records to make it complete.
+              </span>
+              <button
+                onClick={() => retryWrites.mutate()}
+                disabled={retryWrites.isLoading}
+                style={{ flexShrink: 0, background: '#991b1b', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                {retryWrites.isLoading ? 'Replaying…' : 'Replay records'}
+              </button>
+            </div>
+          )}
 
           {lowResponse && (
             <div style={{ display: 'flex', gap: 10, background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '10px 12px', marginBottom: 18, fontSize: 13, lineHeight: 1.6 }}>

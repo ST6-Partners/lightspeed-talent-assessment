@@ -42,6 +42,7 @@ export interface AuditResult {
   assessed: number;           // candidates in this role with an assessment_gate decision
   responded: number;          // of those, how many completed the EEO survey
   responseRate: number;       // 0..100, rounded
+  integrityGap: number;       // dropped assessment_gate decision writes for this role (audit may be incomplete)
   dimensions: Dimension[];
 }
 
@@ -147,11 +148,25 @@ export async function runAdverseImpactAudit(db: DrizzleClient, jdId: string): Pr
   const assessed = Number(covRow.assessed) || 0;
   const responded = Number(covRow.responded) || 0;
 
+  // Data-integrity check: assessment_gate decision writes that failed and were
+  // dead-lettered for candidates in THIS role. A non-zero value means the audit
+  // above is missing those candidates until the writes are replayed.
+  const gapRes: any = await db.execute(sql`
+    SELECT COUNT(*)::int AS gap
+    FROM decision_log_failures f
+    JOIN candidates c ON c.id = f.candidate_id
+    WHERE f.resolved = false
+      AND f.decision_type = 'assessment_gate'
+      AND c.jd_id = ${jdId}
+  `);
+  const integrityGap = Number((gapRes.rows ?? gapRes)[0]?.gap) || 0;
+
   return {
     jdId,
     assessed,
     responded,
     responseRate: assessed > 0 ? Math.round((responded / assessed) * 100) : 0,
+    integrityGap,
     dimensions: [
       buildDimension('sex', 'By sex', sexRows),
       buildDimension('raceEthnicity', 'By race / ethnicity', raceRows),

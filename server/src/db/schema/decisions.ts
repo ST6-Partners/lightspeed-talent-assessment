@@ -13,7 +13,7 @@
 // carries the model/prompt provenance that stage history does not.
 // ============================================================
 
-import { pgTable, uuid, varchar, text, integer, jsonb, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, integer, jsonb, timestamp, boolean } from 'drizzle-orm/pg-core';
 import { candidates } from './hiring.js';
 import { users } from './core.js';
 
@@ -58,3 +58,20 @@ export const decisionLog = pgTable('decision_log', {
 
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Dead-letter for decision_log writes that failed even after a retry. Captures the
+// full payload so an admin can replay it into decision_log; `resolved` flips true
+// once replayed. No FK on candidate_id on purpose — the safety-net insert must be
+// as unlikely to fail as possible.
+export const decisionLogFailures = pgTable('decision_log_failures', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  candidateId: uuid('candidate_id'),
+  decisionType: varchar('decision_type', { length: 50 }),
+  outcome: varchar('outcome', { length: 30 }),
+  payload: jsonb('payload'),
+  error: text('error'),
+  resolved: boolean('resolved').notNull().default(false),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+});
+

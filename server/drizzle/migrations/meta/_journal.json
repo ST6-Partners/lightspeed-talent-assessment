@@ -428,6 +428,13 @@
       "when": 1960000031000,
       "tag": "0058_candidate_review_flag_count",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1960000032000,
+      "tag": "0059_decision_log_failures",
+      "breakpoints": true
     }
   ]
 }
