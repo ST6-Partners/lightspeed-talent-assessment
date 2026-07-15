@@ -435,6 +435,13 @@
       "when": 1960000032000,
       "tag": "0059_decision_log_failures",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1960000033000,
+      "tag": "0060_talent_pool",
+      "breakpoints": true
     }
   ]
 }
