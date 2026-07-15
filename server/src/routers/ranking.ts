@@ -81,4 +81,24 @@ export const rankingRouter = router({
         pending,
       };
     }),
+
+  // A single candidate's latest ranking read — used by the Review queue so a
+  // reviewer sees the same AI recommendation/strengths/probes as the ranking.
+  getForCandidate: protectedProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const [row] = await ctx.db
+        .select({
+          recommendation: candidateRankings.recommendation,
+          strengths: candidateRankings.strengths,
+          concerns: candidateRankings.concerns,
+          hadResume: candidateRankings.hadResume,
+          createdAt: candidateRankings.createdAt,
+        })
+        .from(candidateRankings)
+        .where(eq(candidateRankings.candidateId, input.candidateId))
+        .orderBy(desc(candidateRankings.createdAt))
+        .limit(1);
+      return row ?? null;
+    }),
 });

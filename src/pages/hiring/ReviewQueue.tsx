@@ -17,6 +17,10 @@ export default function ReviewQueue() {
     { candidateId: selected?.id ?? '' },
     { enabled: !!selected },
   );
+  const rankRead = trpc.ranking.getForCandidate.useQuery(
+    { candidateId: selected?.id ?? '' },
+    { enabled: !!selected },
+  );
   const resolve = trpc.candidates.resolveReview.useMutation({
     onSuccess: () => { setSelectedId(null); setReason(''); refetch(); },
   });
@@ -89,6 +93,38 @@ export default function ReviewQueue() {
                 </div>
               ))}
             </div>
+
+            {rankRead.data && (
+              <div className="mb-4">
+                <div className="text-xs font-medium text-gray-600 mb-1">AI ranking read (suggestion — you decide)</div>
+                <div className="border border-blue-100 bg-blue-50/50 rounded-lg p-3">
+                  {(rankRead.data as any).recommendation && (
+                    <div className="text-sm text-gray-700 mb-2 leading-relaxed">{(rankRead.data as any).recommendation}</div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-gray-400">Strengths</div>
+                      <ul className="list-disc ml-4 mt-1">
+                        {(((rankRead.data as any).strengths ?? []) as string[]).map((x, i) => (
+                          <li key={i} className="text-xs text-gray-600 leading-snug">{x}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-gray-400">Probe in interview</div>
+                      <ul className="list-disc ml-4 mt-1">
+                        {(((rankRead.data as any).concerns ?? []) as string[]).map((x, i) => (
+                          <li key={i} className="text-xs text-gray-600 leading-snug">{x}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                  {(rankRead.data as any).hadResume === false && (
+                    <div className="text-[11px] text-amber-700 mt-2">No resume on file — ranked on limited data.</div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <label className="block text-xs font-medium text-gray-600 mb-1">Reason / note (optional)</label>
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2}
