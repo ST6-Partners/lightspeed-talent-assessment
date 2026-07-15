@@ -61,6 +61,7 @@ async function callClaudeMeta(
   systemPrompt: string,
   userPrompt: string,
   model: string = MODEL,
+  maxTokens: number = 2048,
 ): Promise<ClaudeCallMeta> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -71,7 +72,7 @@ async function callClaudeMeta(
     },
     body: JSON.stringify({
       model,
-      max_tokens: 2048,
+      max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     }),
@@ -1315,7 +1316,7 @@ FIELD: ${label}
 CURRENT ANSWER: ${value}`;
 
   try {
-    const meta = await callClaudeMeta(system, user, PROMPTS.sharpenIntake.model);
+    const meta = await callClaudeMeta(system, user, PROMPTS.sharpenIntake.model, 400);
     const fenced = meta.text.replace(/```json|```/g, '');
     const parsed = JSON.parse(fenced.slice(fenced.indexOf('{'), fenced.lastIndexOf('}') + 1));
     return {

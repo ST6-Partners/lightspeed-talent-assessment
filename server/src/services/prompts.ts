@@ -67,11 +67,11 @@ export const PROMPTS = {
   },
   sharpenIntake: {
     id: 'sharpen-intake',
-    version: '1.0.0',
-    model: 'claude-sonnet-4-6',
+    version: '1.1.0',
+    model: 'claude-3-5-haiku-20241022',
     purpose: 'Assess whether a hiring-manager intake answer is specific enough; suggest job-relevant follow-ups and concrete rewrites. Never suggests personality/culture-fit proxies.',
     lastRevised: '2026-07-14',
-    changelog: ['1.0.0 — initial registry entry.'],
+    changelog: ['1.1.0 — switched to Haiku + capped output for faster live re-evaluation.', '1.0.0 — initial registry entry.'],
   },
 } as const;
 
