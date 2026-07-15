@@ -40,7 +40,7 @@ if (entries.length > 1) {
 //     Once timestamps are unique this is harmless, but it is confusing and invites a
 //     future clash. Known historical duplicates are grandfathered (renaming applied
 //     migrations is unsafe); any NEW duplicate prefix fails the build.
-const GRANDFATHERED_DUP_PREFIXES = new Set(['0023', '0025']);
+const GRANDFATHERED_DUP_PREFIXES = new Set([]);
 const byPrefix = new Map();
 for (const e of entries) {
   const m = /^(\d+)/.exec(e.tag);

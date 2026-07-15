@@ -4,7 +4,7 @@
 -- so it runs; INSERT ... WHERE NOT EXISTS makes it safe to re-run.
 
 -- 0026: recover the 20 JDs + ensure interview_questions exists.
--- Both 0025_recover_real_jobs and 0023_interview_questions were SKIPPED by the
+-- Both 0064_recover_real_jobs and 0063_interview_questions were SKIPPED by the
 -- migrator because parallel sessions committed migrations with identical journal
 -- timestamps (strict-greater-than dedup). This migration carries a timestamp
 -- safely above everything so it cannot be skipped. Fully idempotent.
