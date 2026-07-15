@@ -45,6 +45,14 @@ export function defaultSchedulingUrl(): string {
   return (process.env.CALENDLY_SCHEDULING_URL ?? '').trim();
 }
 
+// Booking link for the phone-screen stage. Point this at the Zoom Scheduler
+// page (Outlook-connected) configured as a phone/audio slot — the recruiter
+// calls the candidate at the number they provide. No video meeting is created.
+// (We link out to this URL; we do not embed a Calendly widget for phone screens.)
+export function phoneScreenSchedulingUrl(): string {
+  return (process.env.PHONE_SCREEN_SCHEDULING_URL ?? '').trim();
+}
+
 /**
  * Verify Calendly's webhook signature.
  * Header format: "t=<unix>,v1=<hmac-sha256(signingKey, `${t}.${body}`)>".
