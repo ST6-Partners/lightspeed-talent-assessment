@@ -13,7 +13,7 @@ import WhatsNew from './WhatsNew';
 import { trpc } from '../lib/trpc';
 
 const topNav = [
-  { path: '/hiring/metrics', label: 'Metrics & Bias', icon: BarChart2 },
+  { path: '/hiring/metrics', label: 'Metrics', icon: BarChart2 },
 ];
 
 const talentNav = [
@@ -28,7 +28,7 @@ const talentNav = [
   { path: '/hiring/interviews', label: 'Interviews', icon: Video },
 ];
 
-const fairnessNav = { path: '/hiring/fairness', label: 'Fairness', icon: ShieldCheck };
+const fairnessNav = { path: '/hiring/fairness', label: 'Bias', icon: ShieldCheck };
 
 const coreNav = [
   { path: '/hiring/employees', label: 'Employees', icon: Contact },
