@@ -1,11 +1,11 @@
 {
   "name": "lightspeed-talent-assessment",
   "version": "0.1.0",
-  "description": "SP-002 starter scaffold for Type 2 applications — Template App",
+  "description": "SP-002 starter scaffold for Type 2 applications \u2014 Template App",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "npm run check:migrations && vite build",
     "start": "npm run build && NODE_ENV=production tsx server.ts",
     "preview": "vite preview --host 0.0.0.0",
     "db:generate": "drizzle-kit generate",
@@ -22,7 +22,8 @@
     "db:seed:epp": "tsx server/src/seedEpp.ts",
     "db:seed:employees": "tsx server/src/seedEmployees.ts",
     "db:seed:reviews": "tsx server/src/seedReviews.ts",
-    "db:seed:realjobs": "tsx server/src/seedRealJobs.ts"
+    "db:seed:realjobs": "tsx server/src/seedRealJobs.ts",
+    "check:migrations": "node scripts/check-migrations.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.64",
