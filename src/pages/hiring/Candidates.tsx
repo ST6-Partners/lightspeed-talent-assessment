@@ -129,7 +129,6 @@ export default function Candidates() {
   };
 
   const FUNNEL_STAGES = ['Applied', 'Assessment', 'Values Review', 'Work Sample', 'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered', 'Hired'] as const;
-  const SHORT: Record<string, string> = { 'Applied': 'App', 'Assessment': 'Assess', 'Values Review': 'Values', 'Work Sample': 'Sample', 'Phone Screen': 'Phone', 'Interview Scheduled': 'Sched', 'Interviewed': 'Intv', 'Offered': 'Offer', 'Hired': 'Hired' };
   const toggleRole = (jdId: string) => setCollapsedRoles((m) => ({ ...m, [jdId]: !m[jdId] }));
 
   const visibleCandidates = ((candidates ?? []) as any[]).filter((c: any) =>
@@ -445,7 +444,7 @@ export default function Candidates() {
                           <div key={st} className="flex-1 text-center" title={`${st}: ${n}`}>
                             <div className="text-sm font-semibold text-gray-900">{n}</div>
                             <div className="mx-auto my-1 rounded" style={{ height: `${h}px`, background: n ? '#93b5e8' : '#eef1f5' }} />
-                            <div className="text-[10px] text-gray-400">{SHORT[st]}</div>
+                            <div className="text-[10px] text-gray-400 leading-tight">{st}</div>
                           </div>
                         );
                       })}
