@@ -73,3 +73,7 @@ export { assessmentPackages } from './assessmentPackages.js';
 export { interviewPlan, hiringTeam, awarenessList, approvals, interviewQuestions } from './intake.js';
 
 export { candidateInterviews } from './interviews.js';
+
+// EEO store (1 table) — voluntary self-ID for aggregate adverse-impact
+// monitoring. WALLED OFF from the evaluation path (see eeo.ts header).
+export { eeoResponses } from './eeo.js';

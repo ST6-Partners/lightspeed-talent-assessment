@@ -40,6 +40,7 @@ import { schedulingRouter } from './routers/scheduling.js';
 import { interviewsRouter } from './routers/interviews.js';
 import { decisionsRouter } from './routers/decisions.js';
 import { rankingRouter } from './routers/ranking.js';
+import { eeoRouter } from './routers/eeo.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -71,6 +72,7 @@ export const appRouter = router({
   interviews: interviewsRouter,
   decisions: decisionsRouter,
   ranking: rankingRouter,
+  eeo: eeoRouter,
   departments: departmentsRouter,
   tasks: assessmentTasksRouter,
   packages: assessmentPackagesRouter,
