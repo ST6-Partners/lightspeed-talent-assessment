@@ -1151,3 +1151,21 @@ export async function emailInterviewRoundPrep(data: {
     `),
   });
 }
+
+// Voluntary EEO self-identification survey invite. Explicitly optional,
+// confidential, separated from the application, and non-influencing.
+export async function emailEeoSelfId(data: { firstName: string; email: string; jobTitle?: string; surveyUrl: string }) {
+  await sendEmail({
+    to: data.email,
+    templateId: 'eeo_self_id',
+    subject: 'Voluntary self-identification survey — Lightspeed Systems',
+    html: wrap(`
+      ${h1('A quick, voluntary survey')}
+      ${p(`Hi ${data.firstName},`)}
+      ${p('Lightspeed Systems invites you to complete a short <strong>voluntary</strong> self-identification survey. Providing this information is entirely optional.')}
+      ${p('Your responses are <strong>confidential</strong>, are kept <strong>separate from your application</strong>, are <strong>never seen by anyone making hiring decisions</strong>, and <strong>will not affect your candidacy in any way</strong>. We use it only in aggregate to monitor the fairness of our hiring process. You may decline.')}
+      ${button('Complete the voluntary survey', data.surveyUrl)}
+      ${p('If you prefer not to, no action is needed.')}
+    `),
+  });
+}

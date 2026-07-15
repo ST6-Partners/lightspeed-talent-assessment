@@ -718,6 +718,7 @@ export default function Candidates() {
 
           {/* Decision history — Phase 2 provenance trail (model + prompt version + reason) */}
           <DecisionHistorySection key={`dh-${selected.id}`} candidateId={selected.id} />
+          <EeoInviteSection key={`eeo-${selected.id}`} candidateId={selected.id} />
 
         </div>
       )}
@@ -745,6 +746,35 @@ function outcomeClasses(outcome: string): string {
     case 'pending_review': return 'bg-amber-100 text-amber-700';
     default: return 'bg-gray-100 text-gray-600';
   }
+}
+
+const EEO_STATUS_LABEL: Record<string, string> = {
+  not_sent: 'Not sent', invited: 'Invited (awaiting response)', submitted: 'Completed', declined: 'Declined',
+};
+export function EeoInviteSection({ candidateId }: { candidateId: string }) {
+  const { data, refetch } = trpc.eeo.status.useQuery({ candidateId });
+  const invite = trpc.eeo.invite.useMutation({ onSuccess: () => refetch() });
+  const status = data?.status ?? 'not_sent';
+  const sent = status === 'invited' || status === 'submitted' || status === 'declined';
+  return (
+    <Section title="Voluntary self-ID survey">
+      <div className="text-xs text-gray-500 mb-2">
+        Voluntary EEO self-identification, used only in aggregate for the fairness audit. Responses are
+        confidential and never shown here or to anyone making hiring decisions. You only see whether it was sent.
+      </div>
+      <div className="flex items-center gap-3">
+        <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${status === 'submitted' ? 'bg-green-100 text-green-700' : status === 'declined' ? 'bg-gray-100 text-gray-600' : status === 'invited' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+          {EEO_STATUS_LABEL[status] ?? status}
+        </span>
+        <button
+          onClick={() => invite.mutate({ candidateId })}
+          className="text-xs px-3 py-1.5 rounded-md bg-ls-primary text-white hover:opacity-90 disabled:opacity-40"
+          disabled={invite.isLoading || status === 'submitted'}>
+          {invite.isLoading ? 'Sending...' : sent ? 'Resend survey' : 'Send self-ID survey'}
+        </button>
+      </div>
+    </Section>
+  );
 }
 
 export function DecisionHistorySection({ candidateId }: { candidateId: string }) {

@@ -21,6 +21,7 @@ import { candidates, jobDescriptions } from '../db/schema/hiring.js';
 import { eeoResponses } from '../db/schema/eeo.js';
 import { requireAdmin } from '../services/permissions.js';
 import { runAdverseImpactAudit } from '../services/adverseImpact.js';
+import { emailEeoSelfId } from '../services/email.js';
 
 function appBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -92,6 +93,17 @@ export const eeoRouter = router({
     }),
 
   // ── PROTECTED: recruiter generates (or re-fetches) a survey link ──
+  // Recruiter-facing: invite STATUS only (never the responses). Powers the
+  // "Send self-ID survey" affordance without exposing demographics.
+  status: protectedProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const row = await ctx.db.query.eeoResponses.findFirst({
+        where: eq(eeoResponses.candidateId, input.candidateId),
+      });
+      return { status: (row?.status ?? 'not_sent') as string };
+    }),
+
   invite: protectedProcedure
     .input(z.object({ candidateId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
@@ -109,7 +121,13 @@ export const eeoRouter = router({
           .values({ candidateId: candidate.id, token })
           .returning();
       }
-      return { token: row.token, url: `${appBaseUrl()}/eeo-survey/${row.token}` };
+      const url = `${appBaseUrl()}/eeo-survey/${row.token}`;
+      // Deliver the voluntary survey link (best-effort — never blocks).
+      void emailEeoSelfId({
+        firstName: candidate.firstName, email: candidate.email,
+        jobTitle: undefined, surveyUrl: url,
+      }).catch((err) => console.error('[eeo.invite] email failed:', err));
+      return { token: row.token, url, status: row.status };
     }),
 
   // ── ADMIN: role picker (roles that have any assessment_gate decisions) ──
