@@ -40,7 +40,6 @@ export default function Candidates() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [showRejected, setShowRejected] = useState(false);
-  const [showNotSelected, setShowNotSelected] = useState(false);
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     jdId: '', firstName: '', lastName: '', email: '',
@@ -479,85 +478,58 @@ export default function Candidates() {
           </div>
         )}
 
-        {/* Rejected candidates — collapsed, out of the main pipeline */}
-        {(candidates ?? []).filter((c: any) => c.currentStage === 'Rejected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).length > 0 && (
-          <div className="mt-6">
-            <button
-              onClick={() => setShowRejected(!showRejected)}
-              className="flex items-center gap-2 text-sm font-medium text-gray-500 mb-2 hover:text-gray-700"
-            >
-              <ChevronDown size={16} className={showRejected ? '' : '-rotate-90'} />
-              Rejected ({(candidates ?? []).filter((c: any) => c.currentStage === 'Rejected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).length})
-            </button>
-            {showRejected && (
-              <div className="bg-white rounded-lg border border-gray-200">
-                <table className="w-full">
-                  <tbody>
-                    {(candidates ?? []).filter((c: any) => c.currentStage === 'Rejected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).map((c: any) => (
-                      <tr key={c.id} className="border-b border-gray-50 text-sm">
-                        <td className="px-4 py-2 font-medium text-gray-700">{c.firstName} {c.lastName}</td>
-                        <td className="px-4 py-2 text-gray-400 text-xs">{c.email}</td>
-                        <td className="px-4 py-2 text-gray-400 text-xs">{getJdTitle(c.jdId ?? null)}</td>
-                        <td className="px-4 py-2 text-gray-400 text-xs">{c.rejectionReason ?? ''}</td>
-                        <td className="px-4 py-2 text-right">
-                          <button
-                            onClick={() => doDelete(c.id)}
-                            disabled={deleteMutation.isLoading}
-                            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                            title="Delete (build tool)"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Not Selected — role closed/filled, out of the main pipeline. Kept
-            separate from Rejected: these candidacies ended because the role
-            closed, not because the person was declined on their merits. */}
-        {(candidates ?? []).filter((c: any) => c.currentStage === 'Not Selected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).length > 0 && (
-          <div className="mt-6">
-            <button
-              onClick={() => setShowNotSelected(!showNotSelected)}
-              className="flex items-center gap-2 text-sm font-medium text-gray-500 mb-2 hover:text-gray-700"
-            >
-              <ChevronDown size={16} className={showNotSelected ? '' : '-rotate-90'} />
-              Not Selected — role closed/filled ({(candidates ?? []).filter((c: any) => c.currentStage === 'Not Selected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).length})
-            </button>
-            {showNotSelected && (
-              <div className="bg-white rounded-lg border border-gray-200">
-                <table className="w-full">
-                  <tbody>
-                    {(candidates ?? []).filter((c: any) => c.currentStage === 'Not Selected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).map((c: any) => (
-                      <tr key={c.id} className="border-b border-gray-50 text-sm">
-                        <td className="px-4 py-2 font-medium text-gray-700">{c.firstName} {c.lastName}</td>
-                        <td className="px-4 py-2 text-gray-400 text-xs">{c.email}</td>
-                        <td className="px-4 py-2 text-gray-400 text-xs">{getJdTitle(c.jdId ?? null)}</td>
-                        <td className="px-4 py-2 text-gray-400 text-xs">{c.rejectionReason ?? ''}</td>
-                        <td className="px-4 py-2 text-right">
-                          <button
-                            onClick={() => doDelete(c.id)}
-                            disabled={deleteMutation.isLoading}
-                            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                            title="Delete (build tool)"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Closed-out candidates — Rejected + Not Selected in one collapsed list,
+            out of the active pipeline. Each row is labeled with which ending it was:
+            Rejected (a person declined them) vs Not Selected (the role closed/filled). */}
+        {(() => {
+          const closedOut = ((candidates ?? []) as any[]).filter((c: any) =>
+            (c.currentStage === 'Rejected' || c.currentStage === 'Not Selected') &&
+            (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))
+          ).sort((a: any, b: any) => String(a.currentStage).localeCompare(String(b.currentStage)));
+          if (closedOut.length === 0) return null;
+          return (
+            <div className="mt-6">
+              <button
+                onClick={() => setShowRejected(!showRejected)}
+                className="flex items-center gap-2 text-sm font-medium text-gray-500 mb-2 hover:text-gray-700"
+              >
+                <ChevronDown size={16} className={showRejected ? '' : '-rotate-90'} />
+                Rejected &amp; Not Selected ({closedOut.length})
+              </button>
+              {showRejected && (
+                <div className="bg-white rounded-lg border border-gray-200">
+                  <table className="w-full">
+                    <tbody>
+                      {closedOut.map((c: any) => (
+                        <tr key={c.id} className="border-b border-gray-50 text-sm">
+                          <td className="px-4 py-2 font-medium text-gray-700">{c.firstName} {c.lastName}</td>
+                          <td className="px-4 py-2">
+                            <span className={`inline-flex px-2 py-0.5 text-[11px] rounded-full ${STAGE_COLORS[c.currentStage] ?? 'bg-gray-100 text-gray-600'}`}>
+                              {c.currentStage}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-gray-400 text-xs">{c.email}</td>
+                          <td className="px-4 py-2 text-gray-400 text-xs">{getJdTitle(c.jdId ?? null)}</td>
+                          <td className="px-4 py-2 text-gray-400 text-xs">{c.rejectionReason ?? ''}</td>
+                          <td className="px-4 py-2 text-right">
+                            <button
+                              onClick={() => doDelete(c.id)}
+                              disabled={deleteMutation.isLoading}
+                              className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                              title="Delete (build tool)"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Detail panel */}
