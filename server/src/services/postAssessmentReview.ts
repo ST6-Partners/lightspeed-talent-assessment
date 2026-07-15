@@ -17,6 +17,7 @@
 // ============================================================
 
 import { eq, desc } from 'drizzle-orm';
+import { PIPELINE_STAGES } from '../domain/stages.js';
 import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { computeEppScans, buildRoleFitNotes } from './eppScans.js';
@@ -267,10 +268,7 @@ export async function seedAssessmentResults(db: any, candidateId: string, candid
 // advanced by hand. Idempotent: only ever fills nulls, never overwrites. Same
 // spirit as seedAssessmentResults (simulated demo data, not real scoring).
 // ============================================================
-const BACKFILL_STAGE_ORDER = [
-  'Applied', 'Assessment', 'Values Review', 'Work Sample',
-  'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered', 'Hired',
-];
+const BACKFILL_STAGE_ORDER = PIPELINE_STAGES;
 
 // The old one-line note that earlier builds wrote for seeded candidates.
 const LEGACY_WS_STUB = 'Simulated work-sample score (test data).';

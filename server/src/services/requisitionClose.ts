@@ -17,6 +17,7 @@
 // ============================================================
 
 import { eq, inArray } from 'drizzle-orm';
+import { TERMINAL_STAGES } from '../domain/stages.js';
 import {
   jobRequisitions,
   jobDescriptions,
@@ -28,7 +29,6 @@ import { emailReqStatusToCandidate } from './email.js';
 import { logDecision } from './decisionLog.js';
 
 // Stages that are already finished — never re-touched by a close/fill.
-const TERMINAL_STAGES = ['Rejected', 'Hired', 'Not Selected'];
 
 function emailFromAddr(): string {
   return process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com';

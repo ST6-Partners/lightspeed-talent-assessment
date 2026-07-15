@@ -16,6 +16,7 @@
 // ============================================================
 
 import { eq, inArray } from 'drizzle-orm';
+import { ACTIVE_STAGES } from '../domain/stages.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 
 // Max days a candidate should sit in ANY stage before it's "stalled" (14).
@@ -44,7 +45,6 @@ function reqSlaDays(timelineTemplate: string | null | undefined): number {
   }
 }
 
-const ACTIVE_STAGES = ['Applied', 'Assessment', 'Work Sample', 'Values Review', 'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered'];
 
 export interface StalledCandidateAlert {
   candidateId: string;

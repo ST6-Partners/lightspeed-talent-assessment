@@ -11,6 +11,7 @@
 // workSample.rescore (manual re-run after a rubric changes).
 // ============================================================
 import { eq } from 'drizzle-orm';
+import { AUTO_REJECT_STAGES } from '../domain/stages.js';
 import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { resolveDeptWorkSample } from './workSampleResolver.js';
 import { scoreWorkSample, type WorkSampleScoreResult } from './ai.js';
@@ -19,7 +20,6 @@ import { logDecision } from './decisionLog.js';
 
 // Stages early enough that an auto-reject is appropriate (never touch someone
 // already advanced to interviews or beyond, or already Hired/Rejected).
-const AUTO_REJECT_STAGES = ['Applied', 'Assessment', 'Work Sample'];
 
 function formatNotes(
   r: WorkSampleScoreResult,

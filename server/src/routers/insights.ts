@@ -4,6 +4,7 @@
 // ============================================================
 
 import { sql, eq, desc, count, isNotNull } from 'drizzle-orm';
+import { CANDIDATE_STAGES } from '../domain/stages.js';
 import { router, protectedProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { db } from '../db.js';
@@ -138,10 +139,7 @@ export const insightsRouter = router({
     const hired = stageFunnel.find(r => r.stage === 'Hired');
     const offered = stageFunnel.find(r => r.stage === 'Offered');
 
-    const STAGE_ORDER = [
-      'Applied', 'Assessment', 'Work Sample', 'Values Review', 'Phone Screen',
-      'Interview Scheduled', 'Interviewed', 'Offered', 'Hired', 'Rejected', 'Not Selected',
-    ];
+    const STAGE_ORDER = CANDIDATE_STAGES;
 
     return {
       funnel: STAGE_ORDER.map(stage => ({

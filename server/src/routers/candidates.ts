@@ -18,6 +18,7 @@ import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { logDecision } from '../services/decisionLog.js';
 import { analyzeInterviewTranscript } from '../services/ai.js';
+import { CANDIDATE_STAGES, TERMINAL_STAGES } from '../domain/stages.js';
 import { processInterviewFeedback } from '../services/interviewFeedback.js';
 import { seedRoundsFromPlan, autofillSampleRounds } from '../services/interviewRounds.js';
 import { sendAssessment, getScores } from '../services/criteriaCorp.js';
@@ -46,21 +47,7 @@ import { computeHiringAlerts } from '../services/hiring-alerts.js';
 import { walkLeadershipChain } from '../services/orgChain.js';
 import { employees } from '../db/schema/employees.js';
 
-const STAGES = [
-  'Applied',
-  'Assessment',
-  'Values Review',
-  'Work Sample',
-  'Phone Screen',
-  'Interview Scheduled',
-  'Interviewed',
-  'Offered',
-  'Hired',
-  'Rejected',
-  // Terminal disposition for role closed/filled (not an individual rejection).
-  // Kept last so existing stage-index logic is unaffected.
-  'Not Selected',
-] as const;
+const STAGES = CANDIDATE_STAGES;
 
 type Stage = typeof STAGES[number];
 
@@ -347,7 +334,7 @@ async function notifyOfferApprover(
 // sample link on entering Work Sample, interview seeding on Interview Scheduled,
 // stage email, auto-close-on-fill). If there is no real next stage, it just clears
 // the flag. Clearing the flag never blocks a later gate from re-flagging.
-const REVIEW_TERMINAL_STAGES = ['Rejected', 'Hired', 'Not Selected'];
+const REVIEW_TERMINAL_STAGES = TERMINAL_STAGES;
 async function advanceFromReview(db: any, userId: string | null, existing: any, reason: string): Promise<any> {
   const seq = STAGES as readonly string[];
   const idx = seq.indexOf(existing.currentStage);

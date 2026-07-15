@@ -2,12 +2,10 @@ import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info, Archive } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import { CANDIDATE_STAGES, PIPELINE_STAGES, CLOSED_STAGES as CLOSED } from '../../../server/src/domain/stages.js';
 import RoleRankingDropdown from './RoleRankingDropdown';
 
-const STAGES = [
-  'Applied', 'Assessment', 'Values Review', 'Work Sample', 'Phone Screen',
-  'Interview Scheduled', 'Interviewed', 'Offered', 'Hired', 'Rejected', 'Not Selected',
-] as const;
+const STAGES = CANDIDATE_STAGES;
 
 const STAGE_COLORS: Record<string, string> = {
   Applied: 'bg-purple-100 text-purple-700',
@@ -128,10 +126,10 @@ export default function Candidates() {
     updateMutation.mutate({ id, [field]: value });
   };
 
-  const FUNNEL_STAGES = ['Applied', 'Assessment', 'Values Review', 'Work Sample', 'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered', 'Hired'] as const;
+  const FUNNEL_STAGES: readonly string[] = PIPELINE_STAGES;
   const toggleRole = (jdId: string) => setCollapsedRoles((m) => ({ ...m, [jdId]: !m[jdId] }));
 
-  const CLOSED_STAGES = ['Rejected', 'Not Selected'];
+  const CLOSED_STAGES: readonly string[] = CLOSED;
   const matchesInternal = (c: any) =>
     internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal);
 

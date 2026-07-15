@@ -14,6 +14,7 @@
 // ============================================================
 
 import { db } from './db.js';
+import { PIPELINE_STAGES } from './domain/stages.js';
 import {
   jobRequisitions,
   jobDescriptions,
@@ -36,10 +37,7 @@ const pick = <T,>(arr: T[]): T => arr[Math.floor(rng() * arr.length)];
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000);
 
 // ── Funnel stage order ──────────────────────────────────────
-const STAGE_ORDER = [
-  'Applied', 'Assessment', 'Work Sample', 'Values Review',
-  'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered', 'Hired',
-] as const;
+const STAGE_ORDER = PIPELINE_STAGES;
 type Stage = typeof STAGE_ORDER[number];
 
 const SOURCES = ['LinkedIn', 'Referral', 'Company Site', 'Indeed', 'Recruiter Outreach', 'Greenhouse'];
@@ -231,7 +229,7 @@ export async function seedHiring() {
         else interviewScore = rint(72, 93);
       }
 
-      const currentStage = isRejected ? 'Rejected' : finalStage;
+      const currentStage = (isRejected ? 'Rejected' : finalStage) as any;
       const interviewing = reached('Interview Scheduled');
 
       const [cand] = await db.insert(candidates).values({
