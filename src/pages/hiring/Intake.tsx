@@ -79,6 +79,8 @@ function SharpenField({ label, value, onChange, rows, placeholder, roleContext }
     <div>
       <label className={lbl}>{label}</label>
       <textarea rows={rows} value={value}
+        data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false"
+        {...({ writingsuggestions: 'false' } as any)}
         onFocus={() => setFocused(true)}
         onBlur={() => setTimeout(() => setFocused(false), 150)}
         onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={inp} />
