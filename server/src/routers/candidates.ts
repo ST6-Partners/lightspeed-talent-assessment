@@ -44,7 +44,7 @@ import { seedCandidateResume, seedAssessmentResults, simulateUpstreamScores } fr
 import { rankOneCandidateIntoRole } from '../services/candidateRanking.js';
 import { maybeAutoCloseFilledReq } from '../services/requisitionClose.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
-import { walkLeadershipChain } from '../services/orgChain.js';
+import { walkLeadershipChain, emailForEmployeeName } from '../services/orgChain.js';
 import { employees } from '../db/schema/employees.js';
 
 const STAGES = CANDIDATE_STAGES;
@@ -1230,7 +1230,10 @@ export const candidatesRouter = router({
       const jd = candidate.jdId ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) }) : null;
       const req = jd?.reqId ? await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) }) : null;
       const managerName = (req as any)?.hiringManager ?? offer.reportsTo ?? 'Hiring Manager';
-      const managerEmail = process.env.HIRING_MANAGER_EMAIL ?? process.env.HR_EMAIL ?? 'hiring-manager@lightspeedsystems.com';
+      // Route to the ROLE's real hiring manager (resolve their email from the
+      // employees list); fall back to the global address only if unknown.
+      const managerEmail = (await emailForEmployeeName(ctx.db, managerName))
+        ?? process.env.HIRING_MANAGER_EMAIL ?? process.env.HR_EMAIL ?? 'hiring-manager@lightspeedsystems.com';
 
       const chain = await buildOfferApproverChain(ctx.db, managerName, managerEmail);
       const [row] = await ctx.db.insert(offerApprovals).values({
@@ -1532,7 +1535,8 @@ export const candidatesRouter = router({
       const offer = await buildInternalOfferInput(ctx.db, input);
 
       const managerName = offer.comp.newManager ?? 'Hiring Manager';
-      const managerEmail = process.env.HIRING_MANAGER_EMAIL ?? process.env.HR_EMAIL ?? 'hiring-manager@lightspeedsystems.com';
+      const managerEmail = (await emailForEmployeeName(ctx.db, managerName))
+        ?? process.env.HIRING_MANAGER_EMAIL ?? process.env.HR_EMAIL ?? 'hiring-manager@lightspeedsystems.com';
 
       const chain = await buildOfferApproverChain(ctx.db, managerName, managerEmail);
       const [row] = await ctx.db.insert(offerApprovals).values({

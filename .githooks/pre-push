@@ -1,0 +1,11 @@
+#!/bin/sh
+# Pre-push guard — blocks pushes that would break the build on main.
+# Runs the fast checks that have caught real regressions (duplicate migration
+# timestamps, type errors). Enabled automatically via the package.json "prepare"
+# script (git config core.hooksPath .githooks). Bypass in a pinch with --no-verify.
+set -e
+echo "[pre-push] migration journal guard..."
+npm run --silent check:migrations
+echo "[pre-push] typecheck..."
+npm run --silent typecheck
+echo "[pre-push] ok"

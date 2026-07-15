@@ -81,10 +81,10 @@ function buildCriteria(jd: any, req: any): Criteria {
 async function ensureMaterial(db: any, c: any, jd: any): Promise<{ material: string; hadResume: boolean }> {
   let resume = textOr(c.resume_text);
   const hadResume = !!resume;
-  if (!resume) {
-    // Test-data convenience: if a pooled candidate has no resume on file, seed a
-    // realistic one so the ranking has something to reason about. Persists so it's
-    // stable across re-ranks. (Seeded resumes are detected as pre-passed elsewhere.)
+  // Synthetic resumes are TEST DATA only (SEED_SYNTHETIC_RESUMES=true). In production
+  // a candidate with no resume is ranked on whatever real material exists and honestly
+  // surfaces the "no resume on file" state (hadResume=false) instead of a fabricated one.
+  if (!resume && process.env.SEED_SYNTHETIC_RESUMES === 'true') {
     resume = buildSeededResume(c.first_name, c.last_name, jd);
     await db.update(candidates).set({ resumeText: resume }).where(eq(candidates.id, c.id)).catch((err: unknown) => console.warn('[ranking] seeding resume text for pooled candidate failed (non-blocking):', err));
   }

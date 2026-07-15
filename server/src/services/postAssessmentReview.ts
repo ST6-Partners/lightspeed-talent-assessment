@@ -227,6 +227,10 @@ export function buildSeededResume(firstName: string, lastName: string, jd: any):
 }
 
 export async function seedCandidateResume(db: any, candidateId: string, candidate: any): Promise<void> {
+  // Synthetic resumes are TEST DATA only. In production a candidate's resume comes
+  // from their application; when absent, the app should honestly show "no resume on
+  // file" rather than fabricate one. Gate behind SEED_SYNTHETIC_RESUMES=true (dev/demo).
+  if (process.env.SEED_SYNTHETIC_RESUMES !== 'true') return;
   if (candidate.resumeText) return;
   const jd = candidate.jdId
     ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })

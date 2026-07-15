@@ -23,7 +23,8 @@
     "db:seed:employees": "tsx server/src/seedEmployees.ts",
     "db:seed:reviews": "tsx server/src/seedReviews.ts",
     "db:seed:realjobs": "tsx server/src/seedRealJobs.ts",
-    "check:migrations": "node scripts/check-migrations.mjs"
+    "check:migrations": "node scripts/check-migrations.mjs",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.64",

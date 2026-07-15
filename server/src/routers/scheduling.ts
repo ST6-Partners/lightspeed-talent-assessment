@@ -110,7 +110,7 @@ export const schedulingRouter = router({
       }).catch((err) => console.error('[scheduling.openPhoneScreen] invite failed:', err));
 
       await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'open_phone_screen', 'candidates', { candidateId: candidate.id }).catch(() => {});
+      trackActivity(ctx.db, ctx.user.id, 'open_phone_screen', 'candidates', { candidateId: candidate.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return { bookingUrl, phoneUrlSet: !!phoneScreenSchedulingUrl() };
     }),
 

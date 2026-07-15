@@ -29,3 +29,15 @@ export async function walkLeadershipChain(db: any, startEmail: string | null | u
   }
   return chain;
 }
+
+// Resolve an employee's email from their display name (case-insensitive).
+// Used to start the offer-approval chain from the ROLE's real hiring manager
+// (requisitions store the manager as a name, not an email) rather than a global
+// env address. Returns null if no matching employee with an email is found.
+export async function emailForEmployeeName(db: any, name: string | null | undefined): Promise<string | null> {
+  if (!name || !name.trim()) return null;
+  const target = name.trim().toLowerCase();
+  const all = await db.query.employees.findMany();
+  const match = all.find((e: any) => (e.name ?? '').trim().toLowerCase() === target && e.email);
+  return match?.email ?? null;
+}
