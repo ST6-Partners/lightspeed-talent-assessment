@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
 
-const TERMINAL = ['Rejected', 'Hired'];
+const TERMINAL = ['Rejected', 'Hired', 'Not Selected'];
 const pct = (v: any) => (v != null ? `${v}%` : '—');
 
 export default function ReviewQueue() {

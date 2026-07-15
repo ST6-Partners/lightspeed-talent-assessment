@@ -17,7 +17,8 @@ export type DecisionType =
   | 'interview_questions'
   | 'interview_feedback'
   | 'reference_check'
-  | 'manual_stage_change';
+  | 'manual_stage_change'
+  | 'requisition_closed';
 
 export type DecisionOutcome =
   | 'advanced'
@@ -27,7 +28,8 @@ export type DecisionOutcome =
   | 'failed'
   | 'scored'
   | 'generated'
-  | 'moved';
+  | 'moved'
+  | 'not_selected';
 
 export interface LogDecisionInput {
   candidateId: string;

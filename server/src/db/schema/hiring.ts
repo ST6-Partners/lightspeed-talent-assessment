@@ -30,6 +30,9 @@ export const candidateStageEnum = pgEnum('candidate_stage', [
   'Offered',
   'Hired',
   'Rejected',
+  // Terminal disposition for candidates whose role closed/filled. NOT an
+  // individual rejection — kept separate from 'Rejected' for clean reporting.
+  'Not Selected',
 ]);
 
 export const requisitionStatusEnum = pgEnum('requisition_status', [

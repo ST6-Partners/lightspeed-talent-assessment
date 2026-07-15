@@ -247,7 +247,7 @@ async function runInterviewBookingReminder({ force = false }: { force?: boolean 
   for (const candidate of rows) {
     const openedAt = candidate.interviewBookingOpenedAt as Date | null;
     if (!openedAt) { continue; }
-    if (['Rejected', 'Hired', 'Interview Scheduled', 'Interviewed', 'Offered'].includes(candidate.currentStage)) {
+    if (['Rejected', 'Hired', 'Not Selected', 'Interview Scheduled', 'Interviewed', 'Offered'].includes(candidate.currentStage)) {
       skipped.push(`${candidate.email} (stage ${candidate.currentStage})`); continue;
     }
 
@@ -382,7 +382,7 @@ async function runInterviewDayBeforeReminder({ force = false }: { force?: boolea
   let candSent = 0, intSent = 0;
   const skipped: string[] = [];
   for (const c of rows) {
-    if (['Rejected', 'Hired'].includes(c.currentStage)) { skipped.push(`${c.email} (stage ${c.currentStage})`); continue; }
+    if (['Rejected', 'Hired', 'Not Selected'].includes(c.currentStage)) { skipped.push(`${c.email} (stage ${c.currentStage})`); continue; }
     if (!force && await alreadySentTemplate(c.id, 'interview_reminder_candidate')) { skipped.push(`${c.email} (already reminded)`); continue; }
 
     const jd = c.jdId ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;

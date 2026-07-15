@@ -6,7 +6,7 @@ import RoleRankingDropdown from './RoleRankingDropdown';
 
 const STAGES = [
   'Applied', 'Assessment', 'Values Review', 'Work Sample',
-  'Interview Scheduled', 'Interviewed', 'Offered', 'Hired', 'Rejected',
+  'Interview Scheduled', 'Interviewed', 'Offered', 'Hired', 'Rejected', 'Not Selected',
 ] as const;
 
 const STAGE_COLORS: Record<string, string> = {
@@ -19,6 +19,7 @@ const STAGE_COLORS: Record<string, string> = {
   Offered: 'bg-emerald-100 text-emerald-700',
   Hired: 'bg-green-100 text-green-700',
   Rejected: 'bg-red-100 text-red-700',
+  'Not Selected': 'bg-gray-100 text-gray-600',
 };
 
 type Stage = typeof STAGES[number];
@@ -39,6 +40,7 @@ export default function Candidates() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [showRejected, setShowRejected] = useState(false);
+  const [showNotSelected, setShowNotSelected] = useState(false);
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     jdId: '', firstName: '', lastName: '', email: '',
@@ -105,13 +107,13 @@ export default function Candidates() {
 
   const getPrevStage = (current: Stage): Stage | null => {
     const idx = STAGES.indexOf(current);
-    if (idx <= 0 || current === 'Rejected') return null;
+    if (idx <= 0 || current === 'Rejected' || current === 'Not Selected') return null;
     return STAGES[idx - 1];
   };
   const getNextStage = (current: Stage): Stage | null => {
     const idx = STAGES.indexOf(current);
     const next = STAGES[idx + 1];
-    if (!next || next === 'Rejected') return null;
+    if (!next || next === 'Rejected' || next === 'Not Selected') return null;
     return next;
   };
 
@@ -132,7 +134,7 @@ export default function Candidates() {
 
   const visibleCandidates = ((candidates ?? []) as any[]).filter((c: any) =>
     (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal)) &&
-    c.currentStage !== 'Rejected'
+    c.currentStage !== 'Rejected' && c.currentStage !== 'Not Selected'
   );
   const jdById: Record<string, any> = {};
   for (const j of (jobDescriptions ?? []) as any[]) jdById[j.id] = j;
@@ -165,7 +167,7 @@ export default function Candidates() {
         <td className="px-4 py-3 font-medium text-gray-900">
           <div className="flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center text-[11px] font-semibold shrink-0">{`${(c.firstName?.[0] ?? '')}${(c.lastName?.[0] ?? '')}`}</span>
-            <span>{c.firstName} {c.lastName}{c.isInternal && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-purple-100 text-purple-700 align-middle">Internal</span>}{c.screenRecommendation === 'review' && c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-red-100 text-red-700 align-middle" title="Below the auto-advance bar — awaiting human review in the Review tab">Review</span>}</span>
+            <span>{c.firstName} {c.lastName}{c.isInternal && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-purple-100 text-purple-700 align-middle">Internal</span>}{c.screenRecommendation === 'review' && c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && c.currentStage !== 'Not Selected' && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-red-100 text-red-700 align-middle" title="Below the auto-advance bar — awaiting human review in the Review tab">Review</span>}</span>
           </div>
         </td>
         <td className="px-4 py-3 text-gray-500">{c.email}</td>
@@ -188,7 +190,7 @@ export default function Candidates() {
                 <ChevronRight size={16} />
               </button>
             )}
-            {c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && (
+            {c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && c.currentStage !== 'Not Selected' && (
               <button onClick={() => setRejectingId(c.id)} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Reject">
                 <Ban size={15} />
               </button>
@@ -230,7 +232,7 @@ export default function Candidates() {
           >
             All
           </button>
-          {STAGES.filter((s) => s !== 'Rejected').map((s) => (
+          {STAGES.filter((s) => s !== 'Rejected' && s !== 'Not Selected').map((s) => (
             <button
               key={s}
               onClick={() => setStageFilter(s)}
@@ -492,6 +494,47 @@ export default function Candidates() {
                 <table className="w-full">
                   <tbody>
                     {(candidates ?? []).filter((c: any) => c.currentStage === 'Rejected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).map((c: any) => (
+                      <tr key={c.id} className="border-b border-gray-50 text-sm">
+                        <td className="px-4 py-2 font-medium text-gray-700">{c.firstName} {c.lastName}</td>
+                        <td className="px-4 py-2 text-gray-400 text-xs">{c.email}</td>
+                        <td className="px-4 py-2 text-gray-400 text-xs">{getJdTitle(c.jdId ?? null)}</td>
+                        <td className="px-4 py-2 text-gray-400 text-xs">{c.rejectionReason ?? ''}</td>
+                        <td className="px-4 py-2 text-right">
+                          <button
+                            onClick={() => doDelete(c.id)}
+                            disabled={deleteMutation.isLoading}
+                            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                            title="Delete (build tool)"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Not Selected — role closed/filled, out of the main pipeline. Kept
+            separate from Rejected: these candidacies ended because the role
+            closed, not because the person was declined on their merits. */}
+        {(candidates ?? []).filter((c: any) => c.currentStage === 'Not Selected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).length > 0 && (
+          <div className="mt-6">
+            <button
+              onClick={() => setShowNotSelected(!showNotSelected)}
+              className="flex items-center gap-2 text-sm font-medium text-gray-500 mb-2 hover:text-gray-700"
+            >
+              <ChevronDown size={16} className={showNotSelected ? '' : '-rotate-90'} />
+              Not Selected — role closed/filled ({(candidates ?? []).filter((c: any) => c.currentStage === 'Not Selected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).length})
+            </button>
+            {showNotSelected && (
+              <div className="bg-white rounded-lg border border-gray-200">
+                <table className="w-full">
+                  <tbody>
+                    {(candidates ?? []).filter((c: any) => c.currentStage === 'Not Selected' && (internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal))).map((c: any) => (
                       <tr key={c.id} className="border-b border-gray-50 text-sm">
                         <td className="px-4 py-2 font-medium text-gray-700">{c.firstName} {c.lastName}</td>
                         <td className="px-4 py-2 text-gray-400 text-xs">{c.email}</td>

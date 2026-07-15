@@ -21,9 +21,8 @@ import {
 import { rankCandidateFit } from './ai.js';
 import { buildSeededResume } from './postAssessmentReview.js';
 
-const MAX_POOL = 60;
 const CONCURRENCY = 5;
-const DROPPED_STAGES = ['Rejected', 'Hired', 'Offered'];
+const DROPPED_STAGES = ['Rejected', 'Hired', 'Offered', 'Not Selected'];
 
 function textOr(v: any, fallback = ''): string {
   return (v == null ? '' : String(v)).trim() || fallback;
@@ -136,9 +135,8 @@ export async function rankRoleCandidates(db: any, jdId: string, userId: string |
            COALESCE(notes, '') AS notes
     FROM candidates
     WHERE jd_id = ${jdId}
-      AND current_stage NOT IN ('Rejected', 'Hired', 'Offered')
+      AND current_stage NOT IN ('Rejected', 'Hired', 'Offered', 'Not Selected')
     ORDER BY created_at DESC
-    LIMIT ${MAX_POOL}
   `)) as any).rows as any[];
 
   const scored = await mapLimit(poolRows, CONCURRENCY, async (c: any) => {
@@ -251,7 +249,7 @@ export async function rankNewApplicants(db: any): Promise<{ affected: number; de
     FROM candidates c
     JOIN ranking_runs rr ON rr.jd_id = c.jd_id
     LEFT JOIN candidate_rankings cr ON cr.candidate_id = c.id
-    WHERE c.current_stage NOT IN ('Rejected', 'Hired', 'Offered')
+    WHERE c.current_stage NOT IN ('Rejected', 'Hired', 'Offered', 'Not Selected')
       AND cr.id IS NULL
     GROUP BY c.id
     LIMIT 10

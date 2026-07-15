@@ -9,6 +9,7 @@ import { router, protectedProcedure } from '../trpc.js';
 import { jobRequisitions, jobDescriptions, candidates } from '../db/schema/hiring.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { emailReqStatusToCandidate } from '../services/email.js';
+import { dispositionCandidatesForReqStatus } from '../services/requisitionClose.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { ataSeedRoles } from '../data/ataSeedRoles.js';
@@ -96,29 +97,12 @@ export const requisitionsRouter = router({
         .where(eq(jobRequisitions.id, id))
         .returning();
 
-      // Requisition closed or put on hold → notify active candidates (courtesy).
+      // Requisition closed or put on hold → dispose/notify active candidates.
+      // Closed moves the still-active tail to the terminal 'Not Selected'
+      // disposition (+ courtesy email); On Hold just sends the courtesy note.
+      // Shared with the automatic close-on-fill path in candidates.advanceStage.
       if ((input.status === 'Closed' || input.status === 'On Hold') && existing.status !== input.status) {
-        const jds = await ctx.db.query.jobDescriptions.findMany({ where: eq(jobDescriptions.reqId, id) });
-        const jdIds = jds.map((j: any) => j.id);
-        if (jdIds.length) {
-          const cands = await ctx.db.query.candidates.findMany({ where: inArray(candidates.jdId, jdIds) });
-          const active = cands.filter((c: any) => c.currentStage !== 'Rejected' && c.currentStage !== 'Hired');
-          const onHold = input.status === 'On Hold';
-          for (const c of active) {
-            const jd = jds.find((j: any) => j.id === c.jdId);
-            const jobTitle = jd?.jobTitle ?? undefined;
-            try {
-              await emailReqStatusToCandidate({ firstName: c.firstName, lastName: c.lastName, email: c.email, jobTitle, onHold });
-              await ctx.db.insert(inboundEmails).values({
-                fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
-                toEmail: c.email,
-                subject: onHold ? `Update on the ${jobTitle ?? 'role'} at Lightspeed Systems` : `Update on your application — ${jobTitle ?? 'Lightspeed Systems'}`,
-                body: onHold ? 'The role you are being considered for has been placed on hold; your application remains active.' : 'This position has been closed; we will not be moving forward with hiring for it at this time.',
-                replyTag: onHold ? 'req_on_hold' : 'req_closed', source: 'simulated', raw: { kind: onHold ? 'req_on_hold' : 'req_closed', reqId: id, candidateId: c.id },
-              });
-            } catch (err) { console.error('[requisition] candidate status-notify failed:', err); }
-          }
-        }
+        await dispositionCandidatesForReqStatus(ctx.db, id, input.status, ctx.user.id);
       }
 
       await auditChange(ctx.db, ctx.user.id, id, 'job_requisitions', 'update');

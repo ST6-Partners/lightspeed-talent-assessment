@@ -41,6 +41,7 @@ import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 import { prepInterviewQuestions } from '../services/interviewPrep.js';
 import { seedCandidateResume, seedAssessmentResults, simulateUpstreamScores } from '../services/postAssessmentReview.js';
 import { rankOneCandidateIntoRole } from '../services/candidateRanking.js';
+import { maybeAutoCloseFilledReq } from '../services/requisitionClose.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
 import { walkLeadershipChain } from '../services/orgChain.js';
 import { employees } from '../db/schema/employees.js';
@@ -55,6 +56,9 @@ const STAGES = [
   'Offered',
   'Hired',
   'Rejected',
+  // Terminal disposition for role closed/filled (not an individual rejection).
+  // Kept last so existing stage-index logic is unaffected.
+  'Not Selected',
 ] as const;
 
 type Stage = typeof STAGES[number];
@@ -614,6 +618,17 @@ export const candidatesRouter = router({
       }
 
       } // end forward-only side effects
+
+      // If this move hired the candidate and that fills the requisition, auto-close
+      // the role and dispose the remaining active candidates (courtesy email + a
+      // real 'Not Selected' ending) — so the tail never waits on a manual close.
+      if (input.toStage === 'Hired' && existing.jdId) {
+        try {
+          await maybeAutoCloseFilledReq(ctx.db, existing.jdId, ctx.user.id);
+        } catch (err) {
+          console.error('[advance] auto-close-on-fill failed:', err);
+        }
+      }
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'advance_stage', 'candidates', {

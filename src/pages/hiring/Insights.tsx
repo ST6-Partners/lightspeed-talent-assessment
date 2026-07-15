@@ -15,6 +15,7 @@ const STAGE_COLORS: Record<string, string> = {
   Offered:             'bg-emerald-500',
   Hired:               'bg-green-500',
   Rejected:            'bg-red-400',
+  'Not Selected':      'bg-gray-400',
 };
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
