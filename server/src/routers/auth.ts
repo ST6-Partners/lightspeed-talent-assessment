@@ -14,7 +14,7 @@ import { eq, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { users } from '../db/schema/core.js';
-import { requireAdmin } from '../services/permissions.js';
+import { requireAdmin, requireSysadmin } from '../services/permissions.js';
 import { hashPassword, verifyPassword, mintToken } from '../auth.js';
 import { env } from '../env.js';
 
@@ -122,7 +122,7 @@ export const authRouter = router({
     }),
 
   // Admin: list all users (password hashes never exposed).
-  listUsers: protectedProcedure
+  listUsers: protectedProcedure.use(requireAdmin)
     .use(requireAdmin)
     .query(async ({ ctx }) => {
       return ctx.db.query.users.findMany({
@@ -135,7 +135,7 @@ export const authRouter = router({
     }),
 
   // Admin: update a user's app-level fields.
-  updateUser: protectedProcedure
+  updateUser: protectedProcedure.use(requireSysadmin)
     .use(requireAdmin)
     .input(z.object({
       id: z.string().uuid(),
@@ -157,7 +157,7 @@ export const authRouter = router({
   // Admin: reset ANOTHER user's password (no current password required).
   // This is the recovery path for locked-out users, since there is no
   // email-based "forgot password". Admin/sysadmin only (requireAdmin).
-  resetUserPassword: protectedProcedure
+  resetUserPassword: protectedProcedure.use(requireSysadmin)
     .use(requireAdmin)
     .input(z.object({ userId: z.string().uuid(), newPassword: z.string().min(8) }))
     .mutation(async ({ ctx, input }) => {
@@ -172,7 +172,7 @@ export const authRouter = router({
   // Admin: provision a new staff account (replaces public sign-up). The admin
   // sets an initial password and hands it to the user; there is no public
   // self-registration. Admin/sysadmin only (requireAdmin).
-  createUser: protectedProcedure
+  createUser: protectedProcedure.use(requireSysadmin)
     .use(requireAdmin)
     .input(z.object({
       email: z.string().email(),
