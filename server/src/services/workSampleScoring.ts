@@ -11,7 +11,7 @@
 // workSample.rescore (manual re-run after a rubric changes).
 // ============================================================
 import { eq } from 'drizzle-orm';
-import { AUTO_REJECT_STAGES } from '../domain/stages.js';
+import { AUTO_REJECT_STAGES, CANDIDATE_STAGES } from '../domain/stages.js';
 import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { resolveDeptWorkSample } from './workSampleResolver.js';
 import { scoreWorkSample, type WorkSampleScoreResult } from './ai.js';
@@ -115,6 +115,27 @@ export async function scoreAndStoreWorkSample(db: any, candidateId: string): Pro
     })
     .where(eq(candidates.id, candidateId));
 
-  // No stage change on a low score — the work sample is advisory and a human decides.
+  // On a PASSING work sample, auto-advance into Phone Screen — the human
+  // narrow-down pool where recruiters review the survivors and decide who to
+  // actually contact. Only move forward from a pre-Phone-Screen active stage.
+  // Deliberately no candidate email here: nobody is promised a call until a
+  // human decides to reach out (there is no phone-screen scheduler yet).
+  const psIdx = CANDIDATE_STAGES.indexOf('Phone Screen');
+  const curIdx = CANDIDATE_STAGES.indexOf(candidate.currentStage as any);
+  if (pass && curIdx >= 0 && curIdx < psIdx) {
+    await db.update(candidates)
+      .set({ currentStage: 'Phone Screen', updatedAt: new Date() })
+      .where(eq(candidates.id, candidateId));
+    await db.insert(candidateStageHistory).values({
+      candidateId,
+      fromStage: candidate.currentStage,
+      toStage: 'Phone Screen',
+      changedBy: null,
+      reason: `Auto-advanced: work sample ${result.overallScore} met the pass mark ${cfg.passThreshold}.`,
+    });
+  }
+
+  // On a low score there is no stage change — the work sample is advisory,
+  // the candidate is flagged for the Review queue, and a human decides.
   return result;
 }
