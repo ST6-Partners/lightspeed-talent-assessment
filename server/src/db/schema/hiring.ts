@@ -210,10 +210,6 @@ export const candidates = pgTable('candidates', {
   // Flags a strong-but-not-selected candidate so they can be surfaced and
   // re-engaged for a future role. Independent of currentStage — a candidate
   // in 'Not Selected' or 'Rejected' can still be pooled.
-  inTalentPool: boolean('in_talent_pool').notNull().default(false),
-  talentPoolNote: text('talent_pool_note'),
-  talentPoolAddedAt: timestamp('talent_pool_added_at', { withTimezone: true }),
-  talentPoolAddedBy: uuid('talent_pool_added_by').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
