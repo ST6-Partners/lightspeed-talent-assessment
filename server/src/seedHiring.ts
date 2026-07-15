@@ -38,7 +38,7 @@ const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000);
 // ── Funnel stage order ──────────────────────────────────────
 const STAGE_ORDER = [
   'Applied', 'Assessment', 'Work Sample', 'Values Review',
-  'Interview Scheduled', 'Interviewed', 'Offered', 'Hired',
+  'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered', 'Hired',
 ] as const;
 type Stage = typeof STAGE_ORDER[number];
 

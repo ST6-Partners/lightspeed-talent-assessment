@@ -247,7 +247,7 @@ async function runInterviewBookingReminder({ force = false }: { force?: boolean 
   for (const candidate of rows) {
     const openedAt = candidate.interviewBookingOpenedAt as Date | null;
     if (!openedAt) { continue; }
-    if (['Rejected', 'Hired', 'Not Selected', 'Interview Scheduled', 'Interviewed', 'Offered'].includes(candidate.currentStage)) {
+    if (['Rejected', 'Hired', 'Not Selected', 'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered'].includes(candidate.currentStage)) {
       skipped.push(`${candidate.email} (stage ${candidate.currentStage})`); continue;
     }
 

@@ -671,6 +671,33 @@ export async function emailBookingStalledHR(data: {
 // ── Stage-transition dispatcher ────────────────────────────
 // Called by the candidates router on every stage change.
 
+export async function emailInvitedToPhoneScreen(data: CandidateEmailData) {
+  await sendEmail({
+    to: data.email,
+    templateId: 'phone_screen_invite',
+    subject: `Let's set up a quick call — ${data.jobTitle ?? 'Lightspeed Systems'}`,
+    html: wrap(`
+      ${h1('Let\'s schedule a quick phone screen')}
+      ${p(`Hi ${data.firstName},`)}
+      ${p(`Thanks for your interest in <strong>${data.jobTitle ?? 'the position'}</strong>. Before we move to interviews, we'd like a short phone call with our recruiting team to cover a few basics — timing, availability, compensation range, and a couple of quick questions about the role.`)}
+      ${p('Someone from our team will reach out shortly to find a time. If you have scheduling preferences, just reply to this email.')}
+    `),
+  });
+}
+
+export async function emailPhoneScreenHR(data: CandidateEmailData) {
+  await sendEmail({
+    to: HR_EMAIL,
+    templateId: 'phone_screen_hr',
+    subject: `Phone screen: ${data.firstName} ${data.lastName} — ${data.jobTitle ?? 'position'}`,
+    html: wrap(`
+      ${h1('Candidate ready for a phone screen')}
+      ${p(`<strong>${data.firstName} ${data.lastName}</strong> has advanced to the phone-screen stage for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
+      ${p('Reach out to schedule a short recruiter call to confirm logistics (timing, availability, comp range) and that the person matches the paper before the interview loop.')}
+    `),
+  });
+}
+
 export async function dispatchStageEmail(
   toStage: string,
   fromStage: string | null | undefined,
@@ -709,6 +736,10 @@ export async function dispatchStageEmail(
     case 'Values Review':
       await emailAdvancingToValuesReview(data);
       await emailWorkSampleSubmittedHR(data);
+      break;
+    case 'Phone Screen':
+      await emailInvitedToPhoneScreen(data);
+      await emailPhoneScreenHR(data);
       break;
     case 'Interview Scheduled':
       await emailInterviewScheduled(data);

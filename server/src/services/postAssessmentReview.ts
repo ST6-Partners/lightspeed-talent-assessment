@@ -265,7 +265,7 @@ export async function seedAssessmentResults(db: any, candidateId: string, candid
 // ============================================================
 const BACKFILL_STAGE_ORDER = [
   'Applied', 'Assessment', 'Values Review', 'Work Sample',
-  'Interview Scheduled', 'Interviewed', 'Offered', 'Hired',
+  'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered', 'Hired',
 ];
 
 // The old one-line note that earlier builds wrote for seeded candidates.

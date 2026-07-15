@@ -27,6 +27,7 @@ export const STAGE_SLA_DAYS: Record<string, number> = {
   'Assessment': STAGE_SLA_DEFAULT_DAYS,
   'Work Sample': STAGE_SLA_DEFAULT_DAYS,
   'Values Review': STAGE_SLA_DEFAULT_DAYS,
+  'Phone Screen': STAGE_SLA_DEFAULT_DAYS,
   'Interview Scheduled': STAGE_SLA_DEFAULT_DAYS,
   'Interviewed': STAGE_SLA_DEFAULT_DAYS,
   'Offered': STAGE_SLA_DEFAULT_DAYS,
@@ -43,7 +44,7 @@ function reqSlaDays(timelineTemplate: string | null | undefined): number {
   }
 }
 
-const ACTIVE_STAGES = ['Applied', 'Assessment', 'Work Sample', 'Values Review', 'Interview Scheduled', 'Interviewed', 'Offered'];
+const ACTIVE_STAGES = ['Applied', 'Assessment', 'Work Sample', 'Values Review', 'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered'];
 
 export interface StalledCandidateAlert {
   candidateId: string;

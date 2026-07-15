@@ -51,6 +51,7 @@ const STAGES = [
   'Assessment',
   'Values Review',
   'Work Sample',
+  'Phone Screen',
   'Interview Scheduled',
   'Interviewed',
   'Offered',

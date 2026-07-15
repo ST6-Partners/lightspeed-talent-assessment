@@ -116,9 +116,10 @@ export const insightsRouter = router({
         WHEN 'Assessment'          THEN 2
         WHEN 'Work Sample'         THEN 3
         WHEN 'Values Review'       THEN 4
-        WHEN 'Interview Scheduled' THEN 5
-        WHEN 'Interviewed'         THEN 6
-        ELSE 7 END
+        WHEN 'Phone Screen'        THEN 5
+        WHEN 'Interview Scheduled' THEN 6
+        WHEN 'Interviewed'         THEN 7
+        ELSE 8 END
     `);
 
     // ── Weekly application volume (last 12 weeks) ──────────
@@ -138,7 +139,7 @@ export const insightsRouter = router({
     const offered = stageFunnel.find(r => r.stage === 'Offered');
 
     const STAGE_ORDER = [
-      'Applied', 'Assessment', 'Work Sample', 'Values Review',
+      'Applied', 'Assessment', 'Work Sample', 'Values Review', 'Phone Screen',
       'Interview Scheduled', 'Interviewed', 'Offered', 'Hired', 'Rejected', 'Not Selected',
     ];
 

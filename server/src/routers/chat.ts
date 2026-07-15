@@ -96,7 +96,7 @@ function buildLiveDataTools(db: any) {
       description:
         'Search candidates by name or email substring, and/or filter by exact hiring stage ' +
         '(e.g. "Applied", "Assessment", "Work Sample", "Values Review", "Interview Scheduled", ' +
-        '"Interviewed", "Offered", "Hired", "Rejected"). Returns contact info, current stage, ' +
+        '"Phone Screen", "Interviewed", "Offered", "Hired", "Rejected"). Returns contact info, current stage, ' +
         'and assessment scores. Only use this when the question is actually about specific ' +
         'candidates, not for simple counts (use getSystemCounts for counts).',
       inputSchema: z.object({

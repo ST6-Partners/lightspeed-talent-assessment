@@ -10,6 +10,7 @@ const STAGE_COLORS: Record<string, string> = {
   Assessment:          'bg-blue-500',
   'Work Sample':       'bg-indigo-500',
   'Values Review':     'bg-cyan-500',
+  'Phone Screen':       'bg-teal-500',
   'Interview Scheduled':'bg-yellow-500',
   Interviewed:         'bg-orange-500',
   Offered:             'bg-emerald-500',

@@ -5,7 +5,7 @@ import { trpc } from '../../lib/trpc';
 import RoleRankingDropdown from './RoleRankingDropdown';
 
 const STAGES = [
-  'Applied', 'Assessment', 'Values Review', 'Work Sample',
+  'Applied', 'Assessment', 'Values Review', 'Work Sample', 'Phone Screen',
   'Interview Scheduled', 'Interviewed', 'Offered', 'Hired', 'Rejected', 'Not Selected',
 ] as const;
 
@@ -14,6 +14,7 @@ const STAGE_COLORS: Record<string, string> = {
   Assessment: 'bg-blue-100 text-blue-700',
   'Work Sample': 'bg-indigo-100 text-indigo-700',
   'Values Review': 'bg-cyan-100 text-cyan-700',
+  'Phone Screen': 'bg-teal-100 text-teal-700',
   'Interview Scheduled': 'bg-yellow-100 text-yellow-700',
   Interviewed: 'bg-orange-100 text-orange-700',
   Offered: 'bg-emerald-100 text-emerald-700',
@@ -127,8 +128,8 @@ export default function Candidates() {
     updateMutation.mutate({ id, [field]: value });
   };
 
-  const FUNNEL_STAGES = ['Applied', 'Assessment', 'Values Review', 'Work Sample', 'Interview Scheduled', 'Interviewed', 'Offered'] as const;
-  const SHORT: Record<string, string> = { 'Applied': 'App', 'Assessment': 'Assess', 'Values Review': 'Values', 'Work Sample': 'Sample', 'Interview Scheduled': 'Sched', 'Interviewed': 'Intv', 'Offered': 'Offer' };
+  const FUNNEL_STAGES = ['Applied', 'Assessment', 'Values Review', 'Work Sample', 'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered', 'Hired'] as const;
+  const SHORT: Record<string, string> = { 'Applied': 'App', 'Assessment': 'Assess', 'Values Review': 'Values', 'Work Sample': 'Sample', 'Phone Screen': 'Phone', 'Interview Scheduled': 'Sched', 'Interviewed': 'Intv', 'Offered': 'Offer', 'Hired': 'Hired' };
   const toggleRole = (jdId: string) => setCollapsedRoles((m) => ({ ...m, [jdId]: !m[jdId] }));
 
   const visibleCandidates = ((candidates ?? []) as any[]).filter((c: any) =>

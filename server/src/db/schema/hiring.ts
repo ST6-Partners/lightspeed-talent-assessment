@@ -25,6 +25,8 @@ export const candidateStageEnum = pgEnum('candidate_stage', [
   'Assessment',
   'Work Sample',
   'Values Review',
+  // Human recruiter phone screen (logistics + fit) before the interview loop.
+  'Phone Screen',
   'Interview Scheduled',
   'Interviewed',
   'Offered',
