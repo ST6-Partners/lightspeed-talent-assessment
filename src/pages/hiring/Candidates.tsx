@@ -223,23 +223,20 @@ export default function Candidates() {
 
         <TimelineAlerts />
 
-        {/* Stage filter */}
-        <div className="flex gap-2 mb-4 flex-wrap">
-          <button
-            onClick={() => setStageFilter('')}
-            className={`px-3 py-1 text-xs rounded-full border ${!stageFilter ? 'bg-ls-primary text-white border-gray-900' : 'border-gray-300 text-gray-600 hover:border-gray-500'}`}
+        {/* Stage filter — single dropdown instead of an open chip row */}
+        <div className="flex items-center gap-2 mb-4">
+          <label htmlFor="stage-filter" className="text-xs font-medium text-gray-500">Stage</label>
+          <select
+            id="stage-filter"
+            value={stageFilter}
+            onChange={(e) => setStageFilter(e.target.value as Stage | '')}
+            className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan"
           >
-            All
-          </button>
-          {STAGES.filter((s) => s !== 'Rejected' && s !== 'Not Selected').map((s) => (
-            <button
-              key={s}
-              onClick={() => setStageFilter(s)}
-              className={`px-3 py-1 text-xs rounded-full border transition-colors ${stageFilter === s ? 'bg-ls-primary text-white border-gray-900' : 'border-gray-300 text-gray-600 hover:border-gray-500'}`}
-            >
-              {s}
-            </button>
-          ))}
+            <option value="">All stages</option>
+            {STAGES.filter((s) => s !== 'Rejected' && s !== 'Not Selected').map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
         </div>
 
         {/* Internal / external filter */}
