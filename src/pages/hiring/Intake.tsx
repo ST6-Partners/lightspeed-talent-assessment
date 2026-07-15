@@ -51,6 +51,50 @@ const EMPTY = {
 const lbl = 'block text-xs font-medium text-gray-600 mb-1';
 const inp = 'w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan';
 
+function SharpenField({ label, value, onChange, rows, placeholder, roleContext }: {
+  label: string; value: string; onChange: (v: string) => void; rows: number; placeholder?: string; roleContext?: string;
+}) {
+  const [res, setRes] = useState<any>(null);
+  const sharpen = trpc.intake.sharpenField.useMutation({ onSuccess: (r) => setRes(r) });
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <label className={lbl}>{label}</label>
+        <button type="button"
+          onClick={() => { setRes(null); sharpen.mutate({ label, value, roleContext }); }}
+          disabled={!value.trim() || sharpen.isLoading}
+          className="text-xs text-ls-primary hover:underline disabled:opacity-40 disabled:no-underline mb-1">
+          {sharpen.isLoading ? 'Sharpening\u2026' : '\u2726 Sharpen with AI'}
+        </button>
+      </div>
+      <textarea rows={rows} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={inp} />
+      {res && (
+        <div className="mt-1.5 border border-cyan-200 bg-cyan-50 rounded-md p-2.5 text-xs">
+          <div className="text-gray-600 mb-1">{res.assessment}</div>
+          {!res.alreadySpecific && (res.followUps?.length > 0) && (
+            <ul className="list-disc pl-4 mb-2 text-gray-600 space-y-0.5">
+              {res.followUps.map((q: string, i: number) => <li key={i}>{q}</li>)}
+            </ul>
+          )}
+          {!res.alreadySpecific && (res.suggestions?.length > 0) && (
+            <div className="space-y-1">
+              <div className="text-gray-500">Suggested wording (click to add):</div>
+              {res.suggestions.map((sug: string, i: number) => (
+                <button key={i} type="button"
+                  onClick={() => onChange(value.trim() ? value.trim() + '\n' + sug : sug)}
+                  className="block w-full text-left px-2 py-1 rounded bg-white border border-gray-200 hover:border-ls-cyan text-gray-700">
+                  + {sug}
+                </button>
+              ))}
+            </div>
+          )}
+          <button type="button" onClick={() => setRes(null)} className="mt-1.5 text-gray-400 hover:text-gray-600">Dismiss</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Intake() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -386,32 +430,25 @@ export default function Intake() {
             <p className="text-xs text-gray-400 mb-3">Must-haves and nice-to-haves auto-fill from the selected JD (Section 2). They stay blank for a brand-new JD. Edit as needed.</p>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={lbl}>Must-haves (non-negotiables) — one per line</label>
-                <textarea rows={4} value={form.mustHaves} onChange={(e) => setForm({ ...form, mustHaves: e.target.value })} placeholder="e.g. 5+ years front-end&#10;Strong React/Redux, CSS" className={inp} />
+                <SharpenField label={"Must-haves (non-negotiables) — one per line"} value={form.mustHaves} onChange={(v) => setForm({ ...form, mustHaves: v })} rows={4} placeholder="e.g. 5+ years front-end&#10;Strong React/Redux, CSS" roleContext={form.department} />
               </div>
               <div>
-                <label className={lbl}>Nice-to-haves — one per line</label>
-                <textarea rows={4} value={form.niceToHaves} onChange={(e) => setForm({ ...form, niceToHaves: e.target.value })} placeholder="e.g. Follows industry trends" className={inp} />
+                <SharpenField label={"Nice-to-haves — one per line"} value={form.niceToHaves} onChange={(v) => setForm({ ...form, niceToHaves: v })} rows={4} placeholder="e.g. Follows industry trends" roleContext={form.department} />
               </div>
               <div>
-                <label className={lbl}>What makes a candidate stand out</label>
-                <textarea rows={2} value={form.standoutSignals} onChange={(e) => setForm({ ...form, standoutSignals: e.target.value })} className={inp} />
+                <SharpenField label={"What makes a candidate stand out"} value={form.standoutSignals} onChange={(v) => setForm({ ...form, standoutSignals: v })} rows={2} roleContext={form.department} />
               </div>
               <div>
-                <label className={lbl}>Dealbreakers</label>
-                <textarea rows={2} value={form.dealbreakers} onChange={(e) => setForm({ ...form, dealbreakers: e.target.value })} className={inp} />
+                <SharpenField label={"Dealbreakers"} value={form.dealbreakers} onChange={(v) => setForm({ ...form, dealbreakers: v })} rows={2} roleContext={form.department} />
               </div>
               <div>
-                <label className={lbl}>Who thrives here</label>
-                <textarea rows={2} value={form.thriveProfile} onChange={(e) => setForm({ ...form, thriveProfile: e.target.value })} className={inp} />
+                <SharpenField label={"Who thrives here"} value={form.thriveProfile} onChange={(v) => setForm({ ...form, thriveProfile: v })} rows={2} roleContext={form.department} />
               </div>
               <div>
-                <label className={lbl}>Who tends to struggle</label>
-                <textarea rows={2} value={form.struggleProfile} onChange={(e) => setForm({ ...form, struggleProfile: e.target.value })} className={inp} />
+                <SharpenField label={"Who tends to struggle"} value={form.struggleProfile} onChange={(v) => setForm({ ...form, struggleProfile: v })} rows={2} roleContext={form.department} />
               </div>
               <div className="col-span-2">
-                <label className={lbl}>Team context — current challenges / growth stage</label>
-                <textarea rows={2} value={form.teamContext} onChange={(e) => setForm({ ...form, teamContext: e.target.value })} className={inp} />
+                <SharpenField label={"Team context — current challenges / growth stage"} value={form.teamContext} onChange={(v) => setForm({ ...form, teamContext: v })} rows={2} roleContext={form.department} />
               </div>
               <div>
                 <label className={lbl}>Companies to target — one per line</label>

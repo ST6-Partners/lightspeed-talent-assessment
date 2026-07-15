@@ -1262,3 +1262,70 @@ ${input.candidateMaterial || '(no resume on file)'}`;
     return placeholderRankFit(input);
   }
 }
+
+// ============================================================
+// SHARPEN INTAKE FIELD (advisory) — helps a hiring manager turn a
+// vague intake answer ("strong communicator") into specific, job-
+// relevant signal the ranking/matching can actually use. Returns a
+// judgment plus optional follow-up questions and concrete rewrites.
+// STRICTLY job-relevant: never suggests personality traits, "culture
+// fit", or anything that could proxy for a protected characteristic.
+// Human stays in control — this only suggests.
+// ============================================================
+export interface SharpenIntakeResult {
+  alreadySpecific: boolean;
+  assessment: string;         // one short line
+  followUps: string[];        // 0-3 probing questions
+  suggestions: string[];      // 0-3 concrete rewrites
+}
+
+function placeholderSharpen(value: string): SharpenIntakeResult {
+  return {
+    alreadySpecific: value.trim().length > 80,
+    assessment: 'Sandbox draft — set ANTHROPIC_API_KEY for real suggestions.',
+    followUps: value.trim().length > 80 ? [] : ['What does this look like day to day in this specific role?'],
+    suggestions: [],
+  };
+}
+
+export async function sharpenIntakeField(
+  label: string,
+  value: string,
+  roleContext?: string,
+): Promise<SharpenIntakeResult> {
+  if (!value || value.trim().length < 2) {
+    return { alreadySpecific: false, assessment: 'Empty — nothing to sharpen yet.', followUps: [], suggestions: [] };
+  }
+  if (SANDBOX) {
+    console.log('[AI SANDBOX] sharpenIntakeField');
+    return placeholderSharpen(value);
+  }
+
+  const system = `You help a hiring manager make ONE intake-form answer more specific and job-relevant, the way a sharp recruiter would probe in an intake meeting.
+Given the field label, the manager's current answer, and the role, decide whether the answer is already concrete and behavior/outcome-based.
+If it is vague (e.g. "strong communicator", "team player", "self-starter"), produce:
+  - 1 to 3 short follow-up QUESTIONS that push for specifics tied to this role, and
+  - 1 to 3 concrete REWRITES phrased as observable job behaviors or outcomes.
+CRITICAL GUARDRAILS: stay strictly job-relevant. NEVER suggest personality traits, "culture fit", demeanor, or anything that could act as a proxy for a protected characteristic (age, gender, race, national origin, disability, religion, etc.). No "energetic", "young", "cultural add", "good vibes". Focus on skills, tasks, deliverables, and measurable outcomes.
+Return ONLY a JSON object:
+{ "alreadySpecific": true|false, "assessment": "<one short line>", "followUps": ["..."], "suggestions": ["..."] }`;
+
+  const user = `ROLE: ${roleContext || 'unspecified'}
+FIELD: ${label}
+CURRENT ANSWER: ${value}`;
+
+  try {
+    const meta = await callClaudeMeta(system, user, PROMPTS.sharpenIntake.model);
+    const fenced = meta.text.replace(/```json|```/g, '');
+    const parsed = JSON.parse(fenced.slice(fenced.indexOf('{'), fenced.lastIndexOf('}') + 1));
+    return {
+      alreadySpecific: !!parsed.alreadySpecific,
+      assessment: String(parsed.assessment ?? ''),
+      followUps: Array.isArray(parsed.followUps) ? parsed.followUps.map(String).slice(0, 3) : [],
+      suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.map(String).slice(0, 3) : [],
+    };
+  } catch (err) {
+    console.error('[AI] sharpenIntakeField failed — returning placeholder:', err);
+    return placeholderSharpen(value);
+  }
+}

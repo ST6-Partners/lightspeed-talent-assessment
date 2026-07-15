@@ -65,6 +65,14 @@ export const PROMPTS = {
     lastRevised: '2026-07-14',
     changelog: ['1.0.0 — initial registry entry.'],
   },
+  sharpenIntake: {
+    id: 'sharpen-intake',
+    version: '1.0.0',
+    model: 'claude-sonnet-4-6',
+    purpose: 'Assess whether a hiring-manager intake answer is specific enough; suggest job-relevant follow-ups and concrete rewrites. Never suggests personality/culture-fit proxies.',
+    lastRevised: '2026-07-14',
+    changelog: ['1.0.0 — initial registry entry.'],
+  },
 } as const;
 
 export type PromptKey = keyof typeof PROMPTS;
