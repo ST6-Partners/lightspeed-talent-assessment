@@ -26,7 +26,6 @@ import {
   ReleaseNotesAdmin,
   EmailTestPanel,
   DocumentIndexPanel,
-  FairnessPanel,
 } from './admin';
 
 // ── Feature flags panel (simple settings table) ──────────────
@@ -90,7 +89,6 @@ const ANALYTICS_TABS = [
   { id: 'feedback', label: 'Feedback' },
   { id: 'chatlogs', label: 'Chat Logs' },
   { id: 'satisfaction', label: 'Satisfaction' },
-  { id: 'fairness', label: 'Fairness' },
 ];
 
 const CONFIG_TABS = [
@@ -247,7 +245,6 @@ export default function AdminSettings() {
         {activeSection === 'feedback' && showAnalytics && <FeedbackPanel />}
         {activeSection === 'chatlogs' && showAnalytics && <ChatLogs />}
         {activeSection === 'satisfaction' && showAnalytics && <SatisfactionDashboard />}
-        {activeSection === 'fairness' && showAnalytics && <FairnessPanel />}
         {activeSection === 'users' && showConfig && <UserManagement />}
         {activeSection === 'archived' && showConfig && <ArchivedItems />}
         {activeSection === 'prompts' && showSystem && <PromptAdmin />}

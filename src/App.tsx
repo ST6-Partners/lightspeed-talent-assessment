@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import WorkSample from './pages/WorkSample';
 import EeoSurvey from './pages/EeoSurvey';
+import Fairness from './pages/hiring/Fairness';
 import BookInterview from './pages/BookInterview';
 import ApplyInternal from './pages/ApplyInternal';
 import Approve from './pages/Approve';
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="/hiring/requisitions" element={<Requisitions />} />
         <Route path="/hiring/candidates" element={<Candidates />} />
         <Route path="/hiring/review" element={<ReviewQueue />} />
+        <Route path="/hiring/fairness" element={<Fairness />} />
         <Route path="/hiring/interviews" element={<Interviews />} />
         <Route path="/hiring/internal" element={<InternalReport />} />
         <Route path="/hiring/assessments" element={<Assessments />} />

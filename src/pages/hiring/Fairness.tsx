@@ -67,7 +67,7 @@ function Dimension({ dim }: { dim: any }) {
   );
 }
 
-export default function FairnessPanel() {
+export default function Fairness() {
   const { data: roles } = trpc.eeo.auditRoles.useQuery();
   const [jdId, setJdId] = useState<string>('');
   const effectiveJd = jdId || roles?.[0]?.jdId || '';

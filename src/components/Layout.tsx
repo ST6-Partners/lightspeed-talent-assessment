@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video } from 'lucide-react';
+import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video, ShieldCheck } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import ChatDrawer from './ChatDrawer';
@@ -28,6 +28,8 @@ const talentNav = [
   { path: '/hiring/interviews', label: 'Interviews', icon: Video },
 ];
 
+const fairnessNav = { path: '/hiring/fairness', label: 'Fairness', icon: ShieldCheck };
+
 const coreNav = [
   { path: '/hiring/employees', label: 'Employees', icon: Contact },
   { path: '/hiring/departments', label: 'Departments', icon: Building2 },
@@ -48,7 +50,7 @@ function BrandMark({ size = 28 }: { size?: number }) {
   );
 }
 
-const allNav = [...topNav, ...talentNav, ...coreNav];
+const allNav = [...topNav, ...talentNav, fairnessNav, ...coreNav];
 
 export default function Layout() {
   const location = useLocation();
@@ -85,6 +87,7 @@ export default function Layout() {
     );
   }
 
+  const isAdmin = ['admin', 'sysadmin'].includes(user.role);
   const crumb = allNav.find((n) => n.path === location.pathname)?.label
     ?? (location.pathname.startsWith('/hiring') ? 'Hiring' : 'Home');
 
@@ -124,6 +127,7 @@ export default function Layout() {
 
           <div className="px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Talent Acquisition</div>
           {talentNav.map(renderLink)}
+          {isAdmin && renderLink(fairnessNav)}
 
           <div className="px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Core Data</div>
           {coreNav.map(renderLink)}

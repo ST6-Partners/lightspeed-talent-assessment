@@ -16,4 +16,3 @@ export { default as SatisfactionDashboard } from './SatisfactionDashboard';
 export { default as ReleaseNotesAdmin } from './ReleaseNotesAdmin';
 export { default as EmailTestPanel } from './EmailTestPanel';
 export { default as DocumentIndexPanel } from './DocumentIndexPanel';
-export { default as FairnessPanel } from './FairnessPanel';
