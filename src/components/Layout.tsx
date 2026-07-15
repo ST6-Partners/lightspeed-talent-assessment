@@ -22,7 +22,6 @@ const talentNav = [
   { path: '/hiring/candidates', label: 'Candidates', icon: Users },
   { path: '/hiring/review', label: 'Review', icon: ClipboardCheck },
   { path: '/hiring/internal', label: 'Internal Pipeline', icon: UserCheck },
-  { path: '/hiring/talent-pool', label: 'Talent Pool', icon: Bookmark },
   { path: '/hiring/assessments', label: 'Assessments', icon: Brain },
   { path: '/hiring/tasks', label: 'Work Sample', icon: Library },
   { path: '/hiring/scorecards', label: 'Scorecards', icon: CheckSquare },
