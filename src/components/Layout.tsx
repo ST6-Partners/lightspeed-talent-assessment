@@ -13,7 +13,7 @@ import WhatsNew from './WhatsNew';
 import { trpc } from '../lib/trpc';
 
 const topNav = [
-  { path: '/hiring/metrics', label: 'Metrics', icon: BarChart2 },
+  { path: '/hiring/metrics', label: 'Metrics & Bias', icon: BarChart2 },
 ];
 
 const talentNav = [
@@ -124,10 +124,10 @@ export default function Layout() {
 
         <nav className="flex-1 overflow-y-auto">
           {topNav.map(renderLink)}
+          {isAdmin && renderLink(fairnessNav)}
 
           <div className="px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Talent Acquisition</div>
           {talentNav.map(renderLink)}
-          {isAdmin && renderLink(fairnessNav)}
 
           <div className="px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Core Data</div>
           {coreNav.map(renderLink)}

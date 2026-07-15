@@ -84,14 +84,14 @@ export default function Insights() {
     );
   }
 
-  const { funnel, rejectionReasons, sourceMix, timeInStage, weeklyVolume, ccat, epp, interview, summary, conversions } = data;
+  const { funnel, rejectionReasons, sourceMix, timeInStage, weeklyVolume, ccat, epp, interview, summary } = data;
 
   const funnelMax = Math.max(...funnel.map((f) => f.count), 1);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Insights</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Metrics & Bias</h1>
         <p className="text-sm text-gray-500 mt-1">Hiring pipeline analytics</p>
       </div>
 
@@ -250,34 +250,6 @@ export default function Insights() {
         </div>
       </div>
 
-      {/* Stage conversion table */}
-      {conversions.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <span className="text-sm font-semibold text-gray-700">Stage transitions</span>
-          </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-500 uppercase">
-                <th className="px-4 py-3">From</th>
-                <th className="px-4 py-3">To</th>
-                <th className="px-4 py-3 text-right">Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {conversions
-                .sort((a, b) => b.count - a.count)
-                .map((c, i) => (
-                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 text-sm">
-                    <td className="px-4 py-2 text-gray-600">{c.from ?? '—'}</td>
-                    <td className="px-4 py-2 text-gray-600">{c.to}</td>
-                    <td className="px-4 py-2 text-right font-semibold text-gray-800">{c.count}</td>
-                  </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
