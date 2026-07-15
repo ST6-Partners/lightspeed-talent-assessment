@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info } from 'lucide-react';
+import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info, Archive } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import RoleRankingDropdown from './RoleRankingDropdown';
 
@@ -485,10 +485,24 @@ export default function Candidates() {
                     <div className="border-t border-gray-100 px-4 py-3">
                       <button
                         onClick={() => setOpenClosed((m) => ({ ...m, [g.jdId]: !m[g.jdId] }))}
-                        className="flex items-center gap-2 text-xs font-medium text-gray-500 hover:text-gray-700"
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-600 transition-colors"
                       >
-                        <ChevronDown size={14} className={openClosed[g.jdId] ? '' : '-rotate-90'} />
-                        Closed out ({g.closed.length})
+                        <ChevronDown size={15} className={`text-gray-400 transition-transform ${openClosed[g.jdId] ? '' : '-rotate-90'}`} />
+                        <Archive size={15} className="text-gray-400" />
+                        <span>Closed out</span>
+                        <span className="text-gray-400 font-normal">· {g.closed.length}</span>
+                        <span className="ml-auto flex items-center gap-1.5">
+                          {g.closed.filter((c: any) => c.currentStage === 'Rejected').length > 0 && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] rounded-full bg-red-100 text-red-700">
+                              {g.closed.filter((c: any) => c.currentStage === 'Rejected').length} rejected
+                            </span>
+                          )}
+                          {g.closed.filter((c: any) => c.currentStage === 'Not Selected').length > 0 && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] rounded-full bg-gray-200 text-gray-600">
+                              {g.closed.filter((c: any) => c.currentStage === 'Not Selected').length} not selected
+                            </span>
+                          )}
+                        </span>
                       </button>
                       {openClosed[g.jdId] && (
                         <div className="mt-2 overflow-x-auto">
