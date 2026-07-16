@@ -3,6 +3,7 @@
 // Pulls from insightsRouter.summary (one query, full payload)
 // ============================================================
 
+import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
 
 const STAGE_COLORS: Record<string, string> = {
@@ -66,7 +67,10 @@ function ScoreBadge({ label, value, pass }: { label: string; value: number | nul
 }
 
 export default function Insights() {
-  const { data, isLoading, error } = trpc.insights.summary.useQuery();
+  // null = all roles (portfolio view); otherwise a single job's metrics.
+  const [jdId, setJdId] = useState<string | null>(null);
+  const { data: roles } = trpc.insights.roles.useQuery();
+  const { data, isLoading, error } = trpc.insights.summary.useQuery(jdId ? { jdId } : undefined);
 
   if (isLoading) {
     return (
@@ -90,9 +94,28 @@ export default function Insights() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Metrics</h1>
-        <p className="text-sm text-gray-500 mt-1">Hiring pipeline analytics</p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Metrics</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {jdId
+              ? `${(roles ?? []).find((r) => r.jdId === jdId)?.title ?? 'Role'} — pipeline analytics`
+              : 'All roles — hiring pipeline analytics'}
+          </p>
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1">View</label>
+          <select
+            value={jdId ?? ''}
+            onChange={(e) => setJdId(e.target.value || null)}
+            className="w-64 px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+          >
+            <option value="">All roles (overall)</option>
+            {(roles ?? []).map((r) => (
+              <option key={r.jdId} value={r.jdId}>{r.title} ({r.count})</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Summary KPIs */}

@@ -1,18 +1,53 @@
 // ============================================================
 // INSIGHTS ROUTER — Hiring pipeline analytics
 // All metrics computed server-side from existing hiring tables.
+// summary() accepts an optional { jdId } to scope every metric to a
+// single role; omitted → all jobs (the original all-roles view).
+// roles() lists the roles that have candidates, for the Metrics dropdown.
 // ============================================================
 
-import { sql, eq, desc, count, isNotNull } from 'drizzle-orm';
+import { sql, eq, and, count, isNotNull } from 'drizzle-orm';
+import { z } from 'zod';
 import { CANDIDATE_STAGES } from '../domain/stages.js';
 import { router, protectedProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { db } from '../db.js';
 
 export const insightsRouter = router({
-  // Full analytics payload — one call loads the entire Insights page
-  summary: protectedProcedure.query(async ({ ctx }) => {
-    const pool = (ctx.db as any).session?.client ?? (await import('../db.js')).pool;
+  // Roles that have at least one candidate — powers the Metrics per-role picker.
+  roles: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db
+      .select({
+        jdId: candidates.jdId,
+        title: jobDescriptions.jobTitle,
+        count: count(),
+      })
+      .from(candidates)
+      .leftJoin(jobDescriptions, eq(candidates.jdId, jobDescriptions.id))
+      .where(isNotNull(candidates.jdId))
+      .groupBy(candidates.jdId, jobDescriptions.jobTitle);
+    return rows
+      .map((r) => ({
+        jdId: r.jdId as string,
+        title: (r.title as string | null) ?? 'Untitled role',
+        count: Number(r.count),
+      }))
+      .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title));
+  }),
+
+  // Full analytics payload — one call loads the entire Insights page.
+  // Pass { jdId } to scope every metric to one role.
+  summary: protectedProcedure
+    .input(z.object({ jdId: z.string().uuid().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+    const jdId = input?.jdId ?? null;
+    // Reusable candidate-scope predicate (role filter or all rows).
+    const scoped = (extra?: any) => (jdId ? (extra ? and(eq(candidates.jdId, jdId), extra) : eq(candidates.jdId, jdId)) : extra);
+    // Raw-SQL scope fragments for the two hand-written queries below.
+    const candFilter = jdId ? sql`AND jd_id = ${jdId}` : sql``;
+    const historyFilter = jdId
+      ? sql`WHERE candidate_id IN (SELECT id FROM candidates WHERE jd_id = ${jdId})`
+      : sql``;
 
     // ── Stage funnel ──────────────────────────────────────
     const stageFunnel = await ctx.db
@@ -21,6 +56,7 @@ export const insightsRouter = router({
         count: count(),
       })
       .from(candidates)
+      .where(scoped())
       .groupBy(candidates.currentStage);
 
     // ── Rejection reasons ──────────────────────────────────
@@ -30,7 +66,7 @@ export const insightsRouter = router({
         count: count(),
       })
       .from(candidates)
-      .where(eq(candidates.currentStage, 'Rejected'))
+      .where(scoped(eq(candidates.currentStage, 'Rejected')))
       .groupBy(candidates.rejectionReason);
 
     // ── Source mix ─────────────────────────────────────────
@@ -40,13 +76,14 @@ export const insightsRouter = router({
         count: count(),
       })
       .from(candidates)
+      .where(scoped())
       .groupBy(candidates.source);
 
     // ── CCAT stats ─────────────────────────────────────────
     const ccatRows = await ctx.db
       .select({ score: candidates.ccatScore })
       .from(candidates)
-      .where(isNotNull(candidates.ccatScore));
+      .where(scoped(isNotNull(candidates.ccatScore)));
 
     const ccatScores = ccatRows.map(r => r.score!);
     const ccatStats = ccatScores.length > 0 ? {
@@ -62,7 +99,7 @@ export const insightsRouter = router({
     const eppRows = await ctx.db
       .select({ score: candidates.eppValuesMatchScore })
       .from(candidates)
-      .where(isNotNull(candidates.eppValuesMatchScore));
+      .where(scoped(isNotNull(candidates.eppValuesMatchScore)));
 
     const eppScores = eppRows.map(r => r.score!);
     const eppStats = eppScores.length > 0 ? {
@@ -76,7 +113,7 @@ export const insightsRouter = router({
     const interviewRows = await ctx.db
       .select({ score: candidates.interviewScore })
       .from(candidates)
-      .where(isNotNull(candidates.interviewScore));
+      .where(scoped(isNotNull(candidates.interviewScore)));
 
     const interviewScores = interviewRows.map(r => r.score!);
     const interviewStats = interviewScores.length > 0 ? {
@@ -104,6 +141,7 @@ export const insightsRouter = router({
           created_at AS entered_at,
           LEAD(created_at) OVER (PARTITION BY candidate_id ORDER BY created_at) AS exited_at
         FROM candidate_stage_history
+        ${historyFilter}
       )
       SELECT
         stage,
@@ -130,6 +168,7 @@ export const insightsRouter = router({
         COUNT(*) AS count
       FROM candidates
       WHERE created_at >= NOW() - INTERVAL '12 weeks'
+        ${candFilter}
       GROUP BY DATE_TRUNC('week', created_at)
       ORDER BY DATE_TRUNC('week', created_at)
     `);

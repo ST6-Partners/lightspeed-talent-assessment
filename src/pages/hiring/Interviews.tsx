@@ -9,7 +9,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Search, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, Plus, Trash2, Pencil, X, XCircle } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { SchedulingSection } from './Candidates';
 
@@ -25,6 +25,23 @@ const INTERVIEW_STAGES = ['Interview Scheduled', 'Interviewed', 'Offered', 'Hire
 // panel compares people while they're fresh (manager-meeting decision).
 const INTERVIEW_WINDOW_HOURS = 48;
 const fmtSpan = (h: number) => (h < 48 ? `${h}h` : `${(h / 24).toFixed(1)} days`);
+const FOLLOW_TYPES: { value: 'avoided' | 'half_answered' | 'suggested'; label: string }[] = [
+  { value: 'avoided', label: 'Avoided' },
+  { value: 'half_answered', label: 'Half-answered' },
+  { value: 'suggested', label: 'Suggested' },
+];
+// Elapsed hours between two instants, counting weekdays only (weekends excluded),
+// matching the server's 48-business-hour interview window rule.
+function businessHoursBetween(startMs: number, endMs: number): number {
+  if (endMs <= startMs) return 0;
+  const STEP = 15 * 60 * 1000;
+  let ms = 0;
+  for (let t = startMs; t < endMs; t += STEP) {
+    const day = new Date(t).getDay();
+    if (day !== 0 && day !== 6) ms += Math.min(STEP, endMs - t);
+  }
+  return ms / 3_600_000;
+}
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -41,10 +58,21 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
   const [showBriefing, setShowBriefing] = useState(false);
   const [briefOpen, setBriefOpen] = useState<Record<string, boolean>>({});
   const [fbOpen, setFbOpen] = useState(false);
+  const [fbEdit, setFbEdit] = useState(false);
+  const [draftRead, setDraftRead] = useState('');
+  const [draftFus, setDraftFus] = useState<any[]>([]);
 
   const update = trpc.interviews.updateRound.useMutation({ onSuccess: onChanged, onError: (err) => { alert(err.message); onChanged?.(); } });
   const remove = trpc.interviews.removeRound.useMutation({ onSuccess: onChanged });
   const record = trpc.interviews.recordFeedback.useMutation({ onSuccess: onChanged });
+  const saveFb = trpc.interviews.updateFeedback.useMutation({ onSuccess: () => { setFbEdit(false); onChanged(); } });
+
+  const startEditFb = () => {
+    setDraftRead(round.feedbackHr ?? '');
+    setDraftFus((Array.isArray(round.followUps) ? round.followUps : []).map((f: any) => ({ type: f.type, text: f.text })));
+    setFbEdit(true);
+    setFbOpen(true);
+  };
   const sendPrep = trpc.interviews.sendPrep.useMutation({ onSuccess: onChanged });
   const briefing = trpc.interviews.briefing.useQuery({ id: round.id }, { enabled: showBriefing });
 
@@ -219,15 +247,21 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
             )}
           </div>
 
-          {/* ===== Interview feedback dropdown ===== */}
+          {/* ===== Interview feedback dropdown (carries forward to the next round's briefing) ===== */}
           {(round.feedbackHr || fus.length > 0) && (
             <div>
-              <button type="button" onClick={() => setFbOpen((v) => !v)}
-                className="flex items-center justify-between w-full text-left px-3 py-2.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg">
-                <span className="text-xs font-bold text-gray-800">Interview feedback{round.score != null ? ` · score ${round.score}/100` : ''}</span>
-                {fbOpen ? <ChevronDown size={14} className="text-gray-500 shrink-0" /> : <ChevronRight size={14} className="text-gray-500 shrink-0" />}
-              </button>
-              {fbOpen && (
+              <div className="flex items-center gap-1.5 w-full px-3 py-2.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg">
+                <button type="button" onClick={() => setFbOpen((v) => !v)} className="flex items-center justify-between flex-1 text-left">
+                  <span className="text-xs font-bold text-gray-800">Interview feedback{round.score != null ? ` · score ${round.score}/100` : ''}</span>
+                  {fbOpen ? <ChevronDown size={14} className="text-gray-500 shrink-0" /> : <ChevronRight size={14} className="text-gray-500 shrink-0" />}
+                </button>
+                {!fbEdit && (
+                  <button type="button" onClick={startEditFb}
+                    title="Edit what carries forward to the next interviewer"
+                    className="p-1 text-gray-400 hover:text-ls-primary shrink-0"><Pencil size={13} /></button>
+                )}
+              </div>
+              {fbOpen && !fbEdit && (
                 <div className="mt-1.5 space-y-2">
                   {round.feedbackHr && (
                     <div>
@@ -237,12 +271,48 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
                   )}
                   {fus.length > 0 && (
                     <div>
-                      <div className="text-[11px] font-semibold text-gray-700">Follow up in later rounds</div>
+                      <div className="text-[11px] font-semibold text-gray-700">Follow up in later rounds <span className="font-normal text-gray-400">(sent to the next interviewer)</span></div>
                       <ul className="text-[11px] text-gray-600 list-disc pl-4">
                         {fus.map((f: any, i: number) => <li key={i}><strong>{FOLLOW_LABEL[f.type] ?? 'Follow up'}:</strong> {f.text}</li>)}
                       </ul>
                     </div>
                   )}
+                </div>
+              )}
+              {fbOpen && fbEdit && (
+                <div className="mt-1.5 space-y-2 border border-ls-cyan/40 rounded-lg p-2 bg-white">
+                  <div>
+                    <div className="text-[11px] font-semibold text-gray-700 mb-1">Read on the candidate</div>
+                    <textarea value={draftRead} onChange={(e) => setDraftRead(e.target.value)} rows={3}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded text-[11px]" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold text-gray-700 mb-1">Follow-ups sent to the next interviewer</div>
+                    <div className="space-y-1.5">
+                      {draftFus.map((f: any, i: number) => (
+                        <div key={i} className="flex items-center gap-1.5">
+                          <select value={f.type} onChange={(e) => setDraftFus((arr) => arr.map((x, j) => j === i ? { ...x, type: e.target.value } : x))}
+                            className="px-1.5 py-1 border border-gray-300 rounded text-[11px] shrink-0">
+                            {FOLLOW_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                          </select>
+                          <input value={f.text} onChange={(e) => setDraftFus((arr) => arr.map((x, j) => j === i ? { ...x, text: e.target.value } : x))}
+                            placeholder="What the next round should dig into…"
+                            className="flex-1 px-2 py-1 border border-gray-300 rounded text-[11px]" />
+                          <button type="button" onClick={() => setDraftFus((arr) => arr.filter((_, j) => j !== i))}
+                            className="p-1 text-gray-400 hover:text-red-600 shrink-0" title="Remove"><X size={13} /></button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setDraftFus((arr) => [...arr, { type: 'suggested', text: '' }])}
+                        className="text-[11px] text-gray-500 hover:text-ls-primary flex items-center gap-1"><Plus size={11} /> Add a follow-up</button>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => saveFb.mutate({ id: round.id, feedbackHr: draftRead.trim() || null, followUps: draftFus.filter((f: any) => (f.text ?? '').trim()).map((f: any) => ({ type: f.type, text: f.text.trim() })) })}
+                      disabled={saveFb.isLoading}
+                      className="text-[11px] px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
+                      {saveFb.isLoading ? 'Saving…' : 'Save briefing'}</button>
+                    <button onClick={() => setFbEdit(false)} className="text-[11px] px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-gray-50">Cancel</button>
+                  </div>
                 </div>
               )}
             </div>
@@ -275,6 +345,27 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
           </div>
         </div>
       )}
+
+      {/* Reject modal — reject a candidate mid-process (e.g. between rounds) */}
+      {rejectOpen && selected && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg border border-gray-200 p-5 w-96">
+            <div className="text-sm font-semibold text-gray-700 mb-3">Reject {selected.firstName} {selected.lastName}</div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Reason *</label>
+            <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
+              rows={3} placeholder="e.g. Did not pass the first-round interview…"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan mb-3" />
+            <div className="flex gap-2">
+              <button onClick={() => reject.mutate({ id: selected.id, reason: rejectReason })}
+                disabled={!rejectReason || reject.isLoading}
+                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                {reject.isLoading ? 'Rejecting…' : 'Reject'}
+              </button>
+              <button onClick={() => { setRejectOpen(false); setRejectReason(''); }} className="px-4 py-2 text-gray-600 text-sm">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -301,6 +392,10 @@ export default function Interviews() {
 
   const seed = trpc.interviews.seedFromPlan.useMutation({ onSuccess: () => refreshAll() });
   const add = trpc.interviews.addRound.useMutation({ onSuccess: () => { setNewRound(''); refreshAll(); } });
+  const reject = trpc.candidates.reject.useMutation({ onSuccess: () => { setRejectOpen(false); setRejectReason(''); refreshAll(); }, onError: (err) => alert(err.message) });
+  const setException = trpc.interviews.setWindowException.useMutation({ onSuccess: () => refetch(), onError: (err) => alert(err.message) });
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
 
   const active = (candidates ?? []).filter((c: any) => INTERVIEW_STAGES.includes(c.currentStage));
   const selected: any = (candidates ?? []).find((c: any) => c.id === candidateId) ?? null;
@@ -333,10 +428,12 @@ export default function Interviews() {
     .map((r) => new Date(r.scheduledAt).getTime())
     .sort((a, b) => a - b);
   const windowHrs = scheduledTimes.length >= 2
-    ? Math.round((scheduledTimes[scheduledTimes.length - 1] - scheduledTimes[0]) / 3_600_000)
+    ? Math.round(businessHoursBetween(scheduledTimes[0], scheduledTimes[scheduledTimes.length - 1]))
     : null;
   const withinWindow = windowHrs == null ? null : windowHrs <= INTERVIEW_WINDOW_HOURS;
   const allScheduled = list.length > 0 && scheduledTimes.length === list.length;
+  const windowExempt = !!(selected as any)?.interviewWindowException;
+  const isTerminal = selected ? ['Rejected', 'Hired', 'Not Selected'].includes(selected.currentStage) : false;
 
   const filtered = active.filter((c: any) => {
     const q = search.trim().toLowerCase();
@@ -392,6 +489,13 @@ export default function Interviews() {
                 <div className="font-semibold text-gray-900">{selected.firstName} {selected.lastName}</div>
                 <div className="text-xs text-gray-500">{roleTitle} · {selected.currentStage}</div>
               </div>
+              {!isTerminal && (
+                <button onClick={() => setRejectOpen(true)}
+                  title="Reject this candidate (e.g. after a weak round, before the next one)"
+                  className="ml-auto inline-flex items-center gap-1 text-xs px-2.5 py-1.5 border border-red-200 text-red-600 rounded-md font-medium hover:bg-red-50">
+                  <XCircle size={13} /> Reject
+                </button>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-2">
               <Stat label="Rounds done" value={`${done} of ${list.length}`} />
@@ -401,18 +505,34 @@ export default function Interviews() {
 
             {list.length > 0 && (
               <div className="mt-2 space-y-1 text-[11px]">
-                {windowHrs != null && !withinWindow && (
-                  <div className="rounded bg-amber-50 border border-amber-200 text-amber-800 px-2 py-1">
-                    ⚠ Rounds span {fmtSpan(windowHrs)} — rounds must be within 48h of each other; scheduling a time outside that window will be blocked.
+                {windowExempt ? (
+                  <div className="rounded bg-blue-50 border border-blue-200 text-blue-800 px-2 py-1 flex items-center justify-between gap-2">
+                    <span>⏸ Scheduling exception on — the 48-business-hour window isn't enforced for this candidate{(selected as any)?.interviewWindowExceptionNote ? ` (${(selected as any).interviewWindowExceptionNote})` : ''}.</span>
+                    <button onClick={() => setException.mutate({ candidateId: selected.id, enabled: false })}
+                      className="underline shrink-0 hover:text-blue-900">Turn off</button>
                   </div>
-                )}
-                {windowHrs != null && withinWindow && (
-                  <div className="rounded bg-green-50 border border-green-200 text-green-700 px-2 py-1">
-                    ✓ Scheduled rounds fall within {fmtSpan(windowHrs)} (rule: ≤ 48h).
-                  </div>
-                )}
-                {!allScheduled && (
-                  <div className="text-gray-500">{scheduledTimes.length} of {list.length} rounds have a time set{scheduledTimes.length === list.length ? '' : ' — set times to check the 48h window'}.</div>
+                ) : (
+                  <>
+                    {windowHrs != null && !withinWindow && (
+                      <div className="rounded bg-amber-50 border border-amber-200 text-amber-800 px-2 py-1 flex items-center justify-between gap-2">
+                        <span>⚠ Rounds span {fmtSpan(windowHrs)} of business time — rounds must be within 48 business hours (weekends excluded); a time outside that window is blocked.</span>
+                        <button onClick={() => { const note = window.prompt('Reason for the scheduling exception (e.g. interviewer on vacation):', '') ?? ''; setException.mutate({ candidateId: selected.id, enabled: true, note: note.trim() || null }); }}
+                          className="underline shrink-0 hover:text-amber-900">Allow exception</button>
+                      </div>
+                    )}
+                    {windowHrs != null && withinWindow && (
+                      <div className="rounded bg-green-50 border border-green-200 text-green-700 px-2 py-1">
+                        ✓ Scheduled rounds fall within {fmtSpan(windowHrs)} of business time (rule: ≤ 48 business hours, weekends excluded).
+                      </div>
+                    )}
+                    {!allScheduled && (
+                      <div className="text-gray-500 flex items-center justify-between gap-2">
+                        <span>{scheduledTimes.length} of {list.length} rounds have a time set{scheduledTimes.length === list.length ? '' : ' — set times to check the 48-business-hour window'}.</span>
+                        <button onClick={() => { const note = window.prompt('Reason for the scheduling exception (e.g. interviewer on vacation):', '') ?? ''; setException.mutate({ candidateId: selected.id, enabled: true, note: note.trim() || null }); }}
+                          className="underline shrink-0 text-gray-400 hover:text-gray-600">Allow exception</button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -468,6 +588,27 @@ export default function Interviews() {
                   : <div className="text-xs text-gray-400">Questions are generated automatically once the candidate reaches the interview stage.</div>}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Reject modal — reject a candidate mid-process (e.g. between rounds) */}
+      {rejectOpen && selected && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg border border-gray-200 p-5 w-96">
+            <div className="text-sm font-semibold text-gray-700 mb-3">Reject {selected.firstName} {selected.lastName}</div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Reason *</label>
+            <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
+              rows={3} placeholder="e.g. Did not pass the first-round interview…"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan mb-3" />
+            <div className="flex gap-2">
+              <button onClick={() => reject.mutate({ id: selected.id, reason: rejectReason })}
+                disabled={!rejectReason || reject.isLoading}
+                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                {reject.isLoading ? 'Rejecting…' : 'Reject'}
+              </button>
+              <button onClick={() => { setRejectOpen(false); setRejectReason(''); }} className="px-4 py-2 text-gray-600 text-sm">Cancel</button>
+            </div>
           </div>
         </div>
       )}

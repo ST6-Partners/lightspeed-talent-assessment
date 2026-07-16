@@ -31,6 +31,24 @@ async function loadRound(id: string) {
   return round;
 }
 
+// All of a candidate's rounds should sit within this many BUSINESS hours of each
+// other (Wes's request) so the panel compares people while they're fresh.
+export const INTERVIEW_WINDOW_HOURS = 48;
+
+// Elapsed time between two instants counting only Mon–Fri (weekends excluded),
+// returned in hours. Walks the span in 15-minute steps — spans here are a few
+// days at most, so this is cheap and avoids DST/timezone off-by-one math.
+export function businessHoursBetween(startMs: number, endMs: number): number {
+  if (endMs <= startMs) return 0;
+  const STEP = 15 * 60 * 1000;
+  let ms = 0;
+  for (let t = startMs; t < endMs; t += STEP) {
+    const day = new Date(t).getDay(); // 0 = Sun, 6 = Sat
+    if (day !== 0 && day !== 6) ms += Math.min(STEP, endMs - t);
+  }
+  return ms / 3_600_000;
+}
+
 export const interviewsRouter = router({
   // All rounds for a candidate, in order.
   list: protectedProcedure
@@ -108,23 +126,29 @@ export const interviewsRouter = router({
       status: roundStatus.optional(),
     }))
     .mutation(async ({ input }) => {
-      // Enforce the 48-hour window: setting a round time can't spread this
-      // candidate's scheduled rounds more than 48h apart.
+      // Enforce the 48-business-hour window: setting a round time can't spread
+      // this candidate's scheduled rounds more than 48 hours apart, counting
+      // weekdays only (weekends don't burn the window). A per-candidate
+      // exception (interviewer/candidate unavailable) skips the check.
       if (input.scheduledAt) {
         const current = await loadRound(input.id);
-        const siblings = await db.select().from(candidateInterviews)
-          .where(eq(candidateInterviews.candidateId, current.candidateId));
-        const times = siblings
-          .filter((r: any) => r.id !== input.id && r.scheduledAt)
-          .map((r: any) => new Date(r.scheduledAt).getTime());
-        times.push(new Date(input.scheduledAt).getTime());
-        if (times.length > 1) {
-          const spreadH = (Math.max(...times) - Math.min(...times)) / 3_600_000;
-          if (spreadH > 48) {
-            throw new TRPCError({
-              code: 'BAD_REQUEST',
-              message: `That time would spread this candidate's interview rounds across ${Math.round(spreadH)} hours. Keep all rounds within 48 hours of each other.`,
-            });
+        const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, current.candidateId) });
+        const exempt = (candidate as any)?.interviewWindowException === true;
+        if (!exempt) {
+          const siblings = await db.select().from(candidateInterviews)
+            .where(eq(candidateInterviews.candidateId, current.candidateId));
+          const times = siblings
+            .filter((r: any) => r.id !== input.id && r.scheduledAt)
+            .map((r: any) => new Date(r.scheduledAt).getTime());
+          times.push(new Date(input.scheduledAt).getTime());
+          if (times.length > 1) {
+            const spreadH = businessHoursBetween(Math.min(...times), Math.max(...times));
+            if (spreadH > INTERVIEW_WINDOW_HOURS) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `That time would spread this candidate's interview rounds across ${Math.round(spreadH)} business hours (weekends excluded). Keep all rounds within ${INTERVIEW_WINDOW_HOURS} business hours of each other, or turn on a scheduling exception for this candidate.`,
+              });
+            }
           }
         }
       }
@@ -152,6 +176,46 @@ export const interviewsRouter = router({
     .input(z.object({ id: z.string().uuid(), transcript: z.string().optional() }))
     .mutation(async ({ input }) => {
       return generateRoundFeedback(input.id, input.transcript?.trim() || undefined);
+    }),
+
+  // Edit the feedback that carries FORWARD to the next round's briefing:
+  // the written read on the candidate + the follow-up threads. Lets the
+  // interviewer adjust what the next interviewer sees before it's sent.
+  updateFeedback: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      feedbackHr: z.string().nullable().optional(),
+      followUps: z.array(z.object({
+        type: z.enum(['avoided', 'half_answered', 'suggested']),
+        text: z.string().min(1),
+      })).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const patch: Record<string, unknown> = { updatedAt: new Date() };
+      if (input.feedbackHr !== undefined) patch.feedbackHr = input.feedbackHr;
+      if (input.followUps !== undefined) patch.followUps = input.followUps;
+      const [row] = await db.update(candidateInterviews).set(patch)
+        .where(eq(candidateInterviews.id, input.id)).returning();
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Interview round not found.' });
+      return row;
+    }),
+
+  // Turn the 48-business-hour scheduling window on/off for one candidate.
+  // Used when an interviewer or the candidate isn't available inside the window.
+  setWindowException: protectedProcedure
+    .input(z.object({
+      candidateId: z.string().uuid(),
+      enabled: z.boolean(),
+      note: z.string().max(500).nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const [row] = await db.update(candidates).set({
+        interviewWindowException: input.enabled,
+        interviewWindowExceptionNote: input.enabled ? (input.note ?? null) : null,
+        updatedAt: new Date(),
+      } as any).where(eq(candidates.id, input.candidateId)).returning();
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not found.' });
+      return { ok: true, enabled: input.enabled };
     }),
 
   // Preview the briefing the interviewer for THIS round would receive.
