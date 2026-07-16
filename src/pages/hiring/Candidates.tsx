@@ -49,6 +49,7 @@ export default function Candidates() {
   });
   const [deptFilter, setDeptFilter] = useState('');
   const [collapsedRoles, setCollapsedRoles] = useState<Record<string, boolean>>({});
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
 
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(
     stageFilter ? { stage: stageFilter } : undefined
@@ -103,14 +104,24 @@ export default function Candidates() {
     internalEmployee: '',
   });
 
-  const getPrevStage = (current: Stage): Stage | null => {
-    const idx = STAGES.indexOf(current);
-    if (idx <= 0 || current === 'Rejected' || current === 'Not Selected') return null;
-    return STAGES[idx - 1];
+  // Work Sample is optional per role — skip it in the advance flow unless the
+  // candidate's job description opts in (workSampleRequired).
+  const requiresWorkSample = (c: any) => {
+    if (!c?.jdId) return false;
+    const jd = ((jobDescriptions ?? []) as any[]).find((j: any) => j.id === c.jdId);
+    return jd?.workSampleRequired === true;
   };
-  const getNextStage = (current: Stage): Stage | null => {
-    const idx = STAGES.indexOf(current);
-    const next = STAGES[idx + 1];
+  const getPrevStage = (c: any): Stage | null => {
+    const idx = STAGES.indexOf(c.currentStage as Stage);
+    if (idx <= 0 || c.currentStage === 'Rejected' || c.currentStage === 'Not Selected') return null;
+    let prev = STAGES[idx - 1];
+    if (prev === 'Work Sample' && !requiresWorkSample(c)) prev = STAGES[idx - 2];
+    return (prev as Stage) ?? null;
+  };
+  const getNextStage = (c: any): Stage | null => {
+    const idx = STAGES.indexOf(c.currentStage as Stage);
+    let next = STAGES[idx + 1];
+    if (next === 'Work Sample' && !requiresWorkSample(c)) next = STAGES[idx + 2];
     if (!next || next === 'Rejected' || next === 'Not Selected') return null;
     return next;
   };
@@ -151,7 +162,13 @@ export default function Candidates() {
     groupMap.get(key)!.push(c);
   }
   const roleGroups = Array.from(groupMap.entries()).map(([jdId, all]) => {
-    const cands = all.filter((c: any) => !CLOSED_STAGES.includes(c.currentStage));
+    const cands = all
+      .filter((c: any) => !CLOSED_STAGES.includes(c.currentStage))
+      .sort((a: any, b: any) => {
+        const ta = new Date(a.createdAt).getTime();
+        const tb = new Date(b.createdAt).getTime();
+        return sortOrder === 'oldest' ? ta - tb : tb - ta;
+      });
     const closed = all
       .filter((c: any) => CLOSED_STAGES.includes(c.currentStage))
       .sort((a: any, b: any) => String(a.currentStage).localeCompare(String(b.currentStage)));
@@ -169,7 +186,7 @@ export default function Candidates() {
   }).sort((a, b) => b.cands.length - a.cands.length);
 
   const candidateRow = (c: any) => {
-    const nextStage = getNextStage(c.currentStage as Stage);
+    const nextStage = getNextStage(c);
     return (
       <tr key={c.id} onClick={() => setSelectedId(selectedId === c.id ? null : c.id)}
         className={`border-b border-gray-50 text-sm cursor-pointer transition-colors ${selectedId === c.id ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
@@ -189,8 +206,8 @@ export default function Candidates() {
         <td className="px-4 py-3 text-gray-400">{new Date(c.createdAt).toLocaleDateString()}</td>
         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
           <div className="flex gap-1">
-            {getPrevStage(c.currentStage as Stage) && (
-              <button onClick={() => advanceMutation.mutate({ id: c.id, toStage: getPrevStage(c.currentStage as Stage)! })} disabled={advanceMutation.isLoading} className="p-1 text-gray-400 hover:text-amber-600 transition-colors" title={`Move back to ${getPrevStage(c.currentStage as Stage)}`}>
+            {getPrevStage(c) && (
+              <button onClick={() => advanceMutation.mutate({ id: c.id, toStage: getPrevStage(c)! })} disabled={advanceMutation.isLoading} className="p-1 text-gray-400 hover:text-amber-600 transition-colors" title={`Move back to ${getPrevStage(c)}`}>
                 <ChevronLeft size={16} />
               </button>
             )}
@@ -246,6 +263,16 @@ export default function Candidates() {
             {STAGES.filter((s) => s !== 'Rejected' && s !== 'Not Selected').map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
+          </select>
+          <label htmlFor="sort-order" className="ml-3 text-xs font-medium text-gray-500">Sort</label>
+          <select
+            id="sort-order"
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as 'newest' | 'oldest')}
+            className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+          >
+            <option value="newest">Newest applied first</option>
+            <option value="oldest">Oldest applied first</option>
           </select>
         </div>
 
@@ -1059,6 +1086,14 @@ export function InterviewRoundsSection({ candidateId, onChanged }: { candidateId
                 <div className="mt-2 border-t border-gray-200 pt-2">
                   <div className="text-[11px] font-semibold text-gray-700 mb-1">Briefing this interviewer would receive</div>
                   {briefing.isLoading && <div className="text-[11px] text-gray-400">Loading…</div>}
+                  {briefing.data && (briefing.data as any).talkingPoints && (
+                    <div className="mb-2 rounded bg-gray-50 border border-gray-100 p-2 space-y-1.5">
+                      <div className="text-[11px] font-semibold text-gray-700">Company talking points</div>
+                      {(briefing.data as any).talkingPoints.whoWeAre && (<p className="text-[11px] text-gray-600 whitespace-pre-wrap">{(briefing.data as any).talkingPoints.whoWeAre}</p>)}
+                      {(briefing.data as any).talkingPoints.values.length > 0 && (<div><div className="text-[10px] font-semibold text-gray-500 uppercase">Values</div><ul className="text-[11px] text-gray-600 list-disc pl-4">{(briefing.data as any).talkingPoints.values.map((v: any, i: number) => (<li key={i}><strong>{v.name}</strong>{v.pillar ? ` (${v.pillar})` : ''}{v.description ? `: ${v.description}` : ''}</li>))}</ul></div>)}
+                      {(briefing.data as any).talkingPoints.departments.length > 0 && (<div><div className="text-[10px] font-semibold text-gray-500 uppercase">Departments</div><ul className="text-[11px] text-gray-600 list-disc pl-4">{(briefing.data as any).talkingPoints.departments.map((d: any, i: number) => (<li key={i}>{d.name}{d.size ? `: ${d.size}` : ''}</li>))}</ul></div>)}
+                    </div>
+                  )}
                   {briefing.data && briefing.data.rounds.length === 0 && briefing.data.followUps.length === 0 && (
                     <div className="text-[11px] text-gray-400">No earlier completed rounds yet — nothing to carry forward.</div>
                   )}

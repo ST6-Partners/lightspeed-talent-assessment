@@ -14,6 +14,7 @@ import { recommendCapabilityScores } from '../services/ai.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { employees } from '../db/schema/employees.js';
 import { auditChange } from '../services/audit.js';
+import { getTalkingPointsConfig, setTalkingPointsConfig } from '../services/companyTalkingPoints.js';
 
 const PILLARS = ['Mission-Driven', 'Customer-Obsessed', 'Results-Focused'] as const;
 
@@ -31,6 +32,16 @@ export const valuesRouter = router({
   // ── Values CRUD ──
   list: protectedProcedure.query(async ({ ctx }) =>
     ctx.db.query.companyValues.findMany({ orderBy: [asc(companyValues.sortOrder)] })),
+
+  // ── Standard company talking points (who we are / department sizes) ──
+  // Shown, together with the live values list above, in every interview briefing.
+  getTalkingPoints: protectedProcedure.query(async ({ ctx }) => getTalkingPointsConfig(ctx.db)),
+  setTalkingPoints: protectedProcedure
+    .input(z.object({
+      whoWeAre: z.string().max(4000),
+      departments: z.array(z.object({ name: z.string().max(200), size: z.string().max(60) })).max(100),
+    }))
+    .mutation(async ({ ctx, input }) => setTalkingPointsConfig(ctx.db, input, ctx.user.id)),
 
   // ── Capability items (the "Capability" scorecard section) ──
   listCapabilityItems: protectedProcedure.query(async ({ ctx }) =>

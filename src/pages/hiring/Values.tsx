@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, X, Trash2, Pencil } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
@@ -25,6 +25,14 @@ export default function Values() {
   const [form, setForm] = useState<Form>(EMPTY);
 
   const { data: values, refetch } = trpc.values.list.useQuery();
+  const [tpOpen, setTpOpen] = useState(false);
+  const [who, setWho] = useState('');
+  const [depts, setDepts] = useState<{ name: string; size: string }[]>([]);
+  const tpQuery = trpc.values.getTalkingPoints.useQuery();
+  const tpSave = trpc.values.setTalkingPoints.useMutation({ onSuccess: () => tpQuery.refetch() });
+  useEffect(() => {
+    if (tpQuery.data) { setWho(tpQuery.data.whoWeAre ?? ''); setDepts(tpQuery.data.departments ?? []); }
+  }, [tpQuery.data]);
   const createMutation = trpc.values.create.useMutation({ onSuccess: () => { refetch(); close(); } });
   const updateMutation = trpc.values.update.useMutation({ onSuccess: () => { refetch(); close(); } });
   const deleteMutation = trpc.values.delete.useMutation({ onSuccess: () => refetch() });
@@ -74,6 +82,53 @@ export default function Values() {
           <Plus size={16} />
           New Value
         </button>
+      </div>
+
+      {/* Interview talking points — who we are + department sizes. These, together
+          with the values below, are attached to every interview briefing. */}
+      <div className="bg-white rounded-lg border border-gray-200 mb-6">
+        <button onClick={() => setTpOpen((v) => !v)}
+          className="flex items-center justify-between w-full text-left px-5 py-3">
+          <span className="text-sm font-semibold text-gray-700">Interview talking points</span>
+          <span className="text-xs text-gray-400">{tpOpen ? 'Hide' : 'Edit'}</span>
+        </button>
+        {tpOpen && (
+          <div className="px-5 pb-5 space-y-4 border-t border-gray-100 pt-4">
+            <p className="text-xs text-gray-500">Shown to every interviewer in every briefing, together with the values below. Department sizes are optional.</p>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Who we are</label>
+              <textarea value={who} onChange={(e) => setWho(e.target.value)} rows={4}
+                placeholder="A short, honest overview of the company to give every candidate."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Departments &amp; sizes</label>
+              <div className="space-y-2">
+                {depts.map((d, i) => (
+                  <div key={i} className="flex gap-2">
+                    <input value={d.name} onChange={(e) => setDepts((arr) => arr.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                      placeholder="Department (e.g. Engineering)"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+                    <input value={d.size} onChange={(e) => setDepts((arr) => arr.map((x, j) => j === i ? { ...x, size: e.target.value } : x))}
+                      placeholder="Size (e.g. 45)"
+                      className="w-32 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+                    <button onClick={() => setDepts((arr) => arr.filter((_, j) => j !== i))}
+                      className="p-2 text-gray-400 hover:text-red-600" title="Remove"><Trash2 size={15} /></button>
+                  </div>
+                ))}
+                <button onClick={() => setDepts((arr) => [...arr, { name: '', size: '' }])}
+                  className="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-ls-primary"><Plus size={13} /> Add department</button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => tpSave.mutate({ whoWeAre: who, departments: depts.filter((d) => d.name.trim()).map((d) => ({ name: d.name.trim(), size: d.size.trim() })) })}
+                disabled={tpSave.isLoading}
+                className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50">
+                {tpSave.isLoading ? 'Saving...' : 'Save talking points'}</button>
+              {tpSave.isSuccess && <span className="text-xs text-green-600">Saved</span>}
+            </div>
+          </div>
+        )}
       </div>
 
       {showForm && (

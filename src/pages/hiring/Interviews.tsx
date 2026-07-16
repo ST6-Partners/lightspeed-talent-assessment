@@ -155,6 +155,27 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
             {showBriefing && (
               <div className="mt-1.5 space-y-1.5">
                 {briefing.isLoading && <div className="text-[11px] text-gray-400">Loading…</div>}
+                {briefing.data && briefing.data.talkingPoints && (() => {
+                  const key = 'talking';
+                  const isOpen = briefOpen[key] ?? true;
+                  const tp = briefing.data.talkingPoints;
+                  return (
+                    <div className="border border-gray-200 rounded">
+                      <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !(st[key] ?? true) }))}
+                        className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
+                        {isOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
+                        <span className="text-[11px] font-semibold text-gray-700">Company talking points</span>
+                      </button>
+                      {isOpen && (
+                        <div className="px-3 pb-2 space-y-2">
+                          {tp.whoWeAre && (<div><div className="text-[11px] font-semibold text-gray-700">Who we are</div><p className="text-[11px] text-gray-600 whitespace-pre-wrap">{tp.whoWeAre}</p></div>)}
+                          {tp.values.length > 0 && (<div><div className="text-[11px] font-semibold text-gray-700">Our values</div><ul className="text-[11px] text-gray-600 list-disc pl-4">{tp.values.map((v: any, i: number) => (<li key={i}><strong>{v.name}</strong>{v.pillar ? <span className="text-gray-400"> ({v.pillar})</span> : null}{v.description ? `: ${v.description}` : ''}</li>))}</ul></div>)}
+                          {tp.departments.length > 0 && (<div><div className="text-[11px] font-semibold text-gray-700">Departments</div><ul className="text-[11px] text-gray-600 list-disc pl-4">{tp.departments.map((d: any, i: number) => (<li key={i}>{d.name}{d.size ? `: ${d.size}` : ''}</li>))}</ul></div>)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {briefing.data && briefing.data.rounds.length === 0 && briefing.data.followUps.length === 0 && questions.length === 0 && standardQuestions.length === 0 && (
                   <div className="text-[11px] text-gray-400">No interview questions or earlier-round notes on file yet.</div>
                 )}

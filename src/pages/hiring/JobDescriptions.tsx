@@ -24,6 +24,7 @@ const EMPTY_FORM = {
   preferredQualifications: '',
   eppValues: [] as string[],
   workSampleTaskId: '',
+  workSampleRequired: false,
 };
 
 // A JD is "live/Published" once approved; only an intake-generated JD still
@@ -77,6 +78,7 @@ export default function JobDescriptions() {
       preferredQualifications: jd.preferredQualifications ?? '',
       eppValues: Array.isArray(jd.eppValues) ? (jd.eppValues as string[]) : [],
       workSampleTaskId: jd.workSampleTaskId ?? '',
+      workSampleRequired: jd.workSampleRequired ?? false,
     });
     setShowForm(true);
   };
@@ -217,6 +219,13 @@ export default function JobDescriptions() {
                 ))}
               </select>
               <p className="text-xs text-gray-400 mt-1">Which work sample this role uses. The instructions themselves live in the Work Sample tab.</p>
+              <label className="flex items-center gap-2 mt-3 text-sm text-gray-700">
+                <input type="checkbox" checked={form.workSampleRequired}
+                  onChange={(e) => setForm({ ...form, workSampleRequired: e.target.checked })}
+                  className="rounded border-gray-300 text-ls-primary focus:ring-ls-cyan" />
+                Include a work sample step for this role
+              </label>
+              <p className="text-xs text-gray-400 mt-1">Optional. When on, candidates go through the work sample after the team interview, before the reference check. When off, the step is skipped.</p>
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-2">

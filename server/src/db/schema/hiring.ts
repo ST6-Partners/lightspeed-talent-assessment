@@ -30,6 +30,8 @@ export const candidateStageEnum = pgEnum('candidate_stage', [
   'Phone Screen',
   'Interview Scheduled',
   'Interviewed',
+  // Reference Check follows the (optional, per-role) Work Sample, before an offer.
+  'Reference Check',
   'Offered',
   'Hired',
   'Rejected',
@@ -127,6 +129,9 @@ export const jobDescriptions = pgTable('job_descriptions', {
   workSampleInstructions: text('work_sample_instructions'),
   // Which Work Sample library task this job uses (FK enforced in migration 0017)
   workSampleTaskId: uuid('work_sample_task_id'),
+  // Optional per role: when true, this role includes a Work Sample step (after
+  // the team interview). Default false — work sample is no longer automatic.
+  workSampleRequired: boolean('work_sample_required').notNull().default(false),
   status: jdStatusEnum('status').notNull().default('Draft'),
   // Intake-generated JD awaiting hiring-manager review (NEW JD for review)
   pendingReview: boolean('pending_review').notNull().default(false),

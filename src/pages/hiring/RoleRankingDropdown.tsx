@@ -8,7 +8,7 @@ function initials(first?: string, last?: string): string {
 
 export default function RoleRankingDropdown({ jdId }: { jdId: string }) {
   const [open, setOpen] = useState(false);
-  const [limit, setLimit] = useState(15);
+  const [limit, setLimit] = useState(25);
   const [showCriteria, setShowCriteria] = useState(false);
   const [criteriaDraft, setCriteriaDraft] = useState('');
   const { data, refetch, isFetching } = trpc.ranking.getForRole.useQuery(
@@ -44,7 +44,7 @@ export default function RoleRankingDropdown({ jdId }: { jdId: string }) {
           <Sparkles size={16} className="text-ls-primary" />
           Candidate ranking
           {open && total > 0 && (
-            <span className="text-xs text-blue-400 font-normal">top {Math.min(15, total)} of {total}</span>
+            <span className="text-xs text-blue-400 font-normal">top {Math.min(limit, total)} of {total}</span>
           )}
         </span>
         <span className="flex items-center gap-2">

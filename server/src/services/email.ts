@@ -1100,6 +1100,11 @@ export async function emailInterviewRoundPrep(data: {
   briefing: {
     rounds: { roundName: string; interviewerName: string | null; writtenRead: string }[];
     followUps: { roundName: string; type: 'avoided' | 'half_answered' | 'suggested'; text: string }[];
+    talkingPoints?: {
+      whoWeAre: string;
+      values: { name: string; pillar: string; description: string | null }[];
+      departments: { name: string; size: string }[];
+    };
   };
 }) {
   const label: Record<string, string> = {
@@ -1132,6 +1137,25 @@ export async function emailInterviewRoundPrep(data: {
        `</ul>`
     : '';
 
+  const tp = data.briefing.talkingPoints;
+  const talkingPointsBlock = tp
+    ? `<h2 style="font-size:16px;font-weight:600;margin:24px 0 8px;">Company talking points</h2>` +
+      `<p style="font-size:12px;color:#888;margin:0 0 8px;">Standard points to cover with every candidate.</p>` +
+      (tp.whoWeAre
+        ? `<div style="font-size:13px;font-weight:600;margin:0 0 2px;">Who we are</div><p style="font-size:13px;line-height:1.6;margin:0 0 12px;color:#444;">${esc(tp.whoWeAre)}</p>`
+        : '') +
+      (tp.values.length
+        ? `<div style="font-size:13px;font-weight:600;margin:0 0 2px;">Our values</div><ul style="font-size:13px;line-height:1.6;margin:0 0 12px;padding-left:20px;color:#444;">` +
+          tp.values.map((v) => `<li><strong>${esc(v.name)}</strong>${v.pillar ? ` <span style="color:#888;">(${esc(v.pillar)})</span>` : ''}${v.description ? `: ${esc(v.description)}` : ''}</li>`).join('') +
+          `</ul>`
+        : '') +
+      (tp.departments.length
+        ? `<div style="font-size:13px;font-weight:600;margin:0 0 2px;">Departments</div><ul style="font-size:13px;line-height:1.6;margin:0 0 12px;padding-left:20px;color:#444;">` +
+          tp.departments.map((d) => `<li>${esc(d.name)}${d.size ? `: ${esc(d.size)}` : ''}</li>`).join('') +
+          `</ul>`
+        : '')
+    : '';
+
   const guard = data.briefing.rounds.length
     ? p(`<span style="font-size:12px;color:#888;">Earlier scores are hidden so each round stays independent, and coaching notes written for the earlier interviewers aren't shared — this is the read on the candidate only.</span>`)
     : '';
@@ -1144,6 +1168,7 @@ export async function emailInterviewRoundPrep(data: {
       ${h1(`Interview prep — ${esc(data.roundName)}`)}
       ${p(`Hi ${data.interviewerName ? esc(data.interviewerName) : 'there'},`)}
       ${p(`You're up for the <strong>${esc(data.roundName)}</strong> interview with <strong>${esc(data.firstName)} ${esc(data.lastName)}</strong>${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}. Here's what earlier rounds found and what to dig into.`)}
+      ${talkingPointsBlock}
       ${questionsBlock}
       ${contextBlock}
       ${followBlock}

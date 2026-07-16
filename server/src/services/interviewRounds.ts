@@ -16,6 +16,7 @@ import { db } from '../db.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
 import { candidates, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { interviewPlan } from '../db/schema/intake.js';
+import { getCompanyTalkingPoints, type CompanyTalkingPoints } from './companyTalkingPoints.js';
 import {
   analyzeInterviewTranscript,
   synthesizeInterviewTranscript,
@@ -33,6 +34,8 @@ export interface BriefingFollowUp extends InterviewFollowUp {
 export interface PriorRoundsBriefing {
   rounds: BriefingRound[];
   followUps: BriefingFollowUp[];
+  // Standard company talking points shown to every interviewer, every round.
+  talkingPoints: CompanyTalkingPoints;
 }
 
 /** Create per-round records from the requisition's interview plan.
@@ -207,5 +210,6 @@ export async function buildPriorRoundsBriefing(
       if (f && f.text) followUps.push({ roundName: r.roundName, type: f.type, text: f.text });
     }
   }
-  return { rounds, followUps };
+  const talkingPoints = await getCompanyTalkingPoints(db);
+  return { rounds, followUps, talkingPoints };
 }

@@ -23,8 +23,9 @@ import { rankCandidateFit } from './ai.js';
 import { buildSeededResume } from './postAssessmentReview.js';
 
 const CONCURRENCY = 5;
-// Stages NOT ranked: pre-cutoff (Applied, Assessment) so ranking only covers
-// candidates who cleared the objective CCAT gate, plus the terminal states.
+// Stages NOT ranked: everything up to and including Values Review (ranking runs
+// only AFTER resume + values screening completes), plus the terminal states.
+// Ranking covers the post-screening shortlist — Phone Screen onward.
 const DROPPED_STAGES = NOT_RANKABLE_STAGES;
 
 function textOr(v: any, fallback = ''): string {

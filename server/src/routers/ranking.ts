@@ -1,6 +1,6 @@
 // ============================================================
 // RANKING ROUTER — advisory candidate ranking for a role.
-// getForRole returns the live top 15 (best first, in-pool only).
+// getForRole returns the live top 25 (best first, in-pool only).
 // rankRole rebuilds the whole ranking on demand. No stage changes here.
 // ============================================================
 import { z } from 'zod';
@@ -51,7 +51,7 @@ export const rankingRouter = router({
         .innerJoin(candidates, eq(candidates.id, candidateRankings.candidateId))
         .where(inPool)
         .orderBy(desc(candidateRankings.sortScore))
-        .limit(input.limit ?? 15);
+        .limit(input.limit ?? 25);
 
       const [{ n }] = (await ctx.db
         .select({ n: sql<number>`count(*)::int` })

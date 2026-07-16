@@ -22,10 +22,14 @@ export const CANDIDATE_STAGES = [
   'Applied',
   'Assessment',
   'Values Review',
-  'Work Sample',
   'Phone Screen',
   'Interview Scheduled',
   'Interviewed',
+  // Work Sample now sits AFTER the team interview and is OPTIONAL per role
+  // (see OPTIONAL_STAGES + jobDescriptions.workSampleRequired) — it is no longer
+  // an automated up-front narrowing step. Reference Check follows it.
+  'Work Sample',
+  'Reference Check',
   'Offered',
   'Hired',
   'Rejected',
@@ -44,12 +48,17 @@ export const CLOSED_STAGES: readonly string[] = ['Rejected', 'Not Selected'];
 export const ACTIVE_STAGES: readonly string[] = CANDIDATE_STAGES.filter((s) => !has(TERMINAL_STAGES, s));
 // Non-terminal pipeline including Hired — the funnel display set.
 export const PIPELINE_STAGES: readonly string[] = CANDIDATE_STAGES.filter((s) => !has(CLOSED_STAGES, s));
-// Mid-pipeline stages eligible for advisory ranking (past the cutoff, pre-offer).
-export const RANKABLE_STAGES: readonly string[] = ['Work Sample', 'Values Review', 'Phone Screen', 'Interview Scheduled', 'Interviewed'];
+// Ranking runs only AFTER resume + values screening (which happens in Values
+// Review). So the rankable pool is the post-screening shortlist — Phone Screen
+// onward, including the optional Work Sample and the Reference Check.
+export const RANKABLE_STAGES: readonly string[] = ['Phone Screen', 'Interview Scheduled', 'Interviewed', 'Work Sample', 'Reference Check'];
 // Everything NOT eligible for ranking (used by the ranking exclusion filters).
 export const NOT_RANKABLE_STAGES: readonly string[] = CANDIDATE_STAGES.filter((s) => !has(RANKABLE_STAGES, s));
 // Early stages where a failing work sample can auto-reject.
 export const AUTO_REJECT_STAGES: readonly string[] = ['Applied', 'Assessment', 'Work Sample'];
+// Stages that are optional per role — skipped in the advance flow unless the
+// role opts in. Work Sample is opt-in via jobDescriptions.workSampleRequired.
+export const OPTIONAL_STAGES: readonly string[] = ['Work Sample'];
 
 export function isTerminal(s: string): boolean { return has(TERMINAL_STAGES, s); }
 export function isActive(s: string): boolean { return has(ACTIVE_STAGES, s); }

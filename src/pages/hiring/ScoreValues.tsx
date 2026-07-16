@@ -34,6 +34,8 @@ export default function ScoreValues() {
   const [currentReviewId, setCurrentReviewId] = useState<string | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [capScores, setCapScores] = useState<Record<string, number>>({});
+  const [naValues, setNaValues] = useState<Record<string, boolean>>({});
+  const [naCaps, setNaCaps] = useState<Record<string, boolean>>({});
   const [capAiShown, setCapAiShown] = useState(false);
   const [capSuggest, setCapSuggest] = useState<Record<string, { score: number; rationale: string }>>({});
   const [capRecMode, setCapRecMode] = useState<'ai' | 'placeholder' | null>(null);
@@ -99,7 +101,7 @@ export default function ScoreValues() {
   const anyRecShown = aiShown || capAiShown;
   const applyRecommendations = async () => {
     if (aiShown || capAiShown) {
-      setScores({}); setAiShown(false);
+      setScores({}); setAiShown(false); setNaValues({}); setNaCaps({});
       setCapScores({}); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setCapAiShown(false);
       return;
     }
@@ -125,15 +127,15 @@ export default function ScoreValues() {
     const cid = params.get('id');
     const rid = params.get('round');
     if (cid) {
-      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setAiShown(false);
+      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setAiShown(false); setNaValues({}); setNaCaps({});
       setInterviewId(rid ?? ''); setBaseline(snap('', today(), rid ?? '', {}));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectCandidate = (id: string) => {
-    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setInterviewId(''); setAiShown(false); setBaseline(snap('', today(), '', {}));
+    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setInterviewId(''); setAiShown(false); setNaValues({}); setNaCaps({}); setBaseline(snap('', today(), '', {}));
   };
-  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setAiShown(false); setBaseline(snap('', today(), interviewId, {})); };
+  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setAiShown(false); setNaValues({}); setNaCaps({}); setBaseline(snap('', today(), interviewId, {})); };
   const loadReview = (r: any) => {
     setCurrentReviewId(r.id);
     setReviewerId(r.reviewerId ?? '');
@@ -144,7 +146,7 @@ export default function ScoreValues() {
     setScores(m);
     const cm: Record<string, number> = {};
     (r.capabilityScores ?? []).forEach((s: any) => { cm[s.capabilityItemId] = s.score; });
-    setCapScores(cm); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null);
+    setCapScores(cm); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setNaValues({}); setNaCaps({});
     setBaseline(snap(r.reviewerId ?? '', new Date(r.reviewedAt).toISOString().slice(0, 10), r.interviewId ?? '', m, cm));
   };
 
@@ -162,8 +164,26 @@ export default function ScoreValues() {
     return g;
   }, [values]);
 
-  const setScore = (valueId: string, score: number) => setScores((p) => ({ ...p, [valueId]: score }));
-  const setCapScore = (id: string, score: number) => setCapScores((p) => ({ ...p, [id]: score }));
+  const setScore = (valueId: string, score: number) => {
+    setScores((p) => ({ ...p, [valueId]: score }));
+    setNaValues((p) => { const n = { ...p }; delete n[valueId]; return n; });
+  };
+  const setCapScore = (id: string, score: number) => {
+    setCapScores((p) => ({ ...p, [id]: score }));
+    setNaCaps((p) => { const n = { ...p }; delete n[id]; return n; });
+  };
+  // "Not assessed": clears any numeric score so the item is excluded from every
+  // average, and flags it so the reviewer can see it was deliberately skipped.
+  const toggleNaValue = (valueId: string) => {
+    const turningOn = !naValues[valueId];
+    setNaValues((p) => { const n = { ...p }; if (turningOn) n[valueId] = true; else delete n[valueId]; return n; });
+    if (turningOn) setScores((p) => { const n = { ...p }; delete n[valueId]; return n; });
+  };
+  const toggleNaCap = (id: string) => {
+    const turningOn = !naCaps[id];
+    setNaCaps((p) => { const n = { ...p }; if (turningOn) n[id] = true; else delete n[id]; return n; });
+    if (turningOn) setCapScores((p) => { const n = { ...p }; delete n[id]; return n; });
+  };
   const toggleExpand = (id: string) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
 
   const pillarAvg = (pillar: string) => {
@@ -202,7 +222,7 @@ export default function ScoreValues() {
     <div className="max-w-3xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-ls-ink">Score Candidate on Values</h1>
-        <p className="text-ls-ink-3 text-sm mt-1">EPP pre-fills a suggested score for each value — the reviewer adjusts with interview judgment.</p>
+        <p className="text-ls-ink-3 text-sm mt-1">EPP pre-fills a suggested score for each value — the reviewer adjusts with interview judgment. Leave an item blank or mark it <b>N/A</b> (not assessed) and it won't count toward the average.</p>
       </div>
 
       <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5 mb-5">
@@ -350,6 +370,12 @@ export default function ScoreValues() {
                             </button>
                           );
                         })}
+                        <button onClick={() => toggleNaValue(v.id)} aria-pressed={naValues[v.id] === true} aria-label={`${v.name} not assessed`} title="Not assessed — excluded from the average"
+                          className={`h-8 px-2 rounded-lg border text-[11px] font-semibold flex items-center justify-center transition-colors ${
+                            naValues[v.id] ? 'bg-ls-ink-2 text-white border-transparent'
+                            : 'bg-white text-ls-ink-3 border-ls-line hover:border-ls-cyan'}`}>
+                          N/A
+                        </button>
                       </div>
                     </div>
                     {sug && (
@@ -430,6 +456,12 @@ export default function ScoreValues() {
                             </button>
                           );
                         })}
+                        <button onClick={() => toggleNaCap(it.id)} aria-pressed={naCaps[it.id] === true} aria-label={`${it.name} not assessed`} title="Not assessed — excluded from the average"
+                          className={`h-8 px-2 rounded-lg border text-[11px] font-semibold flex items-center justify-center transition-colors ${
+                            naCaps[it.id] ? 'bg-ls-ink-2 text-white border-transparent'
+                            : 'bg-white text-ls-ink-3 border-ls-line hover:border-ls-cyan'}`}>
+                          N/A
+                        </button>
                       </div>
                     </div>
                     {capAiShown && capSuggest[it.id] && (
