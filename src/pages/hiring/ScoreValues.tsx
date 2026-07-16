@@ -480,9 +480,30 @@ export default function ScoreValues() {
               {!briefingEditMode ? (
                 <>
                   <div className="text-sm font-semibold text-ls-ink mb-1">Scorecard submitted{rd?.roundName ? ` for ${rd.roundName}` : ''} ✓</div>
-                  <p className="text-[13px] text-ls-ink-2 mb-4">
-                    The briefing from this round — your read on the candidate plus any follow-ups — is what the next interviewer receives. Do you want to review or edit it before it goes on?
+                  <p className="text-[13px] text-ls-ink-2 mb-3">
+                    Here's exactly what carries forward to the next interviewer. Your scorecard scores stay private to this round — only the read + follow-ups below are passed along.
                   </p>
+                  {/* Preview of what actually gets sent to the next round */}
+                  <div className="rounded-lg border border-ls-line bg-ls-bg-2 p-3 mb-4 max-h-72 overflow-y-auto space-y-3">
+                    <div>
+                      <div className="text-[11px] font-semibold text-ls-ink-2 mb-1">Read on the candidate</div>
+                      {rd?.feedbackHr
+                        ? <p className="text-[12px] text-ls-ink whitespace-pre-wrap">{rd.feedbackHr}</p>
+                        : <p className="text-[12px] text-ls-ink-3 italic">Nothing written yet — the next interviewer won't receive a read unless you add one.</p>}
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold text-ls-ink-2 mb-1">Follow-ups for the next round</div>
+                      {(Array.isArray(rd?.followUps) && rd.followUps.length > 0)
+                        ? (
+                          <ul className="text-[12px] text-ls-ink list-disc pl-4 space-y-0.5">
+                            {rd.followUps.map((f: any, i: number) => (
+                              <li key={i}><strong>{(FOLLOW_TYPES.find((t) => t.value === f.type)?.label) ?? 'Follow up'}:</strong> {f.text}</li>
+                            ))}
+                          </ul>
+                        )
+                        : <p className="text-[12px] text-ls-ink-3 italic">No follow-ups queued for the next round.</p>}
+                    </div>
+                  </div>
                   <div className="flex gap-2 justify-end">
                     <button onClick={() => setBriefingPromptFor(null)}
                       className="px-4 py-2 text-sm text-ls-ink-2 hover:text-ls-ink">No, it looks good</button>
