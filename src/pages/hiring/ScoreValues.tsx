@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Check, Sparkles, ChevronDown, ChevronRight, Plus, Eye, EyeOff } from 'lucide-react';
+import { Check, Sparkles, ChevronDown, ChevronRight, Plus, Eye, EyeOff, X, Pencil } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import SearchSelect from '../../components/SearchSelect';
 import { suggestedValueScore, percentileToScore, bandLabel } from '../../lib/epp';
@@ -16,6 +16,11 @@ const TEACH: Record<string, { label: string; cls: string }> = {
   compound: { label: 'Compound', cls: 'bg-amber-50 text-amber-700' },
   learnable: { label: 'Learnable', cls: 'bg-emerald-50 text-emerald-700' },
 };
+const FOLLOW_TYPES: { value: 'avoided' | 'half_answered' | 'suggested'; label: string }[] = [
+  { value: 'avoided', label: 'Avoided' },
+  { value: 'half_answered', label: 'Half-answered' },
+  { value: 'suggested', label: 'Suggested' },
+];
 const today = () => new Date().toISOString().slice(0, 10);
 const snap = (rv: string, dt: string, iv: string, sc: Record<string, number>, cap: Record<string, number> = {}) =>
   JSON.stringify([rv, dt, iv,
@@ -38,6 +43,12 @@ export default function ScoreValues() {
   const [saved, setSaved] = useState(false);
   const [interviewId, setInterviewId] = useState('');
   const [baseline, setBaseline] = useState('');
+  // Post-submit briefing prompt: after a scorecard tied to a round is submitted,
+  // offer to edit the briefing (read + follow-ups) that carries to the next round.
+  const [briefingPromptFor, setBriefingPromptFor] = useState<string | null>(null); // interviewId
+  const [briefingEditMode, setBriefingEditMode] = useState(false);
+  const [bDraftRead, setBDraftRead] = useState('');
+  const [bDraftFus, setBDraftFus] = useState<any[]>([]);
   const loadedParamRef = useRef(false);
   const [params] = useSearchParams();
 
@@ -49,6 +60,10 @@ export default function ScoreValues() {
   const eppQuery = trpc.values.getCandidateEpp.useQuery({ candidateId }, { enabled: !!candidateId });
   const reviewsQuery = trpc.values.getCandidateReviews.useQuery({ candidateId }, { enabled: !!candidateId });
   const roundsQuery = trpc.interviews.list.useQuery({ candidateId }, { enabled: !!candidateId });
+  const updateBriefing = trpc.interviews.updateFeedback.useMutation({
+    onSuccess: () => { roundsQuery.refetch(); setBriefingPromptFor(null); setBriefingEditMode(false); },
+    onError: (err) => alert(err.message),
+  });
   const saveMutation = trpc.values.saveReview.useMutation({
     onSuccess: (r, variables: any) => {
       setSaved(true); setCurrentReviewId(r.reviewId);
@@ -58,6 +73,8 @@ export default function ScoreValues() {
       (variables?.capabilityScores ?? []).forEach((x: any) => { cs[x.capabilityItemId] = x.score; });
       setBaseline(snap(variables?.reviewerId ?? '', variables?.reviewedAt ?? '', variables?.interviewId ?? '', sc, cs));
       reviewsQuery.refetch(); setTimeout(() => setSaved(false), 2500);
+      // Scorecard is the last step of a round — offer to edit the briefing sent onward.
+      if (variables?.interviewId) { roundsQuery.refetch(); setBriefingEditMode(false); setBriefingPromptFor(variables.interviewId); }
     },
   });
 
@@ -448,6 +465,77 @@ export default function ScoreValues() {
           </div>
         </>
       )}
+
+      {/* Post-scorecard briefing prompt — offer to edit what carries to the next round. */}
+      {briefingPromptFor && (() => {
+        const rd: any = (roundsQuery.data ?? []).find((r: any) => r.id === briefingPromptFor);
+        const startEdit = () => {
+          setBDraftRead(rd?.feedbackHr ?? '');
+          setBDraftFus((Array.isArray(rd?.followUps) ? rd.followUps : []).map((f: any) => ({ type: f.type, text: f.text })));
+          setBriefingEditMode(true);
+        };
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl border border-ls-line shadow-lg w-full max-w-lg p-5">
+              {!briefingEditMode ? (
+                <>
+                  <div className="text-sm font-semibold text-ls-ink mb-1">Scorecard submitted{rd?.roundName ? ` for ${rd.roundName}` : ''} ✓</div>
+                  <p className="text-[13px] text-ls-ink-2 mb-4">
+                    The briefing from this round — your read on the candidate plus any follow-ups — is what the next interviewer receives. Do you want to review or edit it before it goes on?
+                  </p>
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setBriefingPromptFor(null)}
+                      className="px-4 py-2 text-sm text-ls-ink-2 hover:text-ls-ink">No, it looks good</button>
+                    <button onClick={startEdit}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-ls-primary text-white rounded-lg text-sm font-semibold hover:bg-ls-primary-600">
+                      <Pencil size={13} /> Edit briefing
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-sm font-semibold text-ls-ink mb-3">Edit briefing to the next interviewer{rd?.roundName ? ` · ${rd.roundName}` : ''}</div>
+                  <div className="mb-3">
+                    <div className="text-[11px] font-semibold text-ls-ink-2 mb-1">Read on the candidate</div>
+                    <textarea value={bDraftRead} onChange={(e) => setBDraftRead(e.target.value)} rows={4}
+                      placeholder="What the next interviewer should know about this candidate…"
+                      className="w-full px-3 py-2 border border-ls-line rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-ls-primary-50" />
+                  </div>
+                  <div className="mb-4">
+                    <div className="text-[11px] font-semibold text-ls-ink-2 mb-1">Follow-ups for the next round</div>
+                    <div className="space-y-1.5">
+                      {bDraftFus.map((f: any, i: number) => (
+                        <div key={i} className="flex items-center gap-1.5">
+                          <select value={f.type} onChange={(e) => setBDraftFus((arr) => arr.map((x, j) => j === i ? { ...x, type: e.target.value } : x))}
+                            className="px-1.5 py-1 border border-ls-line rounded text-[11px] shrink-0">
+                            {FOLLOW_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                          </select>
+                          <input value={f.text} onChange={(e) => setBDraftFus((arr) => arr.map((x, j) => j === i ? { ...x, text: e.target.value } : x))}
+                            placeholder="What the next round should dig into…"
+                            className="flex-1 px-2 py-1 border border-ls-line rounded text-[11px]" />
+                          <button type="button" onClick={() => setBDraftFus((arr) => arr.filter((_, j) => j !== i))}
+                            className="p-1 text-ls-ink-3 hover:text-red-600 shrink-0" title="Remove"><X size={13} /></button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setBDraftFus((arr) => [...arr, { type: 'suggested', text: '' }])}
+                        className="text-[11px] text-ls-ink-3 hover:text-ls-primary flex items-center gap-1"><Plus size={11} /> Add a follow-up</button>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => setBriefingPromptFor(null)}
+                      className="px-4 py-2 text-sm text-ls-ink-2 hover:text-ls-ink">Cancel</button>
+                    <button onClick={() => updateBriefing.mutate({ id: briefingPromptFor, feedbackHr: bDraftRead.trim() || null, followUps: bDraftFus.filter((f: any) => (f.text ?? '').trim()).map((f: any) => ({ type: f.type, text: f.text.trim() })) })}
+                      disabled={updateBriefing.isLoading}
+                      className="px-4 py-2 bg-ls-primary text-white rounded-lg text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50">
+                      {updateBriefing.isLoading ? 'Saving…' : 'Save briefing'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

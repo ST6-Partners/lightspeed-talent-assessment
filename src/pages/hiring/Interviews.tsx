@@ -247,17 +247,17 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
             )}
           </div>
 
-          {/* ===== Interview feedback dropdown (carries forward to the next round's briefing) ===== */}
-          {(round.feedbackHr || fus.length > 0) && (
+          {/* ===== Outgoing briefing — the read + follow-ups sent to the NEXT interviewer. Always editable, on every round. ===== */}
+          {(
             <div>
               <div className="flex items-center gap-1.5 w-full px-3 py-2.5 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg">
                 <button type="button" onClick={() => setFbOpen((v) => !v)} className="flex items-center justify-between flex-1 text-left">
-                  <span className="text-xs font-bold text-gray-800">Interview feedback{round.score != null ? ` · score ${round.score}/100` : ''}</span>
+                  <span className="text-xs font-bold text-gray-800">Briefing to the next interviewer{round.score != null ? ` · score ${round.score}/100` : ''}</span>
                   {fbOpen ? <ChevronDown size={14} className="text-gray-500 shrink-0" /> : <ChevronRight size={14} className="text-gray-500 shrink-0" />}
                 </button>
                 {!fbEdit && (
                   <button type="button" onClick={startEditFb}
-                    title="Edit what carries forward to the next interviewer"
+                    title="Edit the briefing that carries forward to the next interviewer"
                     className="p-1 text-gray-400 hover:text-ls-primary shrink-0"><Pencil size={13} /></button>
                 )}
               </div>
@@ -276,6 +276,9 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
                         {fus.map((f: any, i: number) => <li key={i}><strong>{FOLLOW_LABEL[f.type] ?? 'Follow up'}:</strong> {f.text}</li>)}
                       </ul>
                     </div>
+                  )}
+                  {!round.feedbackHr && fus.length === 0 && (
+                    <div className="text-[11px] text-gray-400">No briefing yet. Click the pencil to write the read + follow-ups that carry forward to the next interviewer.</div>
                   )}
                 </div>
               )}
