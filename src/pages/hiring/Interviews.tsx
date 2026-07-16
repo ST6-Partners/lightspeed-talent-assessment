@@ -345,27 +345,6 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
           </div>
         </div>
       )}
-
-      {/* Reject modal — reject a candidate mid-process (e.g. between rounds) */}
-      {rejectOpen && selected && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg border border-gray-200 p-5 w-96">
-            <div className="text-sm font-semibold text-gray-700 mb-3">Reject {selected.firstName} {selected.lastName}</div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Reason *</label>
-            <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
-              rows={3} placeholder="e.g. Did not pass the first-round interview…"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan mb-3" />
-            <div className="flex gap-2">
-              <button onClick={() => reject.mutate({ id: selected.id, reason: rejectReason })}
-                disabled={!rejectReason || reject.isLoading}
-                className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50">
-                {reject.isLoading ? 'Rejecting…' : 'Reject'}
-              </button>
-              <button onClick={() => { setRejectOpen(false); setRejectReason(''); }} className="px-4 py-2 text-gray-600 text-sm">Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
