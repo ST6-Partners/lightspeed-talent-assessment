@@ -20,6 +20,7 @@ export interface ResolvedWorkSample {
   brief: string | null;
   scoringGuideWork: string | null; // rubric — work quality (may be null until finalized)
   scoringGuideAi: string | null;   // rubric — AI skill (may be null until finalized)
+  deliveryMode: 'take_home' | 'live_walkthrough';
 }
 
 export async function resolveDeptWorkSample(
@@ -71,5 +72,6 @@ function compose(task: any): ResolvedWorkSample {
     brief: task.brief ?? null,
     scoringGuideWork: task.scoringGuideWork ?? null,
     scoringGuideAi: task.scoringGuideAi ?? null,
+    deliveryMode: (task.deliveryMode === 'live_walkthrough' ? 'live_walkthrough' : 'take_home'),
   };
 }

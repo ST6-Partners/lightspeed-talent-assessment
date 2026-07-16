@@ -17,6 +17,8 @@ import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { candidates, jobDescriptions } from '../db/schema/hiring.js';
+import { candidateInterviews } from '../db/schema/interviews.js';
+import { sql } from 'drizzle-orm';
 import { resolveDeptWorkSample } from '../services/workSampleResolver.js';
 import { emailInvitedToWorkSample } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
@@ -107,6 +109,31 @@ export const workSampleRouter = router({
         ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
         : null;
 
+      // Resolve the library task so we know the delivery mode.
+      const resolved = await resolveDeptWorkSample(ctx.db, candidate).catch(() => null);
+
+      // LIVE WALKTHROUGH: don't email a homework link — create a "Work Sample
+      // Walkthrough" interview round the candidate books like any other round.
+      if (resolved?.deliveryMode === 'live_walkthrough') {
+        const existing = await ctx.db.select().from(candidateInterviews)
+          .where(eq(candidateInterviews.candidateId, candidate.id));
+        let round = existing.find((r: any) => r.roundName === 'Work Sample Walkthrough');
+        if (!round) {
+          const maxRow = (await ctx.db.select({ m: sql<number>`coalesce(max(${candidateInterviews.sortOrder}), -1)` })
+            .from(candidateInterviews).where(eq(candidateInterviews.candidateId, candidate.id)))[0];
+          const [created] = await ctx.db.insert(candidateInterviews).values({
+            candidateId: candidate.id,
+            roundName: 'Work Sample Walkthrough',
+            sortOrder: (maxRow?.m ?? -1) + 1,
+          }).returning();
+          round = created;
+        }
+        await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'update');
+        trackActivity(ctx.db, ctx.user.id, 'send_work_sample', 'candidates', { candidateId: candidate.id, mode: 'live_walkthrough' }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
+        return { mode: 'live_walkthrough' as const, roundId: round.id, roundName: 'Work Sample Walkthrough' };
+      }
+
+      // TAKE-HOME (default): emailed submission link, auto-scored.
       const url = `${appBaseUrl()}/work-sample/${token}`;
 
       await emailInvitedToWorkSample({
@@ -114,14 +141,14 @@ export const workSampleRouter = router({
         lastName: candidate.lastName,
         email: candidate.email,
         jobTitle: jd?.jobTitle,
-        workSampleInstructions: jd?.workSampleInstructions ?? undefined,
+        workSampleInstructions: resolved?.instructions ?? jd?.workSampleInstructions ?? undefined,
         workSampleUrl: url,
       });
 
       await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'send_work_sample', 'candidates', { candidateId: candidate.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
+      trackActivity(ctx.db, ctx.user.id, 'send_work_sample', 'candidates', { candidateId: candidate.id, mode: 'take_home' }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
 
-      return { token, url };
+      return { mode: 'take_home' as const, token, url };
     }),
 
   // ── PROTECTED: recruiter records a manual review ───────────

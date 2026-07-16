@@ -81,7 +81,12 @@ export default function Candidates() {
     onSuccess: () => refetch(),
   });
   const sendWorkSampleMutation = trpc.workSample.send.useMutation({
-    onSuccess: () => refetch(),
+    onSuccess: (res: any) => {
+      refetch();
+      if (res?.mode === 'live_walkthrough') {
+        alert('This work sample is set to a live walkthrough. A "Work Sample Walkthrough" interview round has been created — schedule it and assign an interviewer in the Interviews tab.');
+      }
+    },
   });
   const workSampleReviewMutation = trpc.workSample.setReview.useMutation({
     onSuccess: () => refetch(),

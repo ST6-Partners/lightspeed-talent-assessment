@@ -23,6 +23,7 @@ const TaskInput = z.object({
   scoringGuideWork: z.string().optional(),
   scoringGuideAi: z.string().optional(),
   status: z.enum(STATUS).optional(),
+  deliveryMode: z.enum(['take_home', 'live_walkthrough']).optional(),
   version: z.number().int().positive().optional(),
   active: z.boolean().optional(),
 });

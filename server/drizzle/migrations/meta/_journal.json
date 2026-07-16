@@ -484,6 +484,13 @@
       "when": 1960000039000,
       "tag": "0068_job_work_sample_required",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1960000040000,
+      "tag": "0069_task_delivery_mode",
+      "breakpoints": true
     }
   ]
 }

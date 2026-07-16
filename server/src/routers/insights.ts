@@ -6,12 +6,13 @@
 // roles() lists the roles that have candidates, for the Metrics dropdown.
 // ============================================================
 
-import { sql, eq, and, count, isNotNull } from 'drizzle-orm';
+import { sql, eq, and, gte, lte, count, isNotNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { CANDIDATE_STAGES } from '../domain/stages.js';
 import { router, protectedProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { db } from '../db.js';
+import { getReportConfig, setReportConfig, type ReportCadence } from '../services/reportConfig.js';
 
 export const insightsRouter = router({
   // Roles that have at least one candidate — powers the Metrics per-role picker.
@@ -35,18 +36,49 @@ export const insightsRouter = router({
       .sort((a, b) => b.count - a.count || a.title.localeCompare(b.title));
   }),
 
+  // Scheduled-report recipient config (weekly / quarterly). Off by default.
+  getReportConfig: protectedProcedure
+    .input(z.object({ cadence: z.enum(['weekly', 'quarterly']) }))
+    .query(async ({ ctx, input }) => getReportConfig(ctx.db, input.cadence as ReportCadence)),
+
+  setReportConfig: protectedProcedure
+    .input(z.object({
+      cadence: z.enum(['weekly', 'quarterly']),
+      enabled: z.boolean(),
+      recipients: z.array(z.string()).default([]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await setReportConfig(ctx.db, input.cadence as ReportCadence, { enabled: input.enabled, recipients: input.recipients }, ctx.user.id);
+      return { ok: true };
+    }),
+
   // Full analytics payload — one call loads the entire Insights page.
   // Pass { jdId } to scope every metric to one role.
   summary: protectedProcedure
-    .input(z.object({ jdId: z.string().uuid().optional() }).optional())
+    .input(z.object({
+      jdId: z.string().uuid().optional(),
+      from: z.string().datetime().optional(),
+      to: z.string().datetime().optional(),
+    }).optional())
     .query(async ({ ctx, input }) => {
     const jdId = input?.jdId ?? null;
-    // Reusable candidate-scope predicate (role filter or all rows).
-    const scoped = (extra?: any) => (jdId ? (extra ? and(eq(candidates.jdId, jdId), extra) : eq(candidates.jdId, jdId)) : extra);
+    const from = input?.from ? new Date(input.from) : null;
+    const to = input?.to ? new Date(input.to) : null;
+    // Reusable candidate-scope predicate: role filter + optional applied-date window.
+    const scoped = (extra?: any) => {
+      const conds = [
+        jdId ? eq(candidates.jdId, jdId) : null,
+        from ? gte(candidates.createdAt, from) : null,
+        to ? lte(candidates.createdAt, to) : null,
+        extra ?? null,
+      ].filter(Boolean) as any[];
+      return conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
+    };
     // Raw-SQL scope fragments for the two hand-written queries below.
-    const candFilter = jdId ? sql`AND jd_id = ${jdId}` : sql``;
-    const historyFilter = jdId
-      ? sql`WHERE candidate_id IN (SELECT id FROM candidates WHERE jd_id = ${jdId})`
+    const candFilter = sql`${jdId ? sql` AND jd_id = ${jdId}` : sql``}${from ? sql` AND created_at >= ${from.toISOString()}` : sql``}${to ? sql` AND created_at <= ${to.toISOString()}` : sql``}`;
+    const historyCandScope = sql`${jdId ? sql` AND jd_id = ${jdId}` : sql``}${from ? sql` AND created_at >= ${from.toISOString()}` : sql``}${to ? sql` AND created_at <= ${to.toISOString()}` : sql``}`;
+    const historyFilter = (jdId || from || to)
+      ? sql`WHERE candidate_id IN (SELECT id FROM candidates WHERE 1=1${historyCandScope})`
       : sql``;
 
     // ── Stage funnel ──────────────────────────────────────
@@ -167,7 +199,7 @@ export const insightsRouter = router({
         TO_CHAR(DATE_TRUNC('week', created_at), 'MM/DD') AS week,
         COUNT(*) AS count
       FROM candidates
-      WHERE created_at >= NOW() - INTERVAL '12 weeks'
+      WHERE ${(from || to) ? sql`1=1` : sql`created_at >= NOW() - INTERVAL '12 weeks'`}
         ${candFilter}
       GROUP BY DATE_TRUNC('week', created_at)
       ORDER BY DATE_TRUNC('week', created_at)

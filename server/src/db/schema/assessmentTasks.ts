@@ -31,6 +31,10 @@ export const assessmentTasks = pgTable('assessment_tasks', {
   scoringGuideWork: text('scoring_guide_work'),
   scoringGuideAi: text('scoring_guide_ai'),
   status: taskStatusEnum('status').notNull().default('Draft'),
+  // How the candidate completes this task:
+  //  'take_home'       — emailed link, candidate submits a written answer/file (auto-scored)
+  //  'live_walkthrough' — a Zoom interview round where the candidate walks the panel through it (human-scored)
+  deliveryMode: varchar('delivery_mode', { length: 20 }).notNull().default('take_home'),
   version: integer('version').notNull().default(1),
   active: boolean('active').notNull().default(true),
   createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),

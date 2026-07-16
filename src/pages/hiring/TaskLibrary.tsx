@@ -16,11 +16,12 @@ type Form = {
   title: string; departmentId: string; difficulty: typeof DIFFICULTIES[number];
   timeLimitMin: string; brief: string; showYourWorkInstructions: string;
   scoringGuideWork: string; scoringGuideAi: string; status: typeof STATUSES[number]; version: string;
+  deliveryMode: 'take_home' | 'live_walkthrough';
 };
 const EMPTY: Form = {
   title: '', departmentId: '', difficulty: 'Mid', timeLimitMin: '',
   brief: '', showYourWorkInstructions: '', scoringGuideWork: '', scoringGuideAi: '',
-  status: 'Draft', version: '1',
+  status: 'Draft', version: '1', deliveryMode: 'take_home',
 };
 
 export default function TaskLibrary() {
@@ -57,6 +58,7 @@ export default function TaskLibrary() {
       brief: t.brief ?? '', showYourWorkInstructions: t.showYourWorkInstructions ?? '',
       scoringGuideWork: t.scoringGuideWork ?? '', scoringGuideAi: t.scoringGuideAi ?? '',
       status: t.status ?? 'Draft', version: t.version != null ? String(t.version) : '1',
+      deliveryMode: t.deliveryMode === 'live_walkthrough' ? 'live_walkthrough' : 'take_home',
     });
     setShowForm(true);
   };
@@ -74,6 +76,7 @@ export default function TaskLibrary() {
       scoringGuideAi: form.scoringGuideAi || undefined,
       status: form.status,
       version: form.version ? parseInt(form.version) : undefined,
+      deliveryMode: form.deliveryMode,
     };
     if (editingId) updateMutation.mutate({ id: editingId, ...payload });
     else createMutation.mutate(payload);
@@ -170,6 +173,20 @@ export default function TaskLibrary() {
                   placeholder="1"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
               </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">How the candidate completes this</label>
+              <select value={form.deliveryMode}
+                onChange={(e) => setForm({ ...form, deliveryMode: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan">
+                <option value="take_home">Take-home — candidate submits their work (auto-scored)</option>
+                <option value="live_walkthrough">Live walkthrough — candidate walks the panel through it on a Zoom round (human-scored)</option>
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1">
+                {form.deliveryMode === 'live_walkthrough'
+                  ? 'Sending this work sample creates a "Work Sample Walkthrough" interview round instead of emailing a homework link.'
+                  : 'Sending this work sample emails the candidate a link to submit their answer.'}
+              </p>
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-1">Candidate brief — what they see</label>

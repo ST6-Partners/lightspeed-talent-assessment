@@ -20,6 +20,9 @@ import { sendEmail, emailBookingReminderCandidate, emailBookingStalledHR } from 
 import { computeHiringAlerts, renderAlertDigest } from './hiring-alerts.js';
 import { approverEmail, emailApprovalReminder, emailInterviewReminderCandidate, emailInterviewReminderInterviewer, emailPostingOpenedExternal, HIRING_TEAM_INBOX } from './email.js';
 import { getPostingWindows, writeExternalOpenMarker } from './posting.js';
+import { emailMetricsReport } from './email.js';
+import { buildPeriodMetrics } from './reportMetrics.js';
+import { getReportConfig } from './reportConfig.js';
 
 function schedAppBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -429,6 +432,61 @@ async function runPostingWindowFlip(): Promise<JobResult> {
   return { affected: flipped, details: flipped ? `Flipped ${flipped} role(s) to external.` : 'No roles due to open externally.' };
 }
 
+// ── Job: scheduled weekly / quarterly metrics report ──────
+// Off by default (opt-in recipients + toggle in the Metrics tab). Sends a
+// headline hiring digest with change-vs-prior-period deltas.
+
+function fmtDate(d: Date): string {
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+async function runWeeklyReport(): Promise<JobResult> {
+  const cfg = await getReportConfig(db, 'weekly').catch(() => ({ enabled: false, recipients: [] as string[] }));
+  if (!cfg.enabled || cfg.recipients.length === 0) return { affected: 0, details: 'Weekly report disabled or no recipients.' };
+
+  const now = new Date();
+  const from = new Date(now); from.setDate(from.getDate() - 7);
+  const prevFrom = new Date(from); prevFrom.setDate(prevFrom.getDate() - 7);
+  const cur = await buildPeriodMetrics(db, from.toISOString(), now.toISOString());
+  const prev = await buildPeriodMetrics(db, prevFrom.toISOString(), from.toISOString());
+  const periodLabel = `Week of ${fmtDate(from)} – ${fmtDate(now)}`;
+  const appUrl = schedAppBaseUrl() ? `${schedAppBaseUrl()}/hiring/metrics` : undefined;
+
+  let sent = 0;
+  for (const to of cfg.recipients) {
+    try {
+      await emailMetricsReport({ to, subject: `Weekly hiring report — ${periodLabel}`, periodLabel, cadence: 'weekly', metrics: cur, compareLabel: 'vs prior week', compare: prev, appUrl });
+      sent++;
+    } catch (err) { console.error('[weekly-report] send failed for', to, err); }
+  }
+  return { affected: sent, details: `Weekly report sent to ${sent}/${cfg.recipients.length} recipient(s) — ${periodLabel}.` };
+}
+
+async function runQuarterlyReport(): Promise<JobResult> {
+  const cfg = await getReportConfig(db, 'quarterly').catch(() => ({ enabled: false, recipients: [] as string[] }));
+  if (!cfg.enabled || cfg.recipients.length === 0) return { affected: 0, details: 'Quarterly report disabled or no recipients.' };
+
+  const now = new Date();
+  const qStartMonth = Math.floor(now.getMonth() / 3) * 3;           // current quarter's first month
+  const thisQ = new Date(now.getFullYear(), qStartMonth, 1);
+  const prevQ = new Date(now.getFullYear(), qStartMonth - 3, 1);    // the quarter that just ended
+  const prevPrevQ = new Date(now.getFullYear(), qStartMonth - 6, 1);
+  const cur = await buildPeriodMetrics(db, prevQ.toISOString(), thisQ.toISOString());
+  const prev = await buildPeriodMetrics(db, prevPrevQ.toISOString(), prevQ.toISOString());
+  const q = Math.floor(prevQ.getMonth() / 3) + 1;
+  const periodLabel = `Q${q} ${prevQ.getFullYear()}`;
+  const appUrl = schedAppBaseUrl() ? `${schedAppBaseUrl()}/hiring/metrics` : undefined;
+
+  let sent = 0;
+  for (const to of cfg.recipients) {
+    try {
+      await emailMetricsReport({ to, subject: `Quarterly hiring report — ${periodLabel}`, periodLabel, cadence: 'quarterly', metrics: cur, compareLabel: 'vs prior quarter', compare: prev, appUrl });
+      sent++;
+    } catch (err) { console.error('[quarterly-report] send failed for', to, err); }
+  }
+  return { affected: sent, details: `Quarterly report sent to ${sent}/${cfg.recipients.length} recipient(s) — ${periodLabel}.` };
+}
+
 export function registerHiringJobs(): void {
   registerJob({
     name:           'rank-new-applicants',
@@ -502,5 +560,23 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '30 9 * * *',  // 9:30 AM daily
     handler:        runPostingWindowFlip,
+  });
+  registerJob({
+    name:           'weekly-metrics-report',
+    label:          'Weekly Metrics Report',
+    description:    'Email a weekly hiring-metrics digest (with vs-prior-week deltas) to the configured recipients. Off until enabled in the Metrics tab.',
+    color:          '#6366f1',
+    jobType:        'cron',
+    cronExpression: '0 8 * * 1',   // 8:00 AM every Monday
+    handler:        runWeeklyReport,
+  });
+  registerJob({
+    name:           'quarterly-metrics-report',
+    label:          'Quarterly Metrics Report',
+    description:    'Email a quarterly hiring-metrics summary (with vs-prior-quarter deltas) to the configured recipients on the first day of each quarter. Off until enabled in the Metrics tab.',
+    color:          '#7c3aed',
+    jobType:        'cron',
+    cronExpression: '0 8 1 1,4,7,10 *',  // 8:00 AM on the 1st of Jan/Apr/Jul/Oct
+    handler:        runQuarterlyReport,
   });
 }

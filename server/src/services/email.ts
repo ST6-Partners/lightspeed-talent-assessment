@@ -1211,3 +1211,51 @@ export async function emailScreeningCallInvite(data: { email: string; firstName:
     `),
   });
 }
+
+// ── Scheduled metrics report (weekly / quarterly) ──────────
+export async function emailMetricsReport(data: {
+  to: string;
+  subject: string;
+  periodLabel: string;          // e.g. "Week of Jul 14–20, 2026" or "Q3 2026"
+  cadence: 'weekly' | 'quarterly';
+  metrics: { applied: number; advanced: number; interviewsScheduled: number; offered: number; hired: number; rejected: number; openReqs: number };
+  compareLabel?: string;        // e.g. "vs prior week"
+  compare?: { applied: number; advanced: number; interviewsScheduled: number; offered: number; hired: number; rejected: number; openReqs: number };
+  appUrl?: string;
+}) {
+  const m = data.metrics;
+  const delta = (cur: number, prev?: number) => {
+    if (prev == null) return '';
+    const d = cur - prev;
+    const color = d > 0 ? '#059669' : d < 0 ? '#dc2626' : '#888';
+    const sign = d > 0 ? '+' : '';
+    return `<span style="font-size:12px;color:${color};margin-left:6px;">${sign}${d} ${esc(data.compareLabel ?? '')}</span>`;
+  };
+  const row = (label: string, cur: number, prev?: number) =>
+    `<tr>
+       <td style="padding:8px 0;border-bottom:1px solid #eee;font-size:14px;color:#444;">${esc(label)}</td>
+       <td style="padding:8px 0;border-bottom:1px solid #eee;font-size:16px;font-weight:600;text-align:right;color:#1a1a1a;">${cur}${delta(cur, prev)}</td>
+     </tr>`;
+  const c = data.compare;
+  const body = `
+    ${h1(`Hiring report · ${esc(data.periodLabel)}`)}
+    ${p(`Here's your ${data.cadence} hiring snapshot.`)}
+    <table style="width:100%;border-collapse:collapse;margin:8px 0 24px;">
+      ${row('New applicants', m.applied, c?.applied)}
+      ${row('Advanced a stage', m.advanced, c?.advanced)}
+      ${row('Interviews scheduled', m.interviewsScheduled, c?.interviewsScheduled)}
+      ${row('Offers extended', m.offered, c?.offered)}
+      ${row('Hires', m.hired, c?.hired)}
+      ${row('Rejected', m.rejected, c?.rejected)}
+      ${row('Open roles (now)', m.openReqs)}
+    </table>
+    ${data.appUrl ? button('Open the full metrics dashboard', data.appUrl) : ''}
+    ${p(`<span style="font-size:12px;color:#888;">You're receiving this because you're on the ${data.cadence} hiring-report list. Ask HR to update recipients in the Metrics tab.</span>`)}
+  `;
+  await sendEmail({
+    to: data.to,
+    subject: data.subject,
+    templateId: `metrics_report_${data.cadence}`,
+    html: wrap(body),
+  });
+}
