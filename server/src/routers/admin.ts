@@ -10,6 +10,7 @@ import { appSettings } from '../db/schema/core.js';
 import { feedback } from '../db/schema/feedback.js';
 import { notifications } from '../db/schema/notifications.js';
 import { requireAdmin, requireSysadmin } from '../services/permissions.js';
+import { getAlertPrefs, setAlertPrefs, ALERT_TEMPLATES } from '../services/alertPrefs.js';
 
 export const adminRouter = router({
   // App Settings CRUD
@@ -41,6 +42,22 @@ export const adminRouter = router({
           .returning();
         return setting;
       }
+    }),
+
+  // Email alert on/off switches (which automated alert emails send).
+  listAlertPrefs: protectedProcedure
+    .use(requireAdmin)
+    .query(async ({ ctx }) => {
+      const prefs = await getAlertPrefs(ctx.db);
+      return { templates: ALERT_TEMPLATES, prefs };
+    }),
+
+  setAlertPrefs: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ prefs: z.record(z.string(), z.boolean()) }))
+    .mutation(async ({ ctx, input }) => {
+      await setAlertPrefs(ctx.db, input.prefs, ctx.user.id);
+      return { ok: true };
     }),
 
   // Feedback triage

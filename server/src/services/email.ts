@@ -80,6 +80,20 @@ function buildSendGridBody(payload: EmailPayload) {
  * admin test form) can tell the user whether it really went out or was logged.
  */
 export async function sendEmailOrThrow(payload: EmailPayload): Promise<{ sandbox: boolean }> {
+  // Alert on/off gate — suppress a toggleable alert email when it's been turned
+  // off in Settings. Dynamic import + fail-open so a DB hiccup never blocks mail.
+  try {
+    const { isAlertTemplate, isAlertEnabled } = await import('./alertPrefs.js');
+    if (isAlertTemplate(payload.templateId)) {
+      const { db } = await import('../db.js');
+      if (!(await isAlertEnabled(db, payload.templateId))) {
+        console.log(`[EMAIL SUPPRESSED] ${payload.templateId} — alert turned off in Settings.`);
+        return { sandbox: true };
+      }
+    }
+  } catch (err) {
+    console.warn('[EMAIL] alert-pref check failed (sending anyway):', err);
+  }
   if (!isEmailConfigured()) {
     console.log(`[EMAIL SANDBOX] Template: ${payload.templateId} | To: ${payload.to} | Subject: ${payload.subject}`);
     return { sandbox: true };
@@ -1257,5 +1271,30 @@ export async function emailMetricsReport(data: {
     subject: data.subject,
     templateId: `metrics_report_${data.cadence}`,
     html: wrap(body),
+  });
+}
+
+// ── Scorecard reminder (hourly until the interviewer fills it) ──
+export async function emailScorecardReminder(data: {
+  to: string;
+  interviewerName?: string | null;
+  firstName: string;
+  lastName: string;
+  jobTitle?: string;
+  roundName: string;
+  scorecardUrl: string;
+  hoursWaiting: number;
+}) {
+  const who = data.interviewerName ? esc(data.interviewerName.split(' ')[0]) : 'there';
+  await sendEmail({
+    to: data.to,
+    subject: `Reminder: score ${esc(data.firstName)} ${esc(data.lastName)} — ${esc(data.roundName)}`,
+    templateId: 'scorecard_reminder',
+    html: wrap(`
+      ${h1('Your scorecard is still open')}
+      ${p(`Hi ${who}, it's been about ${data.hoursWaiting} hour${data.hoursWaiting === 1 ? '' : 's'} since your ${esc(data.roundName)} with ${esc(data.firstName)} ${esc(data.lastName)}${data.jobTitle ? ` for ${esc(data.jobTitle)}` : ''}. Please fill out the scorecard while it's fresh — we'll keep nudging hourly until it's in.`)}
+      ${button('Fill out the scorecard', data.scorecardUrl)}
+      ${p(`<span style="font-size:12px;color:#888;">If the button doesn't work, paste this link: ${data.scorecardUrl}</span>`)}
+    `),
   });
 }

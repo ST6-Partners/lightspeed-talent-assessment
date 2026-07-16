@@ -23,6 +23,9 @@ import { getPostingWindows, writeExternalOpenMarker } from './posting.js';
 import { emailMetricsReport } from './email.js';
 import { buildPeriodMetrics } from './reportMetrics.js';
 import { getReportConfig } from './reportConfig.js';
+import { emailScorecardReminder } from './email.js';
+import { candidateInterviews } from '../db/schema/interviews.js';
+import { valueReviews } from '../db/schema/values.js';
 
 function schedAppBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -487,6 +490,62 @@ async function runQuarterlyReport(): Promise<JobResult> {
   return { affected: sent, details: `Quarterly report sent to ${sent}/${cfg.recipients.length} recipient(s) — ${periodLabel}.` };
 }
 
+// ── Job: scorecard reminder ────────────────────────────────
+// After an interview round has happened, nudge the interviewer hourly until
+// they submit the scorecard (a value_reviews row tied to that round). Stops
+// automatically once filled, once the candidate is terminal, or after 14 days.
+const SCORECARD_TERMINAL = ['Rejected', 'Hired', 'Not Selected'];
+const SCORECARD_FIRST_NUDGE_MS = 45 * 60 * 1000; // wait ~45 min before the first nudge
+const SCORECARD_MAX_AGE_MS = 14 * 24 * 3600 * 1000;
+
+async function runScorecardReminder(): Promise<JobResult> {
+  const now = Date.now();
+  const rounds = await db.select().from(candidateInterviews);
+  let sent = 0;
+
+  for (const r of rounds as any[]) {
+    if (!r.interviewerEmail) continue;
+    const scheduled = r.scheduledAt ? new Date(r.scheduledAt).getTime() : null;
+    const happened = r.status === 'completed' || (scheduled != null && scheduled <= now);
+    if (!happened) continue;
+
+    // Reference time the interview took place (best available).
+    const ref = scheduled ?? (r.updatedAt ? new Date(r.updatedAt).getTime() : (r.createdAt ? new Date(r.createdAt).getTime() : now));
+    const waited = now - ref;
+    if (waited < SCORECARD_FIRST_NUDGE_MS) continue; // too soon
+    if (waited > SCORECARD_MAX_AGE_MS) continue;      // give up nagging on ancient rounds
+
+    // Already scored? (a value_reviews row tied to this round)
+    const review = (await db.select().from(valueReviews).where(eq(valueReviews.interviewId, r.id)).limit(1))[0];
+    if (review) continue;
+
+    const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, r.candidateId) });
+    if (!candidate || SCORECARD_TERMINAL.includes(candidate.currentStage as string)) continue;
+
+    const jd = candidate.jdId
+      ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+      : null;
+    const base = schedAppBaseUrl();
+    const scorecardUrl = `${base}/hiring/scorecards?id=${candidate.id}&round=${r.id}`;
+    const hoursWaiting = Math.max(1, Math.floor(waited / 3_600_000));
+
+    try {
+      await emailScorecardReminder({
+        to: r.interviewerEmail,
+        interviewerName: r.interviewerName,
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        jobTitle: jd?.jobTitle ?? undefined,
+        roundName: r.roundName,
+        scorecardUrl,
+        hoursWaiting,
+      });
+      sent++;
+    } catch (err) { console.error('[scorecard-reminder] send failed for round', r.id, err); }
+  }
+  return { affected: sent, details: sent ? `Nudged ${sent} interviewer(s) with an open scorecard.` : 'No open scorecards needing a nudge.' };
+}
+
 export function registerHiringJobs(): void {
   registerJob({
     name:           'rank-new-applicants',
@@ -578,5 +637,14 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '0 8 1 1,4,7,10 *',  // 8:00 AM on the 1st of Jan/Apr/Jul/Oct
     handler:        runQuarterlyReport,
+  });
+  registerJob({
+    name:           'scorecard-reminder',
+    label:          'Scorecard Reminder',
+    description:    'Every hour, nudge interviewers who have not yet filled out a scorecard for a completed interview round. Stops once the scorecard is in.',
+    color:          '#0d9488',
+    jobType:        'cron',
+    cronExpression: '0 * * * *',   // top of every hour
+    handler:        runScorecardReminder,
   });
 }

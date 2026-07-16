@@ -94,6 +94,7 @@ const ANALYTICS_TABS = [
 
 const CONFIG_TABS = [
   { id: 'users', label: 'Users' },
+  { id: 'emailalerts', label: 'Email Alerts' },
   { id: 'archived', label: 'Archived Items' },
 ];
 
@@ -205,6 +206,51 @@ function TabRow({ label, tabs, activeSection, onSelect }: TabRowProps) {
   );
 }
 
+function EmailAlerts() {
+  const utils = trpc.useContext();
+  const { data, isLoading } = trpc.admin.listAlertPrefs.useQuery();
+  const save = trpc.admin.setAlertPrefs.useMutation({ onSuccess: () => { setDraft(null); utils.admin.listAlertPrefs.invalidate(); } });
+  const [draft, setDraft] = useState<Record<string, boolean> | null>(null);
+  const prefs = draft ?? data?.prefs ?? {};
+  const templates = data?.templates ?? [];
+
+  if (isLoading) return <div style={{ padding: 32, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Loading…</div>;
+
+  const groups = Array.from(new Set(templates.map((t: any) => t.group)));
+  const toggle = (id: string) => setDraft({ ...prefs, [id]: !(prefs[id] !== false) });
+
+  return (
+    <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb', padding: 20, maxWidth: 640 }}>
+      <div style={{ fontSize: 14, color: '#6b7280', marginBottom: 16 }}>
+        Turn automated alert emails on or off. Candidate-facing emails (application received, offer, rejection) are always on and not listed here.
+      </div>
+      {groups.map((g) => (
+        <div key={g as string} style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' as const, marginBottom: 6 }}>{g as string}</div>
+          {templates.filter((t: any) => t.group === g).map((t: any) => {
+            const on = prefs[t.id] !== false;
+            return (
+              <label key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}>
+                <span style={{ fontSize: 14, color: '#374151' }}>{t.label}</span>
+                <input type="checkbox" checked={on} onChange={() => toggle(t.id)} />
+              </label>
+            );
+          })}
+        </div>
+      ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+        <button
+          onClick={() => save.mutate({ prefs })}
+          disabled={save.isLoading || !draft}
+          style={{ padding: '8px 18px', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: draft ? 'pointer' : 'default', opacity: draft ? 1 : 0.5 }}>
+          {save.isLoading ? 'Saving…' : 'Save'}
+        </button>
+        {save.isSuccess && !draft && <span style={{ fontSize: 13, color: '#059669' }}>Saved</span>}
+      </div>
+    </div>
+  );
+}
+
 // ── Main AdminSettings page ──────────────────────────────────
 export default function AdminSettings() {
   const [activeSection, setActiveSection] = useState('gettingstarted');
@@ -253,6 +299,7 @@ export default function AdminSettings() {
         {activeSection === 'chatlogs' && showAnalytics && <ChatLogs />}
         {activeSection === 'satisfaction' && showAnalytics && <SatisfactionDashboard />}
         {activeSection === 'users' && showConfig && <UserManagement />}
+        {activeSection === 'emailalerts' && showConfig && <EmailAlerts />}
         {activeSection === 'archived' && showConfig && <ArchivedItems />}
         {activeSection === 'prompts' && showSystem && <PromptAdmin />}
         {activeSection === 'activeusers' && showSystem && <ActiveUsers />}
