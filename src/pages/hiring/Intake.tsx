@@ -383,14 +383,26 @@ export default function Intake() {
               </div>
               {(form.reasonType === 'replacement_diff' || form.reasonType === 'termination_diff') && (
                 <div>
-                  <label className={lbl}>How the role should differ (optional)</label>
-                  <input type="text" value={form.roleChangeNote} onChange={(e) => setForm({ ...form, roleChangeNote: e.target.value })} placeholder="e.g. was senior, now hiring junior" className={inp} />
+                  <SharpenField
+                    label="How the role should differ (optional)"
+                    value={form.roleChangeNote}
+                    onChange={(v) => setForm({ ...form, roleChangeNote: v })}
+                    rows={2}
+                    placeholder="e.g. was senior, now hiring junior"
+                    roleContext={form.department || 'unspecified role'}
+                  />
                 </div>
               )}
               {form.reasonType === 'new_headcount' && (
                 <div>
-                  <label className={lbl}>Describe the new role</label>
-                  <textarea rows={3} value={form.roleChangeNote} onChange={(e) => setForm({ ...form, roleChangeNote: e.target.value })} placeholder="Describe the new role: what the person will do, focus areas, key skills. The full JD, work sample, and interview questions are generated from this." className={inp} />
+                  <SharpenField
+                    label="Describe the new role"
+                    value={form.roleChangeNote}
+                    onChange={(v) => setForm({ ...form, roleChangeNote: v })}
+                    rows={3}
+                    placeholder="Describe the new role: what the person will do, focus areas, key skills. The full JD, work sample, and interview questions are generated from this."
+                    roleContext={form.department || 'unspecified role'}
+                  />
                 </div>
               )}
             </div>
