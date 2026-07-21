@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { desc, eq } from 'drizzle-orm';
 import { router, protectedProcedure } from '../trpc.js';
 import { requireAdmin } from '../services/permissions.js';
-import { inboundEmails } from '../db/schema/email.js';
+import { inboundEmails, sentEmails } from '../db/schema/email.js';
 import { sendEmailOrThrow, emailConfig } from '../services/email.js';
 
 function escapeHtml(s: string): string {
@@ -73,6 +73,20 @@ export const emailTestRouter = router({
     .use(requireAdmin)
     .mutation(async ({ ctx }) => {
       await ctx.db.delete(inboundEmails);
+      return { ok: true as const };
+    }),
+
+  // Outbox — every email the app dispatched (captured with full body).
+  listOutbox: protectedProcedure
+    .use(requireAdmin)
+    .query(async ({ ctx }) => {
+      return ctx.db.select().from(sentEmails).orderBy(desc(sentEmails.createdAt)).limit(300);
+    }),
+
+  clearOutbox: protectedProcedure
+    .use(requireAdmin)
+    .mutation(async ({ ctx }) => {
+      await ctx.db.delete(sentEmails);
       return { ok: true as const };
     }),
 

@@ -61,6 +61,7 @@ export { decisionLog } from './decisions.js';
 
 // Email (1 table) — inbound/test inbox
 export { inboundEmails } from './email.js';
+export { sentEmails } from './email.js';
 
 // Offer approvals (1 table) - hiring-manager sign-off gate before candidate send
 export { offerApprovals } from './offerApprovals.js';

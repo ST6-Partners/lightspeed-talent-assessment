@@ -14,3 +14,18 @@ export const inboundEmails = pgTable('inbound_emails', {
   raw: jsonb('raw'),
   receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Outbound email capture ("test inbox" for sent mail). Every email the app
+// dispatches is recorded here with its full rendered body so the whole
+// automated-email set can be reviewed without a live SendGrid key. No FK to
+// candidates — rows persist even after a candidate is deleted.
+export const sentEmails = pgTable('sent_emails', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  recipient: varchar('recipient', { length: 600 }).notNull(),
+  subject: varchar('subject', { length: 500 }),
+  template: varchar('template', { length: 120 }),
+  body: text('body'),
+  status: varchar('status', { length: 20 }).notNull().default('sandbox'), // sandbox | sent | failed | suppressed
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

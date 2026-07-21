@@ -37,6 +37,10 @@ function fmt(ts: string | Date | null) {
 export default function EmailTestPanel() {
   const cfg = trpc.emailTest.config.useQuery();
   const inbox = trpc.emailTest.listInbound.useQuery(undefined, { refetchInterval: 5000 });
+  const outbox = trpc.emailTest.listOutbox.useQuery(undefined, { refetchInterval: 5000 });
+  const clearOutbox = trpc.emailTest.clearOutbox.useMutation({ onSuccess: () => outbox.refetch() });
+  const [openOut, setOpenOut] = useState<string | null>(null);
+  const [outFilter, setOutFilter] = useState<string | null>(null);
   const [inboxFilter, setInboxFilter] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const toAddrs: string[] = Array.from(new Set((inbox.data ?? []).map((m: any) => m.toEmail).filter(Boolean))) as string[];
@@ -199,6 +203,82 @@ export default function EmailTestPanel() {
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* ── OUTBOX (emails the app sent) ── */}
+      <div style={{ ...c.card, marginTop: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <div>
+            <p style={c.h}>Outbox — emails the app sent</p>
+            <p style={c.sub}>{outbox.data?.length ? `${outbox.data.length} captured · auto-refreshing. Every automated email is recorded here with its full content (test mode = not actually delivered).` : 'No emails captured yet. Move a candidate through the pipeline or submit an intake to generate emails.'}</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={c.btnGhost} onClick={() => outbox.refetch()}>Refresh</button>
+            <button style={c.btnGhost} onClick={() => clearOutbox.mutate()}>Clear</button>
+          </div>
+        </div>
+        {(() => {
+          const templates: string[] = Array.from(new Set((outbox.data ?? []).map((m: any) => m.template).filter(Boolean))) as string[];
+          const rows = (outbox.data ?? []).filter((m: any) => !outFilter || m.template === outFilter);
+          return (
+          <>
+          {templates.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '4px 0 12px' }}>
+              <button onClick={() => setOutFilter(null)} style={{ ...c.btnGhost, fontWeight: outFilter === null ? 700 : 400 }}>All ({outbox.data?.length ?? 0})</button>
+              {templates.map((t) => (
+                <button key={t} onClick={() => setOutFilter(t)} style={{ ...c.btnGhost, fontWeight: outFilter === t ? 700 : 400 }}>{t}</button>
+              ))}
+            </div>
+          )}
+          {rows.length > 0 && (
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+              <colgroup><col style={{ width: 110 }} /><col style={{ width: 200 }} /><col style={{ width: 170 }} /><col /><col style={{ width: 90 }} /><col style={{ width: 70 }} /></colgroup>
+              <thead>
+                <tr>
+                  <th style={c.th}>When</th>
+                  <th style={c.th}>To</th>
+                  <th style={c.th}>Template</th>
+                  <th style={c.th}>Subject</th>
+                  <th style={c.th}>Status</th>
+                  <th style={c.th}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((m: any) => {
+                  const isOpen = openOut === m.id;
+                  const isHtml = (m.body || '').trim().startsWith('<');
+                  return (
+                  <Fragment key={m.id}>
+                    <tr onClick={() => setOpenOut(isOpen ? null : m.id)} style={{ cursor: 'pointer', background: isOpen ? '#f3f4f6' : undefined }}>
+                      <td style={c.td}>{fmt(m.createdAt)}</td>
+                      <td style={c.tdEllipsis} title={m.recipient}>{m.recipient}</td>
+                      <td style={c.td}><span style={c.code}>{m.template}</span></td>
+                      <td style={{ ...c.tdEllipsis, color: '#1d4ed8', fontWeight: 600 }} title={m.subject || ''}>{m.subject}</td>
+                      <td style={c.td}><span style={{ ...c.code, color: m.status === 'sent' ? '#065f46' : m.status === 'failed' ? '#b91c1c' : '#92400e' }}>{m.status}</span></td>
+                      <td style={c.td} onClick={(e) => e.stopPropagation()}>
+                        <button style={c.btnGhost} onClick={() => setOpenOut(isOpen ? null : m.id)}>{isOpen ? 'Hide' : 'View'}</button>
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '12px 16px', background: '#f9fafb', borderBottom: '1px solid #eee' }}>
+                          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>To: {m.recipient} · Template: {m.template} · Status: {m.status}{m.error ? ` · ${m.error}` : ''}</div>
+                          <div style={{ fontWeight: 700, marginBottom: 8, color: '#111' }}>{m.subject}</div>
+                          {isHtml
+                            ? <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, maxHeight: 500, overflow: 'auto' }} dangerouslySetInnerHTML={{ __html: m.body }} />
+                            : <div style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: '#374151', lineHeight: 1.6 }}>{m.body || '(no body)'}</div>}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+          </>
+          );
+        })()}
       </div>
     </div>
   );

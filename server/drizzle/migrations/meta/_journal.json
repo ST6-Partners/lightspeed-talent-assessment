@@ -512,6 +512,13 @@
       "when": 1960000043000,
       "tag": "0072_ccat_percentile_subscores",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1960000044000,
+      "tag": "0073_sent_emails",
+      "breakpoints": true
     }
   ]
 }

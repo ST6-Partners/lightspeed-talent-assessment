@@ -79,6 +79,29 @@ function buildSendGridBody(payload: EmailPayload) {
  * Send an email and THROW on failure. Returns { sandbox } so callers (e.g. the
  * admin test form) can tell the user whether it really went out or was logged.
  */
+/**
+ * Capture an outbound email (with full body) into sent_emails so the whole
+ * automated-email set is reviewable in the admin Email panel without a live
+ * SendGrid key. Fail-open: a capture error must never break sending.
+ */
+async function captureOutbound(payload: EmailPayload, status: string, error?: string): Promise<void> {
+  try {
+    const { db } = await import('../db.js');
+    const { sentEmails } = await import('../db/schema/email.js');
+    const to = Array.isArray(payload.to) ? payload.to.join(', ') : payload.to;
+    await db.insert(sentEmails).values({
+      recipient: to,
+      subject: payload.subject,
+      template: payload.templateId,
+      body: payload.html,
+      status,
+      error: error ?? null,
+    });
+  } catch (err) {
+    console.warn('[EMAIL] outbound capture failed (non-blocking):', err);
+  }
+}
+
 export async function sendEmailOrThrow(payload: EmailPayload): Promise<{ sandbox: boolean }> {
   // Alert on/off gate — suppress a toggleable alert email when it's been turned
   // off in Settings. Dynamic import + fail-open so a DB hiccup never blocks mail.
@@ -88,6 +111,7 @@ export async function sendEmailOrThrow(payload: EmailPayload): Promise<{ sandbox
       const { db } = await import('../db.js');
       if (!(await isAlertEnabled(db, payload.templateId))) {
         console.log(`[EMAIL SUPPRESSED] ${payload.templateId} — alert turned off in Settings.`);
+        await captureOutbound(payload, 'suppressed');
         return { sandbox: true };
       }
     }
@@ -96,6 +120,7 @@ export async function sendEmailOrThrow(payload: EmailPayload): Promise<{ sandbox
   }
   if (!isEmailConfigured()) {
     console.log(`[EMAIL SANDBOX] Template: ${payload.templateId} | To: ${payload.to} | Subject: ${payload.subject}`);
+    await captureOutbound(payload, 'sandbox');
     return { sandbox: true };
   }
   const response = await fetch(SENDGRID_SEND_URL, {
@@ -108,8 +133,10 @@ export async function sendEmailOrThrow(payload: EmailPayload): Promise<{ sandbox
   });
   if (!response.ok) {
     const text = await response.text().catch(() => '');
+    await captureOutbound(payload, 'failed', `SendGrid ${response.status}: ${text || response.statusText}`);
     throw new Error(`SendGrid rejected email (${response.status}): ${text || response.statusText}`);
   }
+  await captureOutbound(payload, 'sent');
   return { sandbox: false };
 }
 
