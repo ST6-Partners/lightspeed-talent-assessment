@@ -156,6 +156,13 @@ export const candidates = pgTable('candidates', {
   // Criteria Corp identifiers
   criteriaCorpId: varchar('criteria_corp_id', { length: 100 }),
   ccatScore: integer('ccat_score'),
+  // CCAT percentile + sub-area breakdown (Criteria reports Verbal, Math & Logic,
+  // Spatial Reasoning). Populated from Criteria's response; null until the
+  // assessment is completed and scores are pulled.
+  ccatPercentile: integer('ccat_percentile'),
+  ccatVerbal: integer('ccat_verbal'),
+  ccatMathLogic: integer('ccat_math_logic'),
+  ccatSpatial: integer('ccat_spatial'),
   eppProfile: jsonb('epp_profile'),
   eppValuesMatchScore: integer('epp_values_match_score'),
   // Automated scoring fields

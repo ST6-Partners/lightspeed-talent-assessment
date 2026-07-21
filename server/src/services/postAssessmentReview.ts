@@ -245,8 +245,21 @@ export async function seedAssessmentResults(db: any, candidateId: string, candid
   if (candidate.ccatScore == null) {
     // 22-50 out of 50 — lands above OR below the pass threshold (30), leaning pass
     // (~70%) so testing isn't dominated by CCAT rejects but some still fail.
+    const raw = 22 + Math.floor(Math.random() * 29);
+    // Derive a plausible overall percentile from the raw score, plus sub-area
+    // percentiles jittered around it (simulated demo data, not real scoring).
+    const clampPct = (n: number) => Math.max(1, Math.min(99, n));
+    const pct = clampPct(Math.round((raw / 50) * 100) + (Math.floor(Math.random() * 15) - 7));
+    const sub = () => clampPct(pct + (Math.floor(Math.random() * 21) - 10));
     await db.update(candidates)
-      .set({ ccatScore: 22 + Math.floor(Math.random() * 29), updatedAt: new Date() })
+      .set({
+        ccatScore: raw,
+        ccatPercentile: pct,
+        ccatVerbal: sub(),
+        ccatMathLogic: sub(),
+        ccatSpatial: sub(),
+        updatedAt: new Date(),
+      })
       .where(eq(candidates.id, candidateId));
   }
   const existingEpp = await db.query.candidateEppScores.findMany({ where: eq(candidateEppScores.candidateId, candidateId) });
@@ -311,7 +324,14 @@ export function simulateUpstreamScores(candidate: any, toStage: string): Record<
 
   // Assessment stage -> CCAT (pass-leaning >= 30 for a candidate that advanced).
   if (target >= idx('Assessment') && candidate.ccatScore == null) {
-    patch.ccatScore = rand(32, 19); // 32-50
+    const raw = rand(32, 19); // 32-50
+    patch.ccatScore = raw;
+    const clampPct = (n: number) => Math.max(1, Math.min(99, n));
+    const pct = clampPct(Math.round((raw / 50) * 100) + (Math.floor(Math.random() * 15) - 7));
+    patch.ccatPercentile = pct;
+    patch.ccatVerbal = clampPct(pct + (Math.floor(Math.random() * 21) - 10));
+    patch.ccatMathLogic = clampPct(pct + (Math.floor(Math.random() * 21) - 10));
+    patch.ccatSpatial = clampPct(pct + (Math.floor(Math.random() * 21) - 10));
   }
   // Screen (Values Review) -> EPP match, company-values match, resume review.
   if (target >= idx('Values Review')) {
@@ -349,6 +369,18 @@ export async function backfillTestScores(db: any): Promise<number> {
     // shows the complete per-criterion view for existing data too.
     if (c.workSampleNotes === LEGACY_WS_STUB && c.workSampleScore != null) {
       patch.workSampleNotes = simulatedWorkSampleBreakdown(c.workSampleScore);
+    }
+    // One-time upgrade: candidates with a raw CCAT score from before the percentile +
+    // sub-scores were captured. Derive a demo percentile + sub-area percentiles from the
+    // raw score so the CCAT Results page shows a complete breakdown for existing data too.
+    // Simulated — real values arrive from Criteria once CRITERIA_API_KEY is live. Null-only.
+    if (c.ccatScore != null && c.ccatPercentile == null) {
+      const clampPct = (n: number) => Math.max(1, Math.min(99, n));
+      const pct = clampPct(Math.round((c.ccatScore / 50) * 100) + (Math.floor(Math.random() * 15) - 7));
+      patch.ccatPercentile = pct;
+      patch.ccatVerbal = clampPct(pct + (Math.floor(Math.random() * 21) - 10));
+      patch.ccatMathLogic = clampPct(pct + (Math.floor(Math.random() * 21) - 10));
+      patch.ccatSpatial = clampPct(pct + (Math.floor(Math.random() * 21) - 10));
     }
     if (Object.keys(patch).length) {
       patch.updatedAt = new Date();

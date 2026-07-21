@@ -48,7 +48,10 @@ export interface SendAssessmentResult {
 export interface CcatScores {
   criteriaApplicantId: string;
   ccatScore: number | null;           // 0–50 raw score
-  ccatPercentile: number | null;      // 0–99
+  ccatPercentile: number | null;      // 0–99 overall percentile
+  ccatVerbal: number | null;          // sub-area percentiles (Criteria CCAT)
+  ccatMathLogic: number | null;
+  ccatSpatial: number | null;
   eppProfile: Record<string, number> | null;  // 12-trait EPP percentiles (Criteria trait names)
   assessmentCompletedAt: string | null;       // ISO timestamp
   status: 'completed' | 'pending' | 'expired';
@@ -144,6 +147,10 @@ export async function getScores(
       criteriaApplicantId,
       ccatScore:            Math.floor(Math.random() * 20) + 20, // 20–39 mock
       ccatPercentile:       Math.floor(Math.random() * 60) + 20,
+      // Sub-area percentiles jittered around the overall (mock only).
+      ccatVerbal:           Math.floor(Math.random() * 60) + 20,
+      ccatMathLogic:        Math.floor(Math.random() * 60) + 20,
+      ccatSpatial:          Math.floor(Math.random() * 60) + 20,
       // Criteria's EPP returns 12 traits as percentiles (0-100). Mock the real 12
       // (matches candidate_epp_scores — the store the whole app reads).
       eppProfile: {
@@ -175,6 +182,12 @@ export async function getScores(
     criteriaApplicantId,
     ccatScore:            body.scores?.ccat?.rawScore ?? null,
     ccatPercentile:       body.scores?.ccat?.percentile ?? null,
+    // ⚠️  Sub-area field names (verbal / mathLogic / spatial) are best-guess
+    //     against Criteria's documented CCAT payload — confirm the exact keys
+    //     against a real response once CRITERIA_API_KEY is live and adjust if needed.
+    ccatVerbal:           body.scores?.ccat?.verbal ?? null,
+    ccatMathLogic:        body.scores?.ccat?.mathLogic ?? null,
+    ccatSpatial:          body.scores?.ccat?.spatial ?? null,
     eppProfile:           body.scores?.epp ?? null,
     assessmentCompletedAt: body.completedAt ?? null,
     status:               body.status ?? 'pending',
@@ -197,7 +210,7 @@ export interface CriteriaWebhookPayload {
   packageId: string;
   completedAt: string;
   scores: {
-    ccat?: { rawScore: number; percentile: number };
+    ccat?: { rawScore: number; percentile: number; verbal?: number; mathLogic?: number; spatial?: number };
     epp?: Record<string, number>;
   };
 }

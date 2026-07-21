@@ -1892,6 +1892,10 @@ export const candidatesRouter = router({
       await ctx.db.update(candidates)
         .set({
           ccatScore:             scores.ccatScore ?? undefined,
+          ccatPercentile:        scores.ccatPercentile ?? undefined,
+          ccatVerbal:            scores.ccatVerbal ?? undefined,
+          ccatMathLogic:         scores.ccatMathLogic ?? undefined,
+          ccatSpatial:           scores.ccatSpatial ?? undefined,
           eppProfile:            scores.eppProfile ?? undefined,
           assessmentCompletedAt: scores.assessmentCompletedAt ? new Date(scores.assessmentCompletedAt) : undefined,
           updatedAt:             new Date(),

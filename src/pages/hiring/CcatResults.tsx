@@ -1,32 +1,17 @@
 import { useState } from 'react';
+import { trpc } from '../../lib/trpc';
 import SearchSelect from '../../components/SearchSelect';
 
-// Sample CCAT (Criteria Cognitive Aptitude Test) results — illustrative data
-// showing what a completed CCAT looks like: raw score out of 50, overall
-// percentile vs. the applicant norm group, and the three sub-areas Criteria
-// reports (Verbal, Math & Logic, Spatial Reasoning). Wire to criteriaCorp.ts
-// once the live Criteria account keys are set.
-
-type Ccat = {
-  name: string;
-  role: string;
-  raw: number;        // 0–50 correct
-  percentile: number; // overall percentile
-  verbal: number;     // sub-area percentiles
-  mathLogic: number;
-  spatial: number;
-};
-
-const SAMPLE: Ccat[] = [
-  { name: 'Maya Chen',      role: 'Software Engineer',   raw: 41, percentile: 95, verbal: 92, mathLogic: 97, spatial: 88 },
-  { name: 'Priya Nair',     role: 'Product Manager',     raw: 36, percentile: 86, verbal: 90, mathLogic: 82, spatial: 79 },
-  { name: 'Daniel Reyes',   role: 'Software Engineer',   raw: 33, percentile: 78, verbal: 74, mathLogic: 84, spatial: 72 },
-  { name: 'Aisha Bello',    role: 'Implementation Lead', raw: 29, percentile: 66, verbal: 71, mathLogic: 60, spatial: 64 },
-  { name: 'Tom Fisher',     role: 'Account Executive',   raw: 24, percentile: 50, verbal: 58, mathLogic: 44, spatial: 47 },
-  { name: 'Greg Olsen',     role: 'Account Executive',   raw: 18, percentile: 32, verbal: 40, mathLogic: 28, spatial: 33 },
-];
+// CCAT (Criteria Cognitive Aptitude Test) results for real candidates.
+// Reads live candidate records via candidates.list — each row carries the raw
+// score (0–50), overall percentile, and the three sub-area percentiles Criteria
+// reports (Verbal, Math & Logic, Spatial). Scores land on the candidate when the
+// assessment is completed (Criteria webhook / Refresh scores in the Candidates
+// panel). Until a real CRITERIA_API_KEY is configured, the app runs in sandbox
+// mode and these values are simulated demo data rather than live Criteria output.
 
 // Illustrative Criteria-style recommended raw-score range by role family.
+// Best-effort: only applies when a candidate's role title matches a key.
 const ROLE_RANGE: Record<string, [number, number]> = {
   'Software Engineer':   [31, 38],
   'Product Manager':     [30, 36],
@@ -42,7 +27,16 @@ function band(p: number): { label: string; text: string; bar: string } {
   return { label: 'Below range', text: 'text-ls-risk', bar: 'bg-ls-risk' };
 }
 
-function Bar({ label, p }: { label: string; p: number }) {
+function Bar({ label, p }: { label: string; p: number | null }) {
+  if (p == null) {
+    return (
+      <div className="flex items-center gap-3">
+        <div className="w-28 flex-none text-sm text-ls-ink">{label}</div>
+        <div className="flex-1 h-2.5 rounded-full bg-ls-bg-2 overflow-hidden" />
+        <div className="w-16 flex-none text-right text-xs text-ls-ink-3">Not reported</div>
+      </div>
+    );
+  }
   const b = band(p);
   return (
     <div className="flex items-center gap-3">
@@ -55,33 +49,92 @@ function Bar({ label, p }: { label: string; p: number }) {
   );
 }
 
+type Row = {
+  id: string;
+  name: string;
+  role: string;
+  raw: number;
+  percentile: number | null;
+  verbal: number | null;
+  mathLogic: number | null;
+  spatial: number | null;
+};
+
 export default function CcatResults() {
-  const [selName, setSelName] = useState(SAMPLE[0].name);
-  const c = SAMPLE.find((x) => x.name === selName) ?? SAMPLE[0];
+  const { data: candidates, isLoading } = trpc.candidates.list.useQuery();
+  const { data: jds } = trpc.jobDescriptions.list.useQuery();
+
+  const jdTitle = (jdId: string | null | undefined) =>
+    (jds ?? []).find((j: any) => j.id === jdId)?.jobTitle ?? '—';
+
+  // Only candidates who have completed the CCAT (a raw score is on file).
+  const rows: Row[] = (candidates ?? [])
+    .filter((c: any) => c.ccatScore != null)
+    .map((c: any) => ({
+      id: c.id,
+      name: `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim() || 'Unnamed candidate',
+      role: jdTitle(c.jdId),
+      raw: c.ccatScore as number,
+      percentile: c.ccatPercentile ?? null,
+      verbal: c.ccatVerbal ?? null,
+      mathLogic: c.ccatMathLogic ?? null,
+      spatial: c.ccatSpatial ?? null,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const [selId, setSelId] = useState<string>('');
+  const c = rows.find((x) => x.id === selId) ?? rows[0] ?? null;
+
+  const header = (
+    <div className="mb-6">
+      <h1 className="text-2xl font-bold text-ls-ink">CCAT Results</h1>
+      <p className="text-ls-ink-3 text-sm mt-1">
+        Criteria Cognitive Aptitude Test — 50 questions in 15 minutes. Raw score, overall percentile, and sub-area breakdown.
+      </p>
+    </div>
+  );
+
+  if (isLoading) {
+    return (
+      <div className="max-w-3xl">
+        {header}
+        <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5 text-sm text-ls-ink-3">
+          Loading candidate results…
+        </div>
+      </div>
+    );
+  }
+
+  if (!c) {
+    return (
+      <div className="max-w-3xl">
+        {header}
+        <div className="bg-white rounded-xl border border-ls-line shadow-sm p-8 text-center">
+          <div className="text-sm font-semibold text-ls-ink mb-1">No completed CCAT results yet</div>
+          <p className="text-sm text-ls-ink-3">
+            Scores appear here once a candidate reaches the Assessment stage and the CCAT is completed.
+            Send an assessment and use “Refresh scores” in the Candidates panel to pull results.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const range = ROLE_RANGE[c.role];
   const inRange = range ? (c.raw >= range[0] ? (c.raw <= range[1] ? 'in range' : 'above range') : 'below range') : null;
-  const b = band(c.percentile);
+  const b = c.percentile != null ? band(c.percentile) : null;
 
   return (
     <div className="max-w-3xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-ls-ink">CCAT Results</h1>
-        <p className="text-ls-ink-3 text-sm mt-1">
-          Criteria Cognitive Aptitude Test — 50 questions in 15 minutes. Raw score, overall percentile, and sub-area breakdown.
-        </p>
-      </div>
-
-      <div className="mb-4 inline-block text-[11px] font-medium text-ls-watch bg-ls-watch-bg border border-ls-watch/30 rounded-full px-2.5 py-1">
-        Sample data — illustrative of live CCAT output
-      </div>
+      {header}
 
       <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5 mb-5">
         <label className="block text-xs font-medium text-ls-ink-2 mb-1">Candidate</label>
         <SearchSelect
-          value={selName}
-          onChange={setSelName}
+          value={c.id}
+          onChange={setSelId}
           placeholder="Search candidates…"
-          options={SAMPLE.map((x) => ({ value: x.name, label: `${x.name} · ${x.role}` }))}
+          options={rows.map((x) => ({ value: x.id, label: `${x.name} · ${x.role}` }))}
         />
       </div>
       <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5">
@@ -92,7 +145,9 @@ export default function CcatResults() {
           </div>
           <div className="text-right">
             <div className="text-3xl font-extrabold text-ls-ink leading-none">{c.raw}<span className="text-base text-ls-ink-3 font-medium">/50</span></div>
-            <div className={`text-xs font-medium mt-1 ${b.text}`}>{c.percentile}th percentile · {b.label}</div>
+            {c.percentile != null && b
+              ? <div className={`text-xs font-medium mt-1 ${b.text}`}>{c.percentile}th percentile · {b.label}</div>
+              : <div className="text-xs font-medium mt-1 text-ls-ink-3">Percentile not reported</div>}
           </div>
         </div>
 

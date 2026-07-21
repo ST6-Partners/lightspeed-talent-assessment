@@ -505,6 +505,13 @@
       "when": 1960000042000,
       "tag": "0071_remove_reference_check_stage",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1960000043000,
+      "tag": "0072_ccat_percentile_subscores",
+      "breakpoints": true
     }
   ]
 }
