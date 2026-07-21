@@ -45,14 +45,28 @@ const coreNav = [
 
 const coreDataLink = { path: '/hiring/core-data', label: 'Core Data', icon: Database };
 
-function BrandMark({ size = 28 }: { size?: number }) {
+const LS_MARK_URL = 'https://www.lightspeedsystems.com/wp-content/uploads/2024/12/favicon.svg';
+// Official Lightspeed mark, painted in brand blue via CSS mask so it shows on the
+// dark navy sidebar (the source SVG's own fill is ignored).
+function BrandMark({ size = 34 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" stroke="#4EABD2" strokeWidth="3.6" strokeLinecap="round">
-      <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5" />
-      <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5" />
-      <line x1="5" y1="14" x2="11.5" y2="14" />
-      <line x1="28.5" y1="26" x2="35" y2="26" />
-    </svg>
+    <div
+      role="img"
+      aria-label="Lightspeed"
+      style={{
+        width: Math.round(size * 0.84),
+        height: size,
+        backgroundColor: '#4EABD2',
+        WebkitMaskImage: `url(${LS_MARK_URL})`,
+        maskImage: `url(${LS_MARK_URL})`,
+        WebkitMaskRepeat: 'no-repeat',
+        maskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+        maskPosition: 'center',
+        WebkitMaskSize: 'contain',
+        maskSize: 'contain',
+      }}
+    />
   );
 }
 
@@ -125,7 +139,7 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className="w-60 bg-ls-slate text-[#B9C3CB] flex flex-col px-3.5 py-4">
         <div className="flex items-center gap-2.5 px-2 pb-4">
-          <BrandMark size={34} />
+          <BrandMark size={42} />
           <div className="leading-tight">
             <div className="text-white font-bold text-[15px] tracking-tight leading-[1.12]">Lightspeed<br/>Systems</div>
             <div className="text-[11px] text-[#7E8B94] mt-1">Talent Assessment</div>
