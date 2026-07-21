@@ -149,12 +149,10 @@ export default function Layout() {
         <nav className="flex-1 overflow-y-auto">
           {topNav.map(renderLink)}
           {isAdmin && renderLink(fairnessNav)}
+          {renderLink(coreDataLink)}
 
           <div className="px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Talent Acquisition</div>
           {talentNav.map(renderLink)}
-
-          <div className="pt-3.5" />
-          {renderLink(coreDataLink)}
         </nav>
 
         <div className="mt-auto border-t border-[#36424B] pt-3">
