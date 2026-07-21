@@ -15,6 +15,7 @@ const STAGE_COLORS: Record<string, string> = {
   'Phone Screen': 'bg-teal-100 text-teal-700',
   'Interview Scheduled': 'bg-yellow-100 text-yellow-700',
   Interviewed: 'bg-orange-100 text-orange-700',
+  'Reference Check': 'bg-rose-100 text-rose-700',
   Offered: 'bg-emerald-100 text-emerald-700',
   Hired: 'bg-green-100 text-green-700',
   Rejected: 'bg-red-100 text-red-700',
@@ -114,7 +115,10 @@ export default function Candidates() {
   const requiresWorkSample = (c: any) => {
     if (!c?.jdId) return false;
     const jd = ((jobDescriptions ?? []) as any[]).find((j: any) => j.id === c.jdId);
-    return jd?.workSampleRequired === true;
+    // The role includes the Work Sample step if it's explicitly required OR it
+    // has a work sample task assigned (take-home or walkthrough). Roles with
+    // neither skip the step.
+    return jd?.workSampleRequired === true || !!jd?.workSampleTaskId;
   };
   const getPrevStage = (c: any): Stage | null => {
     const idx = STAGES.indexOf(c.currentStage as Stage);

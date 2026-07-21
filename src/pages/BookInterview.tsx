@@ -70,9 +70,9 @@ export default function BookInterview() {
       <Shell>
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
           <CheckCircle2 className="mx-auto mb-3 text-green-600" size={28} />
-          <h1 className="font-semibold text-gray-900 mb-1">{data.mode === 'phone_screen' ? 'Call confirmed' : 'Interview confirmed'}</h1>
+          <h1 className="font-semibold text-gray-900 mb-1">{data.mode === 'phone_screen' ? 'Call confirmed' : data.mode === 'work_sample_walkthrough' ? 'Walkthrough confirmed' : 'Interview confirmed'}</h1>
           <p className="text-sm text-gray-500">
-            Thanks{data.firstName ? `, ${data.firstName}` : ''} — your {data.mode === 'phone_screen' ? 'call' : 'interview'}{data.jobTitle ? ` for ${data.jobTitle}` : ''} is booked{when ? ` for ${when}` : ''}. A calendar invite is on its way by email.{data.mode === 'phone_screen' ? " We'll call you at the number you provided." : ''}
+            Thanks{data.firstName ? `, ${data.firstName}` : ''} — your {data.mode === 'phone_screen' ? 'call' : data.mode === 'work_sample_walkthrough' ? 'work sample walkthrough' : 'interview'}{data.jobTitle ? ` for ${data.jobTitle}` : ''} is booked{when ? ` for ${when}` : ''}. A calendar invite is on its way by email.{data.mode === 'phone_screen' ? " We'll call you at the number you provided." : ''}
           </p>
           {data.joinUrl ? (
             <a href={data.joinUrl} className="inline-block mt-4 text-sm text-ls-primary font-medium underline">Join link</a>
@@ -119,9 +119,11 @@ export default function BookInterview() {
   return (
     <Shell>
       <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h1 className="text-xl font-bold text-gray-900">Book your interview{data.jobTitle ? ` — ${data.jobTitle}` : ''}</h1>
+        <h1 className="text-xl font-bold text-gray-900">{data.mode === 'work_sample_walkthrough' ? 'Schedule your work sample walkthrough' : 'Book your interview'}{data.jobTitle ? ` — ${data.jobTitle}` : ''}</h1>
         <p className="text-gray-500 text-sm mt-1">
-          Hi {data.firstName}, pick the time that works best for you below. You'll get a calendar invite with the meeting link once you book.
+          {data.mode === 'work_sample_walkthrough'
+            ? `Hi ${data.firstName}, for this role the work sample is a short live walkthrough. Pick a time below and you'll walk our team through the task on the call. You'll get a calendar invite with the meeting link once you book.`
+            : `Hi ${data.firstName}, pick the time that works best for you below. You'll get a calendar invite with the meeting link once you book.`}
         </p>
         {/* Calendly inline widget — initialized by the loaded widget.js */}
         <div

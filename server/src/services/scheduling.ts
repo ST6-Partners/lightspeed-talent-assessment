@@ -28,18 +28,25 @@ export async function openInterviewScheduling(
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
   if (!candidate) return { opened: false, bookingUrl: null, reason: 'candidate not found' };
 
+  const walkthrough = opts.kind === 'work_sample_walkthrough';
+  const openedAt = walkthrough ? candidate.workSampleBookingOpenedAt : candidate.interviewBookingOpenedAt;
+  const existingToken = walkthrough ? candidate.workSampleBookingToken : candidate.interviewBookingToken;
+
   // Don't re-open (and re-email) a booking that's already open unless forced.
-  if (candidate.interviewBookingOpenedAt && !opts.force) {
-    const existing = candidate.interviewBookingToken ? `${appBaseUrl()}/book-interview/${candidate.interviewBookingToken}` : null;
+  if (openedAt && !opts.force) {
+    const existing = existingToken ? `${appBaseUrl()}/book-interview/${existingToken}` : null;
     return { opened: false, bookingUrl: existing, reason: 'already open' };
   }
 
-  const bookingToken = candidate.interviewBookingToken ?? randomUUID();
+  const bookingToken = existingToken ?? randomUUID();
   const schedulingUrl = opts.calendlyUrl ?? candidate.calendlySchedulingUrl ?? defaultSchedulingUrl();
 
+  // Walkthrough bookings use their OWN token/opened-at so the Calendly webhook
+  // can tell them apart from interview bookings (and not move the stage).
   await db.update(candidates).set({
-    interviewBookingToken: bookingToken,
-    interviewBookingOpenedAt: new Date(),
+    ...(walkthrough
+      ? { workSampleBookingToken: bookingToken, workSampleBookingOpenedAt: new Date() }
+      : { interviewBookingToken: bookingToken, interviewBookingOpenedAt: new Date() }),
     ...(schedulingUrl ? { calendlySchedulingUrl: schedulingUrl } : {}),
     updatedAt: new Date(),
   }).where(eq(candidates.id, candidateId));

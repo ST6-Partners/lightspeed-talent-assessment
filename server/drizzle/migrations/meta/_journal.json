@@ -491,6 +491,13 @@
       "when": 1960000040000,
       "tag": "0069_task_delivery_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1960000041000,
+      "tag": "0070_work_sample_walkthrough_booking",
+      "breakpoints": true
     }
   ]
 }

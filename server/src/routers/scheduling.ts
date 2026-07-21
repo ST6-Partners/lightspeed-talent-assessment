@@ -153,30 +153,46 @@ export const schedulingRouter = router({
       let candidate = await ctx.db.query.candidates.findFirst({
         where: eq(candidates.interviewBookingToken, input.token),
       });
-      let mode: 'interview' | 'phone_screen' = 'interview';
+      let mode: 'interview' | 'phone_screen' | 'work_sample_walkthrough' = 'interview';
       if (!candidate) {
         candidate = await ctx.db.query.candidates.findFirst({
           where: eq(candidates.phoneScreenBookingToken, input.token),
         });
         mode = 'phone_screen';
       }
+      if (!candidate) {
+        candidate = await ctx.db.query.candidates.findFirst({
+          where: eq(candidates.workSampleBookingToken, input.token),
+        });
+        mode = 'work_sample_walkthrough';
+      }
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This booking link is invalid or has expired.' });
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
       const alreadyBooked = mode === 'phone_screen'
         ? !!candidate.phoneScreenScheduledAt
-        : !!candidate.interviewScheduledAt;
+        : mode === 'work_sample_walkthrough'
+          ? !!candidate.workSampleScheduledAt
+          : !!candidate.interviewScheduledAt;
       // Interview: embed the Calendly widget (prefilled). Phone screen: link OUT to
       // the Zoom Scheduler page (Outlook-connected) — no embed, no video link.
       const interviewBase = candidate.calendlySchedulingUrl ?? defaultSchedulingUrl();
+      const scheduledAt = mode === 'phone_screen'
+        ? candidate.phoneScreenScheduledAt
+        : mode === 'work_sample_walkthrough'
+          ? candidate.workSampleScheduledAt
+          : candidate.interviewScheduledAt;
+      const joinUrl = mode === 'work_sample_walkthrough'
+        ? candidate.workSampleJoinUrl
+        : mode === 'phone_screen' ? null : candidate.interviewJoinUrl;
       return {
         mode,
         firstName: candidate.firstName,
         jobTitle: jobTitle ?? null,
         alreadyBooked,
-        scheduledAt: mode === 'phone_screen' ? candidate.phoneScreenScheduledAt : candidate.interviewScheduledAt,
-        joinUrl: mode === 'phone_screen' ? null : candidate.interviewJoinUrl,
-        // Embedded Calendly widget URL (interview mode only).
-        calendlyUrl: mode === 'interview' && interviewBase
+        scheduledAt,
+        joinUrl,
+        // Embedded Calendly widget URL (interview + walkthrough modes).
+        calendlyUrl: (mode === 'interview' || mode === 'work_sample_walkthrough') && interviewBase
           ? prefillCalendlyUrl(interviewBase, `${candidate.firstName} ${candidate.lastName}`, candidate.email, input.token)
           : null,
         // External booking link to open (phone-screen / Zoom Scheduler mode).

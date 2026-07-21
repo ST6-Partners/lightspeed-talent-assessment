@@ -199,12 +199,13 @@ export const insightsRouter = router({
       ORDER BY CASE stage
         WHEN 'Applied'             THEN 1
         WHEN 'Assessment'          THEN 2
-        WHEN 'Work Sample'         THEN 3
-        WHEN 'Values Review'       THEN 4
-        WHEN 'Phone Screen'        THEN 5
-        WHEN 'Interview Scheduled' THEN 6
-        WHEN 'Interviewed'         THEN 7
-        ELSE 8 END
+        WHEN 'Values Review'       THEN 3
+        WHEN 'Phone Screen'        THEN 4
+        WHEN 'Interview Scheduled' THEN 5
+        WHEN 'Interviewed'         THEN 6
+        WHEN 'Work Sample'         THEN 7
+        WHEN 'Reference Check'     THEN 8
+        ELSE 9 END
     `);
 
     // ── Weekly application volume (last 12 weeks) ──────────

@@ -605,15 +605,18 @@ export async function emailInterviewBookedCandidate(data: {
   interviewerName?: string;
   joinUrl?: string;
   icsBase64?: string;
+  kind?: 'interview' | 'work_sample_walkthrough';
 }) {
+  const label = data.kind === 'work_sample_walkthrough' ? 'work sample walkthrough' : 'interview';
+  const Label = data.kind === 'work_sample_walkthrough' ? 'Work sample walkthrough' : 'Interview';
   await sendEmail({
     to: data.email,
-    templateId: 'interview_booked',
-    subject: `Your interview is confirmed — ${data.jobTitle ?? 'Lightspeed Systems'}`,
+    templateId: data.kind === 'work_sample_walkthrough' ? 'work_sample_walkthrough_booked' : 'interview_booked',
+    subject: `Your ${label} is confirmed — ${data.jobTitle ?? 'Lightspeed Systems'}`,
     html: wrap(`
-      ${h1('Your interview is confirmed')}
+      ${h1(`Your ${label} is confirmed`)}
       ${p(`Hi ${data.firstName},`)}
-      ${p(`Your interview${data.jobTitle ? ` for <strong>${data.jobTitle}</strong>` : ''} is booked.`)}
+      ${p(`Your ${label}${data.jobTitle ? ` for <strong>${data.jobTitle}</strong>` : ''} is booked.`)}
       ${p(`<strong>When:</strong> ${data.interviewDate}`)}
       ${data.interviewerName ? p(`<strong>Interviewer:</strong> ${data.interviewerName}`) : ''}
       ${data.joinUrl ? p(`<strong>Join link:</strong> <a href="${data.joinUrl}">${data.joinUrl}</a>`) : p('You\'ll receive the Zoom join link shortly.')}

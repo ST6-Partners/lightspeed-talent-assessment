@@ -202,6 +202,12 @@ export const candidates = pgTable('candidates', {
   phoneScreenBookingToken: varchar('phone_screen_booking_token', { length: 64 }),
   phoneScreenBookingOpenedAt: timestamp('phone_screen_booking_opened_at', { withTimezone: true }),
   phoneScreenScheduledAt: timestamp('phone_screen_scheduled_at', { withTimezone: true }),
+  // Work-sample live-walkthrough scheduling (its own booking link so a walkthrough
+  // booking is never mistaken for an interview booking by the Calendly webhook).
+  workSampleBookingToken: varchar('work_sample_booking_token', { length: 64 }),
+  workSampleBookingOpenedAt: timestamp('work_sample_booking_opened_at', { withTimezone: true }),
+  workSampleScheduledAt: timestamp('work_sample_scheduled_at', { withTimezone: true }),
+  workSampleJoinUrl: text('work_sample_join_url'),
   // AI-generated interview content
   interviewQuestions: jsonb('interview_questions'),
   interviewTranscript: text('interview_transcript'),
