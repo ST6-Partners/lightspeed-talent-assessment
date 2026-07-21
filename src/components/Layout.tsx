@@ -47,7 +47,7 @@ const coreDataLink = { path: '/hiring/core-data', label: 'Core Data', icon: Data
 
 function BrandMark({ size = 28 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" stroke="#4FA9D6" strokeWidth="3.6" strokeLinecap="round">
+    <svg width={size} height={size} viewBox="0 0 40 40" fill="none" stroke="#4EABD2" strokeWidth="3.6" strokeLinecap="round">
       <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5" />
       <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5" />
       <line x1="5" y1="14" x2="11.5" y2="14" />

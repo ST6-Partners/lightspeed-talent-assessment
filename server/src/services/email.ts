@@ -157,7 +157,7 @@ export async function sendEmail(payload: EmailPayload): Promise<void> {
 function wrap(body: string): string {
   return `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 24px; color: #1a1a1a;">
-      <img src="https://lightspeedsystems.com/wp-content/uploads/lightspeed-logo.png" alt="Lightspeed Systems" style="height: 32px; margin-bottom: 32px;" />
+      <img src="https://www.lightspeedsystems.com/wp-content/uploads/2024/12/lightspeed_systems_logo.svg" alt="Lightspeed Systems" style="height: 32px; margin-bottom: 32px;" />
       ${body}
       <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;" />
       <p style="font-size: 12px; color: #888;">Lightspeed Systems · 3825 S Capital of Texas Hwy, Austin, TX 78704</p>
