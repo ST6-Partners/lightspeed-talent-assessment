@@ -111,7 +111,9 @@ export default function Layout() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    // Fixed viewport height + hidden overflow so the sidebar nav and the main
+    // content each scroll on their own, instead of the whole page scrolling as one.
+    <div className="h-screen flex overflow-hidden">
       {/* Sidebar */}
       <aside className="w-60 bg-ls-slate text-[#B9C3CB] flex flex-col px-3.5 py-4">
         <div className="flex items-center gap-3 px-2 pb-4">
