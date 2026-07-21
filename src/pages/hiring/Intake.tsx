@@ -136,6 +136,10 @@ export default function Intake() {
   const { data: full, refetch: refetchFull } = trpc.intake.get.useQuery({ id: editingId! }, { enabled: !!editingId });
   const { data: allReqs } = trpc.requisitions.list.useQuery();
   const { data: allJds } = trpc.jobDescriptions.list.useQuery(undefined);
+  const wsInfo = trpc.workSample.infoForJd.useQuery(
+    { jdId: form.baseJdId },
+    { enabled: !!form.baseJdId },
+  );
   const deptByReq: Record<string, string> = {};
   for (const r of (allReqs ?? []) as any[]) deptByReq[r.id] = r.department;
   const jdOptions = ((allJds ?? []) as any[]).filter((jd) => form.department && deptByReq[jd.reqId] === form.department);
@@ -445,6 +449,16 @@ export default function Intake() {
                       ? 'Same role: this JD is reused as-is on approval. No new JD is created — the role just opens against it.'
                       : 'Different JD: on approval a NEW JD is generated from this one plus your "how the role should differ" note, flagged for the hiring manager to review.'}
                   </p>
+                  {form.baseJdId && wsInfo.data && (
+                    <p className="text-xs mt-1.5 text-gray-600">
+                      <span className="font-medium">Work sample for this role:</span>{' '}
+                      {!wsInfo.data.required
+                        ? 'none — this role skips the work sample step.'
+                        : wsInfo.data.mode === 'live_walkthrough'
+                          ? `live walkthrough on a Zoom round${wsInfo.data.taskTitle ? ` (${wsInfo.data.taskTitle})` : ''}. The candidate walks the panel through it live instead of submitting a take-home; a "Work Sample Walkthrough" round is booked when they reach that step.`
+                          : `take-home submission${wsInfo.data.taskTitle ? ` (${wsInfo.data.taskTitle})` : ''}. The candidate completes and submits it via an emailed link.`}
+                    </p>
+                  )}
                 </div>
               )}
               {form.reasonType === 'new_headcount' && (

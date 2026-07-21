@@ -1,4 +1,5 @@
 import { resolveDeptWorkSample } from '../services/workSampleResolver.js';
+import { ensureWalkthroughRound } from '../services/workSampleWalkthrough.js';
 // ============================================================
 // CANDIDATES ROUTER — CRUD + stage management + email triggers
 // ============================================================
@@ -370,18 +371,24 @@ async function advanceFromReview(db: any, userId: string | null, existing: any, 
       : null;
     let workSampleUrl: string | undefined;
     let workSampleInstructions: string | undefined = jd?.workSampleInstructions ?? undefined;
+    let skipStageEmail = false;
     if (toStage === 'Work Sample') {
-      const token = existing.workSampleToken ?? randomUUID();
-      if (!existing.workSampleToken) {
-        await db.update(candidates).set({ workSampleToken: token, updatedAt: new Date() }).where(eq(candidates.id, existing.id));
-      }
-      workSampleUrl = `${appBaseUrl()}/work-sample/${token}`;
       const resolved = await resolveDeptWorkSample(db, existing);
-      if (resolved) {
-        workSampleInstructions = `<strong>${resolved.title}</strong><br/><br/>` + resolved.instructions.replace(/\n/g, '<br/>');
+      if (resolved?.deliveryMode === 'live_walkthrough') {
+        await ensureWalkthroughRound(db, existing.id).catch((err: any) => console.error('[review-advance] ensure walkthrough round failed:', err));
+        skipStageEmail = true;
+      } else {
+        const token = existing.workSampleToken ?? randomUUID();
+        if (!existing.workSampleToken) {
+          await db.update(candidates).set({ workSampleToken: token, updatedAt: new Date() }).where(eq(candidates.id, existing.id));
+        }
+        workSampleUrl = `${appBaseUrl()}/work-sample/${token}`;
+        if (resolved) {
+          workSampleInstructions = `<strong>${resolved.title}</strong><br/><br/>` + resolved.instructions.replace(/\n/g, '<br/>');
+        }
       }
     }
-    dispatchStageEmail(toStage, existing.currentStage, {
+    if (!skipStageEmail) dispatchStageEmail(toStage, existing.currentStage, {
       firstName: existing.firstName, lastName: existing.lastName, email: existing.email, jobTitle,
       workSampleInstructions, workSampleUrl,
       interviewerName: existing.interviewerName, interviewerEmail: existing.interviewerEmail,
@@ -661,23 +668,32 @@ export const candidatesRouter = router({
       // reaches the Work Sample stage (i.e. passed the assessment). No manual step.
       let workSampleUrl: string | undefined;
       let workSampleInstructions: string | undefined = jd?.workSampleInstructions ?? undefined;
+      let skipStageEmail = false;
       if (input.toStage === 'Work Sample') {
-        const token = (existing as any).workSampleToken ?? randomUUID();
-        if (!(existing as any).workSampleToken) {
-          await ctx.db.update(candidates)
-            .set({ workSampleToken: token, updatedAt: new Date() })
-            .where(eq(candidates.id, input.id));
-        }
-        workSampleUrl = `${appBaseUrl()}/work-sample/${token}`;
-        // Pull the department's work sample from the Work Sample library.
+        // Live walkthrough vs take-home is set per role (the work sample task's
+        // delivery mode, resolved through the JD). Walkthrough -> book a live
+        // round, no homework email. Take-home -> emailed submission link (default).
         const resolved = await resolveDeptWorkSample(ctx.db, existing);
-        if (resolved) {
-          workSampleInstructions =
-            `<strong>${resolved.title}</strong><br/><br/>` + resolved.instructions.replace(/\n/g, '<br/>');
+        if (resolved?.deliveryMode === 'live_walkthrough') {
+          await ensureWalkthroughRound(ctx.db, input.id).catch((err) => console.error('[advance] ensure walkthrough round failed:', err));
+          skipStageEmail = true;
+        } else {
+          const token = (existing as any).workSampleToken ?? randomUUID();
+          if (!(existing as any).workSampleToken) {
+            await ctx.db.update(candidates)
+              .set({ workSampleToken: token, updatedAt: new Date() })
+              .where(eq(candidates.id, input.id));
+          }
+          workSampleUrl = `${appBaseUrl()}/work-sample/${token}`;
+          // Pull the department's work sample from the Work Sample library.
+          if (resolved) {
+            workSampleInstructions =
+              `<strong>${resolved.title}</strong><br/><br/>` + resolved.instructions.replace(/\n/g, '<br/>');
+          }
         }
       }
 
-      dispatchStageEmail(input.toStage, existing.currentStage, {
+      if (!skipStageEmail) dispatchStageEmail(input.toStage, existing.currentStage, {
         firstName: existing.firstName,
         lastName: existing.lastName,
         email: existing.email,

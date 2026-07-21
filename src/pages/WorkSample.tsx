@@ -68,6 +68,30 @@ export default function WorkSample() {
     );
   }
 
+  // Live walkthrough roles: nothing to submit here — the candidate walks the
+  // team through the task on a short call the hiring team schedules.
+  if ((data as any).deliveryMode === 'live_walkthrough') {
+    return (
+      <Shell>
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h1 className="text-xl font-bold text-gray-900">Work Sample{data.jobTitle ? ` — ${data.jobTitle}` : ''}</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Hi {data.firstName}, for this role the work sample is a short live walkthrough rather than a take-home. A member of the hiring team will set up a brief call where you'll walk us through the task together — there's nothing to submit here.
+          </p>
+          {(data.instructions || data.taskTitle) && (
+            <div className="mt-5 bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">What to expect</div>
+              {data.taskTitle && <div className="text-sm font-semibold text-gray-900 mb-2">{data.taskTitle}</div>}
+              <div className="text-sm text-gray-700 whitespace-pre-line">
+                {data.instructions || 'The hiring team will share details when they schedule your walkthrough.'}
+              </div>
+            </div>
+          )}
+        </div>
+      </Shell>
+    );
+  }
+
   return (
     <Shell>
       <div className="bg-white rounded-lg border border-gray-200 p-6">

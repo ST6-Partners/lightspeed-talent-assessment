@@ -694,7 +694,7 @@ export default function Candidates() {
                       className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50"
                     />
                     <button
-                      onClick={() => navigator.clipboard?.writeText(sendWorkSampleMutation.data!.url)}
+                      onClick={() => navigator.clipboard?.writeText(sendWorkSampleMutation.data!.url!)}
                       className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50"
                     >
                       Copy

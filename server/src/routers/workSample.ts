@@ -24,6 +24,7 @@ import { emailInvitedToWorkSample } from '../services/email.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { scoreAndStoreWorkSample } from '../services/workSampleScoring.js';
+import { ensureWalkthroughRound } from '../services/workSampleWalkthrough.js';
 import { getWorkSampleScoringConfig, setWorkSampleScoringConfig } from '../services/workSampleConfig.js';
 import { requireAdmin } from '../services/permissions.js';
 
@@ -58,6 +59,23 @@ export const workSampleRouter = router({
         instructions: resolved?.instructions ?? jd?.workSampleInstructions ?? null,
         alreadySubmitted: !!candidate.workSampleSubmittedAt,
         submittedAt: candidate.workSampleSubmittedAt,
+        deliveryMode: resolved?.deliveryMode ?? 'take_home',
+      };
+    }),
+
+  // Work-sample mode for a role — used by the intake form so a hiring manager
+  // sees, when they pick a JD, whether that role's work sample is a take-home
+  // submission or a live (Zoom) walkthrough. Resolved through the JD's task.
+  infoForJd: protectedProcedure
+    .input(z.object({ jdId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const jd = await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, input.jdId) });
+      if (!jd) return { required: false, mode: 'take_home' as const, taskTitle: null as string | null };
+      const resolved = await resolveDeptWorkSample(ctx.db, { jdId: input.jdId }).catch(() => null);
+      return {
+        required: (jd as any).workSampleRequired === true,
+        mode: (resolved?.deliveryMode ?? 'take_home') as 'take_home' | 'live_walkthrough',
+        taskTitle: resolved?.title ?? null,
       };
     }),
 
@@ -115,22 +133,10 @@ export const workSampleRouter = router({
       // LIVE WALKTHROUGH: don't email a homework link — create a "Work Sample
       // Walkthrough" interview round the candidate books like any other round.
       if (resolved?.deliveryMode === 'live_walkthrough') {
-        const existing = await ctx.db.select().from(candidateInterviews)
-          .where(eq(candidateInterviews.candidateId, candidate.id));
-        let round = existing.find((r: any) => r.roundName === 'Work Sample Walkthrough');
-        if (!round) {
-          const maxRow = (await ctx.db.select({ m: sql<number>`coalesce(max(${candidateInterviews.sortOrder}), -1)` })
-            .from(candidateInterviews).where(eq(candidateInterviews.candidateId, candidate.id)))[0];
-          const [created] = await ctx.db.insert(candidateInterviews).values({
-            candidateId: candidate.id,
-            roundName: 'Work Sample Walkthrough',
-            sortOrder: (maxRow?.m ?? -1) + 1,
-          }).returning();
-          round = created;
-        }
+        const round = await ensureWalkthroughRound(ctx.db, candidate.id);
         await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'update');
         trackActivity(ctx.db, ctx.user.id, 'send_work_sample', 'candidates', { candidateId: candidate.id, mode: 'live_walkthrough' }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
-        return { mode: 'live_walkthrough' as const, roundId: round.id, roundName: 'Work Sample Walkthrough' };
+        return { mode: 'live_walkthrough' as const, roundId: round.roundId, roundName: round.roundName };
       }
 
       // TAKE-HOME (default): emailed submission link, auto-scored.
