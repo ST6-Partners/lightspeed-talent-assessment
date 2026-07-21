@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video, ShieldCheck, ClipboardPen, Brain, CheckSquare } from 'lucide-react';
+import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video, ShieldCheck, ClipboardPen, Brain, CheckSquare, Database } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import ChatDrawer from './ChatDrawer';
@@ -30,6 +30,10 @@ const talentNav = [
 
 const fairnessNav = { path: '/hiring/fairness', label: 'Bias', icon: ShieldCheck };
 
+// Individual core-data pages. These are no longer listed one-by-one in the
+// sidebar — they're reached through the single Core Data hub link below,
+// which opens a landing page of cards. Kept here so breadcrumbs still
+// resolve each page's label.
 const coreNav = [
   { path: '/hiring/employees', label: 'Employees', icon: Contact },
   { path: '/hiring/departments', label: 'Departments', icon: Building2 },
@@ -38,6 +42,8 @@ const coreNav = [
   { path: '/hiring/jobs', label: 'Job Descriptions', icon: FileText },
   { path: '/hiring/postings', label: 'Open Roles', icon: Megaphone },
 ];
+
+const coreDataLink = { path: '/hiring/core-data', label: 'Core Data', icon: Database };
 
 function BrandMark({ size = 28 }: { size?: number }) {
   return (
@@ -50,7 +56,7 @@ function BrandMark({ size = 28 }: { size?: number }) {
   );
 }
 
-const allNav = [...topNav, ...talentNav, fairnessNav, ...coreNav];
+const allNav = [...topNav, ...talentNav, fairnessNav, coreDataLink, ...coreNav];
 
 export default function Layout() {
   const location = useLocation();
@@ -131,8 +137,8 @@ export default function Layout() {
           <div className="px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Talent Acquisition</div>
           {talentNav.map(renderLink)}
 
-          <div className="px-2.5 pt-3.5 pb-1.5 text-[10.5px] font-bold uppercase tracking-[.12em] text-[#677480]">Core Data</div>
-          {coreNav.map(renderLink)}
+          <div className="pt-3.5" />
+          {renderLink(coreDataLink)}
         </nav>
 
         <div className="mt-auto border-t border-[#36424B] pt-3">

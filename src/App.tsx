@@ -29,6 +29,7 @@ import Departments from './pages/hiring/Departments';
 import TaskLibrary from './pages/hiring/TaskLibrary';
 import Postings from './pages/hiring/Postings';
 import Titles from './pages/hiring/Titles';
+import CoreData from './pages/hiring/CoreData';
 
 export default function App() {
   return (
@@ -62,6 +63,7 @@ export default function App() {
         <Route path="/hiring/assessments" element={<Assessments />} />
         <Route path="/hiring/scorecards" element={<Scorecards />} />
         {/* Core Data */}
+        <Route path="/hiring/core-data" element={<CoreData />} />
         <Route path="/hiring/employees" element={<Employees />} />
         <Route path="/hiring/departments" element={<Departments />} />
         <Route path="/hiring/tasks" element={<TaskLibrary />} />
