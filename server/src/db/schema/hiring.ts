@@ -30,8 +30,6 @@ export const candidateStageEnum = pgEnum('candidate_stage', [
   'Phone Screen',
   'Interview Scheduled',
   'Interviewed',
-  // Reference Check follows the (optional, per-role) Work Sample, before an offer.
-  'Reference Check',
   'Offered',
   'Hired',
   'Rejected',

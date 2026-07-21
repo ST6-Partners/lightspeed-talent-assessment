@@ -498,6 +498,13 @@
       "when": 1960000041000,
       "tag": "0070_work_sample_walkthrough_booking",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1960000042000,
+      "tag": "0071_remove_reference_check_stage",
+      "breakpoints": true
     }
   ]
 }

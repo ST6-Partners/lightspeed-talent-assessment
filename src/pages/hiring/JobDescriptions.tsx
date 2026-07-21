@@ -225,7 +225,7 @@ export default function JobDescriptions() {
                   className="rounded border-gray-300 text-ls-primary focus:ring-ls-cyan" />
                 Include a work sample step for this role
               </label>
-              <p className="text-xs text-gray-400 mt-1">Optional. When on, candidates go through the work sample after the team interview, before the reference check. When off, the step is skipped.</p>
+              <p className="text-xs text-gray-400 mt-1">Optional. When on, candidates go through the work sample after the team interview. When off, the step is skipped.</p>
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-2">

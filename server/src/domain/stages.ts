@@ -27,9 +27,8 @@ export const CANDIDATE_STAGES = [
   'Interviewed',
   // Work Sample now sits AFTER the team interview and is OPTIONAL per role
   // (see OPTIONAL_STAGES + jobDescriptions.workSampleRequired) — it is no longer
-  // an automated up-front narrowing step. Reference Check follows it.
+  // an automated up-front narrowing step.
   'Work Sample',
-  'Reference Check',
   'Offered',
   'Hired',
   'Rejected',
@@ -50,8 +49,8 @@ export const ACTIVE_STAGES: readonly string[] = CANDIDATE_STAGES.filter((s) => !
 export const PIPELINE_STAGES: readonly string[] = CANDIDATE_STAGES.filter((s) => !has(CLOSED_STAGES, s));
 // Ranking runs only AFTER resume + values screening (which happens in Values
 // Review). So the rankable pool is the post-screening shortlist — Phone Screen
-// onward, including the optional Work Sample and the Reference Check.
-export const RANKABLE_STAGES: readonly string[] = ['Phone Screen', 'Interview Scheduled', 'Interviewed', 'Work Sample', 'Reference Check'];
+// onward, including the optional Work Sample.
+export const RANKABLE_STAGES: readonly string[] = ['Phone Screen', 'Interview Scheduled', 'Interviewed', 'Work Sample'];
 // Everything NOT eligible for ranking (used by the ranking exclusion filters).
 export const NOT_RANKABLE_STAGES: readonly string[] = CANDIDATE_STAGES.filter((s) => !has(RANKABLE_STAGES, s));
 // Early stages where a failing work sample can auto-reject.

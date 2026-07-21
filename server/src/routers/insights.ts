@@ -204,8 +204,7 @@ export const insightsRouter = router({
         WHEN 'Interview Scheduled' THEN 5
         WHEN 'Interviewed'         THEN 6
         WHEN 'Work Sample'         THEN 7
-        WHEN 'Reference Check'     THEN 8
-        ELSE 9 END
+        ELSE 8 END
     `);
 
     // ── Weekly application volume (last 12 weeks) ──────────
