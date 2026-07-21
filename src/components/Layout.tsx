@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video, ShieldCheck, ClipboardPen, Brain, CheckSquare, Database } from 'lucide-react';
+import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video, ShieldCheck, ClipboardPen, Brain, CheckSquare, Database, ArrowLeft } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import ChatDrawer from './ChatDrawer';
@@ -96,6 +96,8 @@ export default function Layout() {
   const isAdmin = ['admin', 'sysadmin'].includes(user.role);
   const crumb = allNav.find((n) => n.path === location.pathname)?.label
     ?? (location.pathname.startsWith('/hiring') ? 'Hiring' : 'Home');
+  // On a Core Data sub-page, offer a way back to the Core Data hub.
+  const isCoreSubpage = coreNav.some((n) => n.path === location.pathname);
 
   const renderLink = (item: { path: string; label: string; icon: any }) => {
     const isActive = location.pathname === item.path;
@@ -157,7 +159,18 @@ export default function Layout() {
       {/* Main content */}
       <div className="flex-1 flex flex-col bg-ls-bg">
         <header className="h-14 bg-white/70 backdrop-blur border-b border-ls-line flex items-center justify-between px-6">
-          <div className="text-[13px] text-ls-ink-3">
+          <div className="text-[13px] text-ls-ink-3 flex items-center gap-1.5">
+            {isCoreSubpage && (
+              <>
+                <Link
+                  to={coreDataLink.path}
+                  className="inline-flex items-center gap-1 text-ls-ink-3 hover:text-ls-primary transition-colors"
+                >
+                  <ArrowLeft size={15} /> Core Data
+                </Link>
+                <span className="text-ls-ink-3/60">/</span>
+              </>
+            )}
             <span className="text-ls-ink font-semibold">{crumb}</span>
           </div>
           <div className="flex items-center gap-2">
