@@ -17,6 +17,7 @@ import { trackActivity } from '../services/telemetry.js';
 import { generateText, tool, stepCountIs } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { REVIEW_MODEL } from '../services/feedbackReviewService.js';
+import { CANDIDATE_STAGES } from '../domain/stages.js';
 
 // ── Live-data tools for the chat assistant ──────────────────────
 // Read-only lookups against real app data so the assistant can answer
@@ -95,8 +96,7 @@ function buildLiveDataTools(db: any) {
     searchCandidates: tool({
       description:
         'Search candidates by name or email substring, and/or filter by exact hiring stage ' +
-        '(e.g. "Applied", "Assessment", "Work Sample", "Values Review", "Interview Scheduled", ' +
-        '"Phone Screen", "Interviewed", "Offered", "Hired", "Rejected"). Returns contact info, current stage, ' +
+        `(one of: ${CANDIDATE_STAGES.map((s) => `"${s}"`).join(', ')}). Returns contact info, current stage, ` +
         'and assessment scores. Only use this when the question is actually about specific ' +
         'candidates, not for simple counts (use getSystemCounts for counts).',
       inputSchema: z.object({

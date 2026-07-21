@@ -17,6 +17,8 @@ import { candidateInterviews } from '../db/schema/interviews.js';
 import { candidates, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { interviewPlan } from '../db/schema/intake.js';
 import { getCompanyTalkingPoints, type CompanyTalkingPoints } from './companyTalkingPoints.js';
+import { scoreWalkthroughFromTranscript } from './workSampleScoring.js';
+import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
 import {
   analyzeInterviewTranscript,
   synthesizeInterviewTranscript,
@@ -180,6 +182,14 @@ export async function generateRoundFeedback(roundId: string, transcriptIn?: stri
     status: 'completed',
     updatedAt: new Date(),
   }).where(eq(candidateInterviews.id, roundId));
+
+  // Live Work Sample Walkthrough: also score the transcript against the role's
+  // work-sample rubric and store it as a SUGGESTED (advisory) score for the
+  // panel — never advances or rejects.
+  if (round.roundName === WALKTHROUGH_ROUND_NAME) {
+    await scoreWalkthroughFromTranscript(db, round.candidateId, transcript)
+      .catch((err) => console.error('[walkthrough] work-sample scoring failed:', err));
+  }
 
   return { roundId, transcript, feedback };
 }

@@ -24,8 +24,10 @@ import { logDecision } from './decisionLog.js';
 function formatNotes(
   r: WorkSampleScoreResult,
   meta: { pass: boolean; threshold: number; autoRejected: boolean },
+  leadNote?: string,
 ): string {
   const lines: string[] = [];
+  if (leadNote) lines.push(leadNote, '');
   lines.push(
     `AI work-sample score: ${r.overallScore}/100 (work quality ${r.workQualityScore}, AI skill ${r.aiSkillScore})` +
     `${r.rubricUsed ? '' : ' — no rubric configured; scored from brief'} · ` +
@@ -137,5 +139,82 @@ export async function scoreAndStoreWorkSample(db: any, candidateId: string): Pro
 
   // On a low score there is no stage change — the work sample is advisory,
   // the candidate is flagged for the Review queue, and a human decides.
+  return result;
+}
+
+
+// ============================================================
+// LIVE WALKTHROUGH SCORING
+// A live work-sample walkthrough is a call where the candidate walks the panel
+// through the task instead of submitting written work. Once its transcript is
+// captured (Zoom recording webhook or a pasted transcript on the round), we run
+// the SAME rubric scorer on the transcript and store the result as a SUGGESTED,
+// advisory score for the people who ran the walkthrough. Unlike the take-home
+// path this never advances or rejects — it is a suggestion the panel accepts or
+// overrides (via the Work Sample review fields on the candidate).
+// ============================================================
+export async function scoreWalkthroughFromTranscript(
+  db: any,
+  candidateId: string,
+  transcript: string,
+): Promise<WorkSampleScoreResult | null> {
+  const text = (transcript ?? '').trim();
+  if (!text) return null;
+
+  const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
+  if (!candidate) return null;
+
+  const jd = candidate.jdId
+    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+    : null;
+  const resolved = await resolveDeptWorkSample(db, candidate);
+
+  const result = await scoreWorkSample({
+    firstName: candidate.firstName,
+    lastName: candidate.lastName,
+    jobTitle: jd?.jobTitle ?? null,
+    taskTitle: resolved?.title ?? null,
+    brief: resolved?.brief ?? jd?.workSampleInstructions ?? null,
+    scoringGuideWork: resolved?.scoringGuideWork ?? null,
+    scoringGuideAi: resolved?.scoringGuideAi ?? null,
+    // The walkthrough transcript IS the work product being scored.
+    submission: text,
+    link: null,
+  });
+
+  const cfg = await getWorkSampleScoringConfig(db);
+  const pass = result.overallScore >= cfg.passThreshold;
+
+  await logDecision(db, {
+    candidateId,
+    decisionType: 'work_sample',
+    outcome: 'scored',
+    score: result.overallScore,
+    decidedByType: result.mode === 'ai' ? 'ai' : 'deterministic',
+    model: result.provenance?.model ?? null,
+    requestedModel: result.provenance?.requestedModel ?? null,
+    promptId: result.provenance?.promptId ?? null,
+    promptVersion: result.provenance?.promptVersion ?? null,
+    reason: `Live walkthrough scored ${result.overallScore}/100 (suggested; advisory, pass mark ${cfg.passThreshold}).`,
+    inputs: {
+      overallScore: result.overallScore,
+      workQualityScore: result.workQualityScore,
+      aiSkillScore: result.aiSkillScore,
+      passThreshold: cfg.passThreshold,
+      rubricUsed: result.rubricUsed,
+      mode: result.mode,
+      source: 'live_walkthrough',
+    },
+  });
+
+  const lead = 'SOURCE: live walkthrough transcript. SUGGESTED score for the people who ran the walkthrough — advisory only; accept it or override it in the Work Sample review fields.';
+  await db.update(candidates)
+    .set({
+      workSampleScore: result.overallScore,
+      workSampleNotes: formatNotes(result, { pass, threshold: cfg.passThreshold, autoRejected: false }, lead),
+      updatedAt: new Date(),
+    })
+    .where(eq(candidates.id, candidateId));
+
   return result;
 }
