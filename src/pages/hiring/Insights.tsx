@@ -243,14 +243,63 @@ function quarterRange(offset: number) {
   return { from: iso(from), to: iso(to), compareFrom: iso(cFrom), compareTo: iso(from), label };
 }
 
-// ── Schedule config (weekly + quarterly report emails) ─────
+// ── Schedule helpers ───────────────────────────────────────
+const DOW = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const pad2 = (n: number) => String(n).padStart(2, '0');
+function ordinal(n: number) {
+  const s = ['th', 'st', 'nd', 'rd']; const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+function fmtClock(hour: number, minute: number) {
+  const h12 = ((hour + 11) % 12) + 1;
+  return `${h12}:${pad2(minute)} ${hour < 12 ? 'AM' : 'PM'}`;
+}
+function nextWeekly(dayOfWeek: number, hour: number, minute: number) {
+  const now = new Date();
+  const d = new Date(now); d.setHours(hour, minute, 0, 0);
+  let add = (dayOfWeek - now.getDay() + 7) % 7;
+  if (add === 0 && d <= now) add = 7;
+  d.setDate(d.getDate() + add);
+  return d;
+}
+function nextQuarterly(dayOfMonth: number, hour: number, minute: number) {
+  const now = new Date();
+  for (let y = 0; y <= 1; y++) {
+    for (const m of [0, 3, 6, 9]) {
+      const d = new Date(now.getFullYear() + y, m, dayOfMonth, hour, minute, 0, 0);
+      if (d > now) return d;
+    }
+  }
+  return null;
+}
+const fmtWhen = (d: Date) => d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+// ── Schedule + recipients card (shown inside the Weekly / Quarterly tabs) ─────
 function ScheduleCard({ cadence, blurb }: { cadence: 'weekly' | 'quarterly'; blurb: string }) {
   const cfg = trpc.insights.getReportConfig.useQuery({ cadence });
   const save = trpc.insights.setReportConfig.useMutation({ onSuccess: () => cfg.refetch() });
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [recips, setRecips] = useState<string | null>(null);
+  const [dow, setDow] = useState<number | null>(null);
+  const [dom, setDom] = useState<number | null>(null);
+  const [time, setTime] = useState<string | null>(null);
+
+  const sched: any = cfg.data?.schedule ?? {};
   const curEnabled = enabled ?? cfg.data?.enabled ?? false;
   const curRecips = recips ?? (cfg.data?.recipients ?? []).join(', ');
+  const curDow = dow ?? sched.dayOfWeek ?? 1;
+  const curDom = dom ?? sched.dayOfMonth ?? 1;
+  const curTime = time ?? `${pad2(sched.hour ?? 8)}:${pad2(sched.minute ?? 0)}`;
+  const [th, tm] = curTime.split(':').map(Number);
+
+  const scheduleObj = cadence === 'weekly'
+    ? { dayOfWeek: curDow, hour: th, minute: tm }
+    : { dayOfMonth: curDom, hour: th, minute: tm };
+
+  const next = cadence === 'weekly' ? nextWeekly(curDow, th, tm) : nextQuarterly(curDom, th, tm);
+  const whenText = cadence === 'weekly'
+    ? `every ${DOW[curDow]} at ${fmtClock(th, tm)}`
+    : `on the ${ordinal(curDom)} of Jan, Apr, Jul & Oct at ${fmtClock(th, tm)}`;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-5">
@@ -262,13 +311,48 @@ function ScheduleCard({ cadence, blurb }: { cadence: 'weekly' | 'quarterly'; blu
         </label>
       </div>
       <p className="text-[12px] text-gray-500 mb-3">{blurb}</p>
+
+      <div className="rounded-md bg-gray-50 border border-gray-200 px-3 py-2 mb-3 text-[12px]">
+        {curEnabled ? (
+          <span className="text-gray-700">
+            Sends <strong>{whenText}</strong>
+            {next && <> &middot; next: <strong>{fmtWhen(next)}</strong></>}
+            <span className="text-gray-400"> (server time)</span>
+          </span>
+        ) : (
+          <span className="text-gray-500">Off &mdash; turn on to send {whenText}.</span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-4 mb-3">
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1">Send day</label>
+          {cadence === 'weekly' ? (
+            <select value={curDow} onChange={(e) => setDow(Number(e.target.value))}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan">
+              {DOW.map((d, i) => (<option key={i} value={i}>{d}</option>))}
+            </select>
+          ) : (
+            <select value={curDom} onChange={(e) => setDom(Number(e.target.value))}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan">
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (<option key={d} value={d}>{ordinal(d)}</option>))}
+            </select>
+          )}
+        </div>
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1">Send time</label>
+          <input type="time" value={curTime} onChange={(e) => setTime(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+        </div>
+      </div>
+
       <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1">Recipients (comma-separated emails)</label>
       <textarea rows={2} value={curRecips} onChange={(e) => setRecips(e.target.value)}
         placeholder="hiringmanager@lightspeedsystems.com, hr@lightspeedsystems.com"
         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
       <div className="flex items-center gap-3">
         <button
-          onClick={() => save.mutate({ cadence, enabled: curEnabled, recipients: curRecips.split(',').map((x) => x.trim()).filter(Boolean) })}
+          onClick={() => save.mutate({ cadence, enabled: curEnabled, recipients: curRecips.split(',').map((x) => x.trim()).filter(Boolean), schedule: scheduleObj })}
           disabled={save.isLoading}
           className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50">
           {save.isLoading ? 'Saving…' : 'Save'}
@@ -279,19 +363,7 @@ function ScheduleCard({ cadence, blurb }: { cadence: 'weekly' | 'quarterly'; blu
   );
 }
 
-function ScheduleConfig() {
-  return (
-    <div className="space-y-5 max-w-2xl">
-      <p className="text-sm text-gray-500">
-        Reports are off until you add recipients and turn them on. Weekly sends every Monday morning; quarterly sends on the first day of each quarter. Both include change-vs-prior-period deltas.
-      </p>
-      <ScheduleCard cadence="weekly" blurb="A bite-sized weekly digest — new applicants, pipeline movement, interviews, offers, hires. Good for hiring managers." />
-      <ScheduleCard cadence="quarterly" blurb="A quarterly summary for leadership — the same metrics rolled up per quarter with prior-quarter comparison." />
-    </div>
-  );
-}
-
-const TABS = ['Overview', 'Weekly', 'Quarterly', 'Schedule'];
+const TABS = ['Overview', 'Weekly', 'Quarterly'];
 
 export default function Insights() {
   const [tab, setTab] = useState('Overview');
@@ -309,23 +381,19 @@ export default function Insights() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Metrics</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {tab === 'Schedule'
-              ? 'Automated report delivery'
-              : jdId
-                ? `${(roles ?? []).find((r) => r.jdId === jdId)?.title ?? 'Role'} — pipeline analytics`
-                : 'All roles — hiring pipeline analytics'}
+            {jdId
+              ? `${(roles ?? []).find((r) => r.jdId === jdId)?.title ?? 'Role'} — pipeline analytics`
+              : 'All roles — hiring pipeline analytics'}
           </p>
         </div>
-        {tab !== 'Schedule' && (
-          <div>
-            <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1">Role</label>
-            <select value={jdId ?? ''} onChange={(e) => setJdId(e.target.value || null)}
-              className="w-64 px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan">
-              <option value="">All roles (overall)</option>
-              {(roles ?? []).map((r) => (<option key={r.jdId} value={r.jdId}>{r.title} ({r.count})</option>))}
-            </select>
-          </div>
-        )}
+        <div>
+          <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1">Role</label>
+          <select value={jdId ?? ''} onChange={(e) => setJdId(e.target.value || null)}
+            className="w-64 px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan">
+            <option value="">All roles (overall)</option>
+            {(roles ?? []).map((r) => (<option key={r.jdId} value={r.jdId}>{r.title} ({r.count})</option>))}
+          </select>
+        </div>
       </div>
 
       <SubTabs tabs={TABS} active={tab} onChange={setTab} />
@@ -348,6 +416,9 @@ export default function Insights() {
             <span className="text-xs text-gray-400">{wk.label}</span>
           </div>
           <ReportView jdId={jdId} range={wk} volumeTitle="Applications this period (by week)" />
+          <div className="max-w-2xl">
+            <ScheduleCard cadence="weekly" blurb="A bite-sized weekly digest — new applicants, pipeline movement, interviews, offers, hires. Good for hiring managers." />
+          </div>
         </div>
       )}
 
@@ -366,10 +437,12 @@ export default function Insights() {
             <span className="text-xs text-gray-400">vs {quarterRange(qOffset + 1).label}</span>
           </div>
           <ReportView jdId={jdId} range={qr} volumeTitle="Applications this quarter (by week)" />
+          <div className="max-w-2xl">
+            <ScheduleCard cadence="quarterly" blurb="A quarterly summary for leadership — the same metrics rolled up per quarter with prior-quarter comparison." />
+          </div>
         </div>
       )}
 
-      {tab === 'Schedule' && <ScheduleConfig />}
     </div>
   );
 }

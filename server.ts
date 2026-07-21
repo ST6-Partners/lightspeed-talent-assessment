@@ -24,7 +24,7 @@ import { inspect } from 'node:util';
 import { env } from './server/src/env.js';
 import { getSessionMiddleware, verifyToken } from './server/src/auth.js';
 import { registerBuiltInJobs, startCronJobs } from './server/src/services/job-runner.js';
-import { registerHiringJobs } from './server/src/services/hiring-scheduler.js';
+import { registerHiringJobs, applyReportSchedules } from './server/src/services/hiring-scheduler.js';
 import { verifyZoomWebhook, handleZoomRecordingReady } from './server/src/services/zoomService.js';
 import { verifyCalendlySignature, applyCalendlyEvent } from './server/src/services/calendly.js';
 import { parseCriteriaWebhook } from './server/src/services/criteriaCorp.js';
@@ -493,7 +493,9 @@ async function main() {
 
   registerBuiltInJobs();
   registerHiringJobs();
-  startCronJobs(db);
+  startCronJobs(db)
+    .then(() => applyReportSchedules())
+    .catch((err) => console.error('[boot] failed to start cron / apply report schedules:', err));
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Template App running on port ${PORT} [${isProduction ? 'production' : 'development'}]`);

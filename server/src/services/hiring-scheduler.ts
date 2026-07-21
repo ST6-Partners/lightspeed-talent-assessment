@@ -13,7 +13,7 @@ import { eq, and, lte, gte, lt, isNull, isNotNull } from 'drizzle-orm';
 import { db } from '../db.js';
 import { candidates, candidateStageHistory, emailLog, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { approvals } from '../db/schema/intake.js';
-import { registerJob, type JobResult } from './job-runner.js';
+import { registerJob, rescheduleCronJob, type JobResult } from './job-runner.js';
 import { rankNewApplicants } from './candidateRanking.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { sendEmail, emailBookingReminderCandidate, emailBookingStalledHR } from './email.js';
@@ -22,7 +22,7 @@ import { approverEmail, emailApprovalReminder, emailInterviewReminderCandidate, 
 import { getPostingWindows, writeExternalOpenMarker } from './posting.js';
 import { emailMetricsReport } from './email.js';
 import { buildPeriodMetrics } from './reportMetrics.js';
-import { getReportConfig } from './reportConfig.js';
+import { getReportConfig, cronForReport } from './reportConfig.js';
 import { emailScorecardReminder } from './email.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
 import { valueReviews } from '../db/schema/values.js';
@@ -544,6 +544,20 @@ async function runScorecardReminder(): Promise<JobResult> {
     } catch (err) { console.error('[scorecard-reminder] send failed for round', r.id, err); }
   }
   return { affected: sent, details: sent ? `Nudged ${sent} interviewer(s) with an open scorecard.` : 'No open scorecards needing a nudge.' };
+}
+
+// Apply each report's stored day/time to its cron job. Called once at
+// boot (after startCronJobs) and again whenever an admin saves a new
+// schedule, so the change takes effect without a server restart.
+export async function applyReportSchedules(): Promise<void> {
+  for (const cadence of ['weekly', 'quarterly'] as const) {
+    try {
+      const cfg = await getReportConfig(db, cadence);
+      rescheduleCronJob(`${cadence}-metrics-report`, cronForReport(cadence, cfg.schedule));
+    } catch (err) {
+      console.warn(`[hiring-scheduler] failed to apply ${cadence} report schedule:`, err);
+    }
+  }
 }
 
 export function registerHiringJobs(): void {

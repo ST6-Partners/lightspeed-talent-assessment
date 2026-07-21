@@ -12,7 +12,8 @@ import { CANDIDATE_STAGES } from '../domain/stages.js';
 import { router, protectedProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { db } from '../db.js';
-import { getReportConfig, setReportConfig, type ReportCadence } from '../services/reportConfig.js';
+import { getReportConfig, setReportConfig, cronForReport, type ReportCadence } from '../services/reportConfig.js';
+import { rescheduleCronJob } from '../services/job-runner.js';
 
 export const insightsRouter = router({
   // Roles that have at least one candidate — powers the Metrics per-role picker.
@@ -46,9 +47,22 @@ export const insightsRouter = router({
       cadence: z.enum(['weekly', 'quarterly']),
       enabled: z.boolean(),
       recipients: z.array(z.string()).default([]),
+      // Delivery day/time. dayOfWeek (0=Sun..6=Sat) for weekly;
+      // dayOfMonth (1..28) for quarterly. Optional — omitted keeps the default.
+      schedule: z.object({
+        dayOfWeek: z.number().int().min(0).max(6).optional(),
+        dayOfMonth: z.number().int().min(1).max(28).optional(),
+        hour: z.number().int().min(0).max(23),
+        minute: z.number().int().min(0).max(59),
+      }).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await setReportConfig(ctx.db, input.cadence as ReportCadence, { enabled: input.enabled, recipients: input.recipients }, ctx.user.id);
+      const cadence = input.cadence as ReportCadence;
+      await setReportConfig(ctx.db, cadence, { enabled: input.enabled, recipients: input.recipients, schedule: input.schedule }, ctx.user.id);
+      // Re-read the normalized config and re-point the cron job at the new
+      // day/time so the change applies without a restart.
+      const cfg = await getReportConfig(ctx.db, cadence);
+      rescheduleCronJob(`${cadence}-metrics-report`, cronForReport(cadence, cfg.schedule));
       return { ok: true };
     }),
 

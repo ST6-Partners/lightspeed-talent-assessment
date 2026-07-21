@@ -153,30 +153,59 @@ export async function listJobRuns(
 
 let cronStarted = false;
 
+// node-cron module + db handle captured at startup so jobs can be
+// (re)scheduled dynamically later — e.g. when an admin changes a report's
+// send day/time. cronTasks holds the live ScheduledTask per job so we can
+// stop and replace it without a restart.
+let cronMod: any = null;
+let cronDbRef: DrizzleClient | null = null;
+const cronTasks = new Map<string, any>();
+
+function scheduleCronTask(jobName: string, cronExpression: string): boolean {
+  if (!cronMod || !cronDbRef) return false;
+  if (typeof cronMod.validate === 'function' && !cronMod.validate(cronExpression)) {
+    console.warn(`[Job-Runner] Invalid cron "${cronExpression}" for ${jobName} — keeping previous schedule`);
+    return false;
+  }
+  const prev = cronTasks.get(jobName);
+  if (prev) { try { prev.stop(); } catch { /* ignore */ } cronTasks.delete(jobName); }
+  const dbRef = cronDbRef;
+  const task = cronMod.schedule(cronExpression, async () => {
+    console.log(`[Job-Runner] Cron firing: ${jobName}`);
+    try {
+      await runJob(dbRef, jobName, 'cron');
+    } catch (err: any) {
+      console.error(`[Job-Runner] Cron job ${jobName} failed:`, err.message);
+    }
+  });
+  cronTasks.set(jobName, task);
+  console.log(`[Job-Runner] Cron scheduled: ${jobName} — ${cronExpression}`);
+  return true;
+}
+
+// Stop + reschedule a single registered job under a new cron expression,
+// without a restart. Returns false if cron isn't available or the
+// expression is invalid (previous schedule is kept in that case).
+export function rescheduleCronJob(jobName: string, cronExpression: string): boolean {
+  return scheduleCronTask(jobName, cronExpression);
+}
+
 export async function startCronJobs(db: DrizzleClient): Promise<void> {
   if (cronStarted) return;
   cronStarted = true;
 
-  let cron: any;
   try {
     // @ts-expect-error node-cron is an optional peer dep, imported dynamically
-    cron = await import('node-cron');
+    cronMod = await import('node-cron');
   } catch {
     console.log('[Job-Runner] node-cron not installed — cron scheduling disabled. Install with: npm install node-cron');
     return;
   }
+  cronDbRef = db;
 
   for (const job of registry.values()) {
     if (job.jobType === 'cron' && job.cronExpression) {
-      cron.schedule(job.cronExpression, async () => {
-        console.log(`[Job-Runner] Cron firing: ${job.name}`);
-        try {
-          await runJob(db, job.name, 'cron');
-        } catch (err: any) {
-          console.error(`[Job-Runner] Cron job ${job.name} failed:`, err.message);
-        }
-      });
-      console.log(`[Job-Runner] Cron scheduled: ${job.name} — ${job.cronExpression}`);
+      scheduleCronTask(job.name, job.cronExpression);
     }
   }
 }
