@@ -124,15 +124,12 @@ export default function Layout() {
     <div className="h-screen flex overflow-hidden">
       {/* Sidebar */}
       <aside className="w-60 bg-ls-slate text-[#B9C3CB] flex flex-col px-3.5 py-4">
-        <div className="px-2 pb-4">
-          <div className="bg-white rounded-lg px-3 py-2 shadow-sm inline-flex items-center">
-            <img
-              src="https://www.lightspeedsystems.com/wp-content/uploads/2024/12/lightspeed_systems_logo.svg"
-              alt="Lightspeed Systems"
-              className="h-6 w-auto"
-            />
+        <div className="flex items-center gap-2.5 px-2 pb-4">
+          <BrandMark size={34} />
+          <div className="leading-tight">
+            <div className="text-white font-bold text-[15px] tracking-tight leading-[1.12]">Lightspeed<br/>Systems</div>
+            <div className="text-[11px] text-[#7E8B94] mt-1">Talent Assessment</div>
           </div>
-          <div className="text-[11px] text-[#7E8B94] mt-1.5 pl-1">Talent Assessment</div>
         </div>
 
         <nav className="flex-1 overflow-y-auto">
