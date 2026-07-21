@@ -571,12 +571,22 @@ export async function emailBookingInvite(data: {
   firstName: string;
   jobTitle?: string;
   bookingUrl: string;
+  kind?: 'interview' | 'work_sample_walkthrough';
 }) {
+  const walkthrough = data.kind === 'work_sample_walkthrough';
   await sendEmail({
     to: data.email,
-    templateId: 'booking_invite',
-    subject: `Book your interview — ${data.jobTitle ?? 'Lightspeed Systems'}`,
-    html: wrap(`
+    templateId: walkthrough ? 'work_sample_walkthrough_invite' : 'booking_invite',
+    subject: walkthrough
+      ? `Schedule your work sample walkthrough — ${data.jobTitle ?? 'Lightspeed Systems'}`
+      : `Book your interview — ${data.jobTitle ?? 'Lightspeed Systems'}`,
+    html: wrap(walkthrough ? `
+      ${h1('Schedule your work sample walkthrough')}
+      ${p(`Hi ${data.firstName},`)}
+      ${p(`You're advancing to the work sample step${data.jobTitle ? ` for <strong>${data.jobTitle}</strong>` : ''}. For this role the work sample is a short live walkthrough: instead of submitting written work, you'll walk our team through the task on a call. Please pick a time that works best for you.`)}
+      ${button('Choose your walkthrough time', data.bookingUrl)}
+      ${p(`<span style="font-size:12px;color:#888;">If the button doesn't work, paste this link: ${data.bookingUrl}</span>`)}
+    ` : `
       ${h1('Book your interview')}
       ${p(`Hi ${data.firstName},`)}
       ${p(`Good news — you're advancing to the interview stage${data.jobTitle ? ` for <strong>${data.jobTitle}</strong>` : ''}. Please pick the time that works best for you from the available slots.`)}

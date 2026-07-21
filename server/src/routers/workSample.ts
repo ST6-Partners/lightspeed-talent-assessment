@@ -136,7 +136,7 @@ export const workSampleRouter = router({
         const round = await ensureWalkthroughRound(ctx.db, candidate.id);
         await auditChange(ctx.db, ctx.user.id, candidate.id, 'candidates', 'update');
         trackActivity(ctx.db, ctx.user.id, 'send_work_sample', 'candidates', { candidateId: candidate.id, mode: 'live_walkthrough' }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
-        return { mode: 'live_walkthrough' as const, roundId: round.roundId, roundName: round.roundName };
+        return { mode: 'live_walkthrough' as const, roundId: round.roundId, roundName: round.roundName, bookingUrl: round.bookingUrl ?? null };
       }
 
       // TAKE-HOME (default): emailed submission link, auto-scored.

@@ -9,13 +9,14 @@
 // ============================================================
 import { eq, sql } from 'drizzle-orm';
 import { candidateInterviews } from '../db/schema/interviews.js';
+import { openInterviewScheduling } from './scheduling.js';
 
 export const WALKTHROUGH_ROUND_NAME = 'Work Sample Walkthrough';
 
 export async function ensureWalkthroughRound(
   db: any,
   candidateId: string,
-): Promise<{ roundId: string; roundName: string; created: boolean }> {
+): Promise<{ roundId: string; roundName: string; created: boolean; bookingUrl?: string | null }> {
   const existing = await db.select().from(candidateInterviews)
     .where(eq(candidateInterviews.candidateId, candidateId));
   const found = existing.find((r: any) => r.roundName === WALKTHROUGH_ROUND_NAME);
@@ -28,5 +29,16 @@ export async function ensureWalkthroughRound(
     roundName: WALKTHROUGH_ROUND_NAME,
     sortOrder: (maxRow?.m ?? -1) + 1,
   }).returning();
-  return { roundId: created.id, roundName: WALKTHROUGH_ROUND_NAME, created: true };
+
+  // Auto-send the candidate the "pick a time" invite the moment the walkthrough
+  // round is created — no recruiter click. Fire-and-forget: a mail failure must
+  // not undo the round. Won't double-send if a booking is already open.
+  let bookingUrl: string | null = null;
+  try {
+    const sched = await openInterviewScheduling(db, candidateId, { kind: 'work_sample_walkthrough' });
+    bookingUrl = sched.bookingUrl;
+  } catch (err) {
+    console.error('[work-sample-walkthrough] auto-open scheduling failed:', err);
+  }
+  return { roundId: created.id, roundName: WALKTHROUGH_ROUND_NAME, created: true, bookingUrl };
 }
