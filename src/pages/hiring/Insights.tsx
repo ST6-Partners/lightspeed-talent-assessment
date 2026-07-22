@@ -1,219 +1,220 @@
 // ============================================================
 // METRICS PAGE — hiring pipeline analytics.
-// Sub-tabs: Overview (all-time), Weekly, Quarterly (period reports
-// with vs-prior-period deltas), and Schedule (configure the automated
-// weekly/quarterly report emails). All views share a per-role filter.
+// Navy hero holds the title, role filter, view tabs and the KPI
+// tiles; below it a stage-by-stage conversion funnel, application
+// volume, avg days per stage, sources, rejection reasons and an
+// assessment-quality panel. Tabs: Overview (all-time), Weekly,
+// Quarterly (period reports with vs-prior-period deltas). Weekly
+// and Quarterly also expose the automated report-email schedule.
 // ============================================================
 
 import { useState } from 'react';
 import { trpc } from '../../lib/trpc';
-import SubTabs from '../../components/SubTabs';
 
-const STAGE_COLORS: Record<string, string> = {
-  Applied:             'bg-purple-500',
-  Assessment:          'bg-blue-500',
-  'Work Sample':       'bg-indigo-500',
-  'Values Review':     'bg-cyan-500',
-  'Phone Screen':       'bg-teal-500',
-  'Interview Scheduled':'bg-yellow-500',
-  Interviewed:         'bg-orange-500',
-  Offered:             'bg-emerald-500',
-  Hired:               'bg-green-500',
-  Rejected:            'bg-red-400',
-  'Not Selected':      'bg-gray-400',
-};
+// ── Colour helpers ─────────────────────────────────────────
+// Funnel segments fade from Lightspeed cyan (light) → deep navy (dark).
+function funnelShade(i: number, n: number) {
+  const a = [78, 171, 210], b = [11, 29, 64];
+  const t = n <= 1 ? 0 : i / (n - 1);
+  const c = a.map((x, k) => Math.round(x + (b[k] - x) * t));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+function readableInk(i: number, n: number) {
+  const a = [78, 171, 210], b = [11, 29, 64];
+  const t = n <= 1 ? 0 : i / (n - 1);
+  const lum = a.reduce((s, x, k) => s + (x + (b[k] - x) * t) * [0.299, 0.587, 0.114][k], 0);
+  return lum > 150 ? '#0B1D40' : '#ffffff';
+}
+const SOURCE_COLORS = ['#2E89B8', '#4EABD2', '#14b8a6', '#6FBCE0', '#8A969E', '#c4b5fd', '#f59e0b'];
+// Pipeline stages shown in the funnel (closed/rejected stages excluded).
+const FUNNEL_STAGES = ['Applied', 'Assessment', 'Values Review', 'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Work Sample', 'Offered', 'Hired'];
 
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+// ── Small building blocks ──────────────────────────────────
+function Card({ title, children, className = '' }: { title?: string; children: any; className?: string }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{label}</div>
-      <div className="text-3xl font-bold text-gray-900">{value ?? '—'}</div>
-      {sub && <div className="text-xs text-gray-400 mt-1">{sub}</div>}
+    <div className={`bg-white rounded-xl border border-gray-200 p-4 ${className}`}>
+      {title && <div className="text-sm font-semibold text-gray-700 mb-4">{title}</div>}
+      {children}
     </div>
   );
 }
 
-function DeltaStat({ label, value, prev, sub }: { label: string; value: number; prev?: number | null; sub?: string }) {
-  const d = typeof prev === 'number' ? value - prev : null;
-  const color = d == null ? '' : d > 0 ? 'text-green-600' : d < 0 ? 'text-red-500' : 'text-gray-400';
+function KpiTile({ label, value, unit, sub, delta }: {
+  label: string; value: string | number; unit?: string; sub?: string; delta?: number | null;
+}) {
+  const dcls = delta == null ? '' : delta > 0 ? 'bg-emerald-400/20 text-emerald-300' : delta < 0 ? 'bg-rose-400/20 text-rose-200' : 'bg-white/15 text-white/70';
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{label}</div>
-      <div className="flex items-baseline gap-2">
-        <span className="text-3xl font-bold text-gray-900">{value}</span>
-        {d != null && <span className={`text-xs font-semibold ${color}`}>{d > 0 ? '+' : ''}{d}</span>}
+    <div className="relative bg-white/[.06] border border-white/10 rounded-xl px-4 py-3">
+      <div className="text-[10.5px] font-bold uppercase tracking-[.07em] text-white/55 leading-tight">{label}</div>
+      <div className="mt-2 text-[26px] font-extrabold text-white leading-none">
+        {value}{unit && <span className="text-sm font-semibold text-white/45 ml-0.5">{unit}</span>}
       </div>
-      {sub && <div className="text-xs text-gray-400 mt-1">{sub}</div>}
-      {d != null && <div className="text-[10px] text-gray-400 mt-0.5">vs prior period</div>}
+      {sub && <div className="text-[11px] text-white/55 mt-2">{sub}</div>}
+      {delta != null && (
+        <span className={`absolute top-3 right-3 text-[11px] font-bold px-2 py-0.5 rounded-full ${dcls}`}>
+          {delta > 0 ? '+' : ''}{delta}
+        </span>
+      )}
     </div>
   );
 }
 
-function SectionHeader({ title }: { title: string }) {
-  return <div className="text-sm font-semibold text-gray-700 mb-3">{title}</div>;
+// ── Stage-by-stage conversion funnel (horizontal band) ─────
+function ConversionFunnel({ funnel }: { funnel: { stage: string; count: number }[] }) {
+  const byStage: Record<string, number> = {};
+  funnel.forEach((f) => { byStage[f.stage] = f.count; });
+  const steps = FUNNEL_STAGES
+    .map((s) => ({ stage: s, count: byStage[s] ?? 0 }))
+    .filter((s, i) => i === 0 || s.count > 0); // always keep Applied; drop empty trailing stages
+  const n = steps.length;
+  if (steps.every((s) => s.count === 0)) {
+    return <div className="text-sm text-gray-400 py-6 text-center">No pipeline data yet.</div>;
+  }
+  return (
+    <div className="flex rounded-xl overflow-hidden border border-gray-200">
+      {steps.map((s, i) => {
+        const prev = i > 0 ? steps[i - 1].count : 0;
+        const conv = i > 0 && prev > 0 ? Math.round((s.count / prev) * 100) : null;
+        const ink = readableInk(i, n);
+        return (
+          <div key={s.stage} className="flex-1 min-w-[92px] px-3 py-3.5"
+            style={{ background: funnelShade(i, n), color: ink }}>
+            <div className="text-2xl font-extrabold leading-none">{s.count}</div>
+            <div className="text-[11.5px] font-semibold mt-1 leading-tight" style={{ opacity: 0.92 }}>{s.stage}</div>
+            <div className="text-[10.5px] mt-1" style={{ opacity: 0.72 }}>
+              {i === 0 ? 'start' : conv != null ? `${conv}% →` : '—'}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
-function BarChart({ rows, maxValue }: { rows: { label: string; value: number; color?: string }[]; maxValue?: number }) {
-  const max = maxValue ?? Math.max(...rows.map((r) => r.value), 1);
+// ── Application volume bars ─────────────────────────────────
+function VolumeChart({ weeklyVolume }: { weeklyVolume: { week: string; count: number }[] }) {
+  if (weeklyVolume.length === 0) return <div className="text-sm text-gray-400 py-6 text-center">No data yet.</div>;
+  const max = Math.max(...weeklyVolume.map((w) => w.count), 1);
   return (
-    <div className="space-y-2">
-      {rows.map((row) => (
-        <div key={row.label} className="flex items-center gap-3">
-          <div className="w-36 text-xs text-gray-600 text-right truncate shrink-0">{row.label}</div>
-          <div className="flex-1 bg-gray-100 rounded-full h-5 relative">
-            <div className={`h-5 rounded-full transition-all ${row.color ?? 'bg-blue-500'}`}
-              style={{ width: `${Math.max((row.value / max) * 100, row.value > 0 ? 4 : 0)}%` }} />
-          </div>
-          <div className="text-xs font-semibold text-gray-700 w-8 text-right">{row.value}</div>
+    <div className="flex items-end gap-1.5 h-40">
+      {weeklyVolume.map((w) => (
+        <div key={w.week} className="flex-1 flex flex-col items-center gap-1 justify-end">
+          <div className="text-[10px] text-gray-500 font-semibold">{w.count}</div>
+          <div className="w-full bg-ls-cyan rounded-t" style={{ height: `${Math.max((w.count / max) * 100, w.count > 0 ? 5 : 0)}%` }} />
+          <div className="text-[9px] text-gray-400 truncate w-full text-center">{w.week}</div>
         </div>
       ))}
     </div>
   );
 }
 
-function ScoreBadge({ label, value, pass }: { label: string; value: number | null; pass?: boolean }) {
-  const color = value === null ? 'text-gray-400' : pass ? 'text-green-600' : 'text-red-500';
+// ── Horizontal bar list (avg days / rejection reasons) ─────
+function HBars({ rows, unit = '', color = 'bg-ls-cyan', empty }: {
+  rows: { label: string; value: number }[]; unit?: string; color?: string; empty: string;
+}) {
+  if (rows.length === 0) return <div className="text-sm text-gray-400 py-6 text-center">{empty}</div>;
+  const max = Math.max(...rows.map((r) => r.value), 1);
   return (
-    <div className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
-      <span className="text-sm text-gray-600">{label}</span>
-      <span className={`text-sm font-semibold ${color}`}>{value !== null ? value : '—'}</span>
+    <div className="space-y-2.5">
+      {rows.map((r) => (
+        <div key={r.label} className="flex items-center gap-3">
+          <div className="w-40 text-xs text-gray-600 text-right truncate shrink-0">{r.label}</div>
+          <div className="flex-1 bg-gray-100 rounded-full h-5 relative">
+            <div className={`h-5 rounded-full ${color}`} style={{ width: `${Math.max((r.value / max) * 100, r.value > 0 ? 6 : 0)}%` }} />
+          </div>
+          <div className="text-xs font-semibold text-gray-700 w-12 text-right">{r.value}{unit}</div>
+        </div>
+      ))}
     </div>
   );
 }
 
-// ── Charts body (shared by every view) ─────────────────────
-function Charts({ data, volumeTitle }: { data: any; volumeTitle: string }) {
-  const { funnel, rejectionReasons, sourceMix, timeInStage, weeklyVolume, ccat, epp, interview } = data;
-  const funnelMax = Math.max(...funnel.map((f: any) => f.count), 1);
+// ── Sources donut ──────────────────────────────────────────
+function SourcesDonut({ sourceMix }: { sourceMix: { source: string; count: number }[] }) {
+  if (sourceMix.length === 0) return <div className="text-sm text-gray-400 py-6 text-center">No source data yet.</div>;
+  const total = sourceMix.reduce((s, x) => s + x.count, 0);
+  let acc = 0;
+  const seg = sourceMix.map((s, i) => {
+    const a = (acc / total) * 360; acc += s.count; const b = (acc / total) * 360;
+    return `${SOURCE_COLORS[i % SOURCE_COLORS.length]} ${a}deg ${b}deg`;
+  }).join(',');
   return (
-    <>
-      <div className="grid grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <SectionHeader title="Pipeline funnel" />
-          <BarChart rows={funnel.map((f: any) => ({ label: f.stage, value: f.count, color: STAGE_COLORS[f.stage] ?? 'bg-gray-400' }))} maxValue={funnelMax} />
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <SectionHeader title="Avg days per stage" />
-          {timeInStage.length === 0 ? (
-            <div className="text-sm text-gray-400 py-4 text-center">Not enough history yet.</div>
-          ) : (
-            <BarChart rows={timeInStage.map((t: any) => ({ label: t.stage, value: t.avgDays, color: 'bg-indigo-400' }))} />
-          )}
+    <div className="flex items-center gap-5">
+      <div className="relative shrink-0" style={{ width: 132, height: 132 }}>
+        <div style={{ width: 132, height: 132, borderRadius: '50%', background: `conic-gradient(${seg})` }} />
+        <div className="absolute inset-0 m-auto bg-white rounded-full flex flex-col items-center justify-center" style={{ width: 78, height: 78 }}>
+          <div className="text-xl font-extrabold text-gray-900 leading-none">{sourceMix.length}</div>
+          <div className="text-[10px] text-gray-400">sources</div>
         </div>
       </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <SectionHeader title={volumeTitle} />
-        {weeklyVolume.length === 0 ? (
-          <div className="text-sm text-gray-400 py-4 text-center">No data yet.</div>
-        ) : (
-          <div className="flex items-end gap-1.5 h-24">
-            {weeklyVolume.map((w: any) => {
-              const max = Math.max(...weeklyVolume.map((x: any) => x.count), 1);
-              const pct = Math.max((w.count / max) * 100, w.count > 0 ? 6 : 0);
-              return (
-                <div key={w.week} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="text-[10px] text-gray-500">{w.count}</div>
-                  <div className="w-full bg-blue-400 rounded-t" style={{ height: `${pct}%` }} />
-                  <div className="text-[9px] text-gray-400 truncate w-full text-center">{w.week}</div>
-                </div>
-              );
-            })}
+      <div className="flex-1 text-xs space-y-1.5">
+        {sourceMix.map((s, i) => (
+          <div key={s.source} className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: SOURCE_COLORS[i % SOURCE_COLORS.length] }} />
+            <span className="text-gray-600">{s.source}</span>
+            <span className="ml-auto font-semibold text-gray-800">{s.count}</span>
           </div>
-        )}
+        ))}
       </div>
-
-      <div className="grid grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <SectionHeader title="Rejection reasons" />
-          {rejectionReasons.length === 0 ? (
-            <div className="text-sm text-gray-400 py-4 text-center">No rejections yet.</div>
-          ) : (
-            <BarChart rows={rejectionReasons.map((r: any) => ({ label: r.reason, value: r.count, color: 'bg-red-400' }))} />
-          )}
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <SectionHeader title="Application sources" />
-          {sourceMix.length === 0 ? (
-            <div className="text-sm text-gray-400 py-4 text-center">No source data yet.</div>
-          ) : (
-            <BarChart rows={sourceMix.map((s: any) => ({ label: s.source, value: s.count, color: 'bg-cyan-500' }))} />
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <SectionHeader title="CCAT scores" />
-          {!ccat ? <div className="text-sm text-gray-400 py-4 text-center">No scores on record.</div> : (
-            <div>
-              <ScoreBadge label="Total assessed" value={ccat.total} />
-              <ScoreBadge label="Average" value={ccat.avg} />
-              <ScoreBadge label="Min" value={ccat.min} />
-              <ScoreBadge label="Max" value={ccat.max} />
-              <ScoreBadge label="Passed (≥30)" value={ccat.passed} pass={true} />
-              <ScoreBadge label="Failed (<30)" value={ccat.failed} pass={false} />
-            </div>
-          )}
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <SectionHeader title="EPP values match" />
-          {!epp ? <div className="text-sm text-gray-400 py-4 text-center">No scores on record.</div> : (
-            <div>
-              <ScoreBadge label="Total analyzed" value={epp.total} />
-              <ScoreBadge label="Average score" value={epp.avg} />
-              <ScoreBadge label="Passed (≥70%)" value={epp.passed} pass={true} />
-              <ScoreBadge label="Failed (<70%)" value={epp.failed} pass={false} />
-            </div>
-          )}
-        </div>
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <SectionHeader title="Interview scores" />
-          {!interview ? <div className="text-sm text-gray-400 py-4 text-center">No scores on record.</div> : (
-            <div>
-              <ScoreBadge label="Total scored" value={interview.total} />
-              <ScoreBadge label="Average score" value={interview.avg} />
-            </div>
-          )}
-        </div>
-      </div>
-    </>
+    </div>
   );
 }
 
-// ── One report view for a range (empty range = all-time) ───
-function ReportView({ jdId, range, volumeTitle }: {
-  jdId: string | null;
-  range: { from?: string; to?: string; compareFrom?: string; compareTo?: string };
-  volumeTitle: string;
-}) {
-  const args: any = {};
-  if (jdId) args.jdId = jdId;
-  if (range.from) args.from = range.from;
-  if (range.to) args.to = range.to;
-  const hasArgs = Object.keys(args).length > 0;
-  const { data, isLoading, error } = trpc.insights.summary.useQuery(hasArgs ? args : undefined);
-
-  const compareArgs: any = { ...(jdId ? { jdId } : {}), from: range.compareFrom, to: range.compareTo };
-  const compare = trpc.insights.summary.useQuery(compareArgs, { enabled: !!range.compareFrom });
-
-  if (isLoading) return <div className="flex items-center justify-center h-48 text-sm text-gray-400">Loading…</div>;
-  if (error || !data) return <div className="flex items-center justify-center h-48 text-sm text-red-400">Failed to load metrics.</div>;
-
-  const s = data.summary;
-  const cs = range.compareFrom ? compare.data?.summary : null;
-  const { ccat, epp } = data;
-
+// ── Assessment quality (pass-rate bars) ────────────────────
+function QualityBar({ label, pct, detail }: { label: string; pct: number | null; detail: string }) {
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <DeltaStat label="Applicants" value={s.totalApplicants} prev={cs?.totalApplicants} />
-        <DeltaStat label="Offered" value={s.totalOffered} prev={cs?.totalOffered} sub={`${s.offerRate}% offer rate`} />
-        <DeltaStat label="Hired" value={s.totalHired} prev={cs?.totalHired} sub={`${s.hireRate}% hire rate`} />
-        <StatCard label="Avg CCAT score" value={ccat ? `${ccat.avg}/50` : '—'} sub={ccat ? `${ccat.passed} passed · ${ccat.failed} failed` : 'No scores yet'} />
-        <StatCard label="Avg EPP match" value={epp ? `${epp.avg}%` : '—'} sub={epp ? `${epp.passed} passed · ${epp.failed} failed` : 'No scores yet'} />
+    <div className="mb-4 last:mb-0">
+      <div className="flex justify-between items-baseline mb-1.5">
+        <span className="text-sm text-gray-700">{label}</span>
+        <span className="text-sm font-bold text-gray-900">{pct == null ? '—' : `${pct}%`}</span>
       </div>
-      <Charts data={data} volumeTitle={volumeTitle} />
+      <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-2.5 rounded-full ls-accent-grad" style={{ width: `${pct ?? 0}%` }} />
+      </div>
+      <div className="text-[11px] text-gray-400 mt-1">{detail}</div>
+    </div>
+  );
+}
+function AssessmentQuality({ ccat, epp, workSample }: { ccat: any; epp: any; workSample: any }) {
+  const rate = (s: any) => (s && s.total ? Math.round((s.passed / s.total) * 100) : null);
+  return (
+    <div>
+      <QualityBar label="CCAT pass rate" pct={rate(ccat)} detail={ccat ? `${ccat.passed}/${ccat.total} scored ≥ 30` : 'No scores yet'} />
+      <QualityBar label="EPP values pass" pct={rate(epp)} detail={epp ? `${epp.passed}/${epp.total} matched ≥ 70%` : 'No scores yet'} />
+      <QualityBar label="Work sample clear" pct={rate(workSample)} detail={workSample ? `${workSample.passed}/${workSample.total} scored ≥ ${workSample.passThreshold}` : 'No submissions yet'} />
+    </div>
+  );
+}
+
+// ── Charts area (everything below the hero) ────────────────
+function Charts({ data }: { data: any }) {
+  const { funnel, weeklyVolume, timeInStage, sourceMix, rejectionReasons, ccat, epp, workSample } = data;
+  return (
+    <div className="space-y-4">
+      <Card title="Conversion funnel — stage by stage">
+        <ConversionFunnel funnel={funnel} />
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card title="Application volume (last 12 weeks)">
+          <VolumeChart weeklyVolume={weeklyVolume} />
+        </Card>
+        <Card title="Avg days in each stage">
+          <HBars rows={timeInStage.map((t: any) => ({ label: t.stage, value: t.avgDays }))} unit="d" color="bg-ls-primary" empty="Not enough history yet." />
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card title="Application sources">
+          <SourcesDonut sourceMix={sourceMix} />
+        </Card>
+        <Card title="Rejection reasons">
+          <HBars rows={rejectionReasons.map((r: any) => ({ label: r.reason, value: r.count }))} color="bg-rose-400" empty="No rejections yet." />
+        </Card>
+        <Card title="Assessment quality">
+          <AssessmentQuality ccat={ccat} epp={epp} workSample={workSample} />
+        </Card>
+      </div>
     </div>
   );
 }
@@ -273,7 +274,7 @@ function nextQuarterly(dayOfMonth: number, hour: number, minute: number) {
 }
 const fmtWhen = (d: Date) => d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
-// ── Schedule + recipients card (shown inside the Weekly / Quarterly tabs) ─────
+// ── Schedule + recipients card (shown inside Weekly / Quarterly) ─────
 function ScheduleCard({ cadence, blurb }: { cadence: 'weekly' | 'quarterly'; blurb: string }) {
   const cfg = trpc.insights.getReportConfig.useQuery({ cadence });
   const save = trpc.insights.setReportConfig.useMutation({ onSuccess: () => cfg.refetch() });
@@ -301,7 +302,7 @@ function ScheduleCard({ cadence, blurb }: { cadence: 'weekly' | 'quarterly'; blu
     : `on the ${ordinal(curDom)} of Jan, Apr, Jul & Oct at ${fmtClock(th, tm)}`;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5">
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
       <div className="flex items-center justify-between mb-2">
         <div className="text-sm font-semibold text-gray-800 capitalize">{cadence} report email</div>
         <label className="inline-flex items-center gap-2 text-xs text-gray-600">
@@ -371,77 +372,114 @@ export default function Insights() {
   const [qOffset, setQOffset] = useState(1); // default to last completed quarter
   const { data: roles } = trpc.insights.roles.useQuery();
 
-  const wk = weekRange(weekOffset);
-  const qr = quarterRange(qOffset);
+  const range = tab === 'Overview' ? { label: 'All time' } : tab === 'Weekly' ? weekRange(weekOffset) : quarterRange(qOffset);
+  const hasRange = tab !== 'Overview';
+
+  const args: any = {};
+  if (jdId) args.jdId = jdId;
+  if (hasRange) { args.from = (range as any).from; args.to = (range as any).to; }
+  const { data, isLoading, error } = trpc.insights.summary.useQuery(Object.keys(args).length ? args : undefined);
+
+  const compareArgs: any = { ...(jdId ? { jdId } : {}), from: (range as any).compareFrom, to: (range as any).compareTo };
+  const compare = trpc.insights.summary.useQuery(compareArgs, { enabled: hasRange && !!(range as any).compareFrom });
+
+  const s = data?.summary;
+  const cs = hasRange ? compare.data?.summary : null;
+  const delta = (v?: number, p?: number) => (typeof v === 'number' && typeof p === 'number' ? v - p : null);
+  const roleTitle = jdId ? ((roles ?? []).find((r) => r.jdId === jdId)?.title ?? 'Role') : null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Metrics</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {jdId
-              ? `${(roles ?? []).find((r) => r.jdId === jdId)?.title ?? 'Role'} — pipeline analytics`
-              : 'All roles — hiring pipeline analytics'}
-          </p>
-        </div>
-        <div>
-          <label className="block text-[11px] font-medium text-gray-500 uppercase tracking-wide mb-1">Role</label>
+    <div className="space-y-5">
+      {/* ── Navy hero: title, filter, tabs, KPI tiles ── */}
+      <div className="rounded-2xl p-6 text-white relative overflow-hidden"
+        style={{ background: 'radial-gradient(120% 140% at 85% 0%, #123056 0%, #0B1D40 55%)' }}>
+        <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
+          <div>
+            <h1 className="text-2xl font-extrabold">Metrics</h1>
+            <p className="text-sm text-white/60 mt-1">{roleTitle ? `${roleTitle} — pipeline analytics` : 'All roles — hiring pipeline analytics'}</p>
+          </div>
           <select value={jdId ?? ''} onChange={(e) => setJdId(e.target.value || null)}
-            className="w-64 px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan">
+            className="w-60 px-3 py-2 rounded-lg text-sm bg-white text-gray-800 border border-white/20 focus:outline-none focus:ring-2 focus:ring-ls-cyan">
             <option value="">All roles (overall)</option>
             {(roles ?? []).map((r) => (<option key={r.jdId} value={r.jdId}>{r.title} ({r.count})</option>))}
           </select>
         </div>
+
+        <div className="inline-flex gap-1 p-1 rounded-xl bg-white/[.07] mb-5">
+          {TABS.map((t) => (
+            <button key={t} onClick={() => setTab(t)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                tab === t ? 'bg-white text-ls-ink shadow' : 'text-white/70 hover:text-white'
+              }`}>
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {isLoading || !data || !s ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-[92px] rounded-xl bg-white/[.06] border border-white/10 animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <KpiTile label="Applicants" value={s.totalApplicants} delta={delta(s.totalApplicants, cs?.totalApplicants)} sub={hasRange ? (range as any).label : 'all time'} />
+            <KpiTile label="Offered" value={s.totalOffered} delta={delta(s.totalOffered, cs?.totalOffered)} sub={`${s.offerRate}% offer rate`} />
+            <KpiTile label="Hired" value={s.totalHired} delta={delta(s.totalHired, cs?.totalHired)} sub={`${s.hireRate}% hire rate`} />
+            <KpiTile label="Avg CCAT" value={data.ccat ? data.ccat.avg : '—'} unit={data.ccat ? '/50' : ''} sub={data.ccat ? `${Math.round((data.ccat.passed / data.ccat.total) * 100)}% pass` : 'no scores'} />
+            <KpiTile label="Avg EPP" value={data.epp ? `${data.epp.avg}%` : '—'} sub={data.epp ? `${Math.round((data.epp.passed / data.epp.total) * 100)}% pass` : 'no scores'} />
+            <KpiTile label="Time to hire" value={data.timeToHire?.medianDays != null ? data.timeToHire.medianDays : '—'} unit={data.timeToHire?.medianDays != null ? 'd' : ''} sub={data.timeToHire ? `median · ${data.timeToHire.hired} hired` : 'no hires yet'} />
+          </div>
+        )}
       </div>
 
-      <SubTabs tabs={TABS} active={tab} onChange={setTab} />
+      {/* ── Period selector for Weekly / Quarterly ── */}
+      {tab === 'Weekly' && (
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-500">Week:</label>
+          <select value={weekOffset} onChange={(e) => setWeekOffset(Number(e.target.value))}
+            className="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white">
+            <option value={0}>This week</option>
+            <option value={1}>Last week</option>
+            <option value={2}>2 weeks ago</option>
+            <option value={3}>3 weeks ago</option>
+          </select>
+          <span className="text-xs text-gray-400">vs prior week</span>
+        </div>
+      )}
+      {tab === 'Quarterly' && (
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-500">Quarter:</label>
+          <select value={qOffset} onChange={(e) => setQOffset(Number(e.target.value))}
+            className="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white">
+            <option value={0}>{quarterRange(0).label} (in progress)</option>
+            <option value={1}>{quarterRange(1).label}</option>
+            <option value={2}>{quarterRange(2).label}</option>
+            <option value={3}>{quarterRange(3).label}</option>
+            <option value={4}>{quarterRange(4).label}</option>
+          </select>
+          <span className="text-xs text-gray-400">vs {quarterRange(qOffset + 1).label}</span>
+        </div>
+      )}
 
-      {tab === 'Overview' && (
-        <ReportView jdId={jdId} range={{}} volumeTitle="Weekly application volume (last 12 weeks)" />
+      {/* ── Charts ── */}
+      {error || !data ? (
+        <div className="flex items-center justify-center h-48 text-sm text-red-400">Failed to load metrics.</div>
+      ) : (
+        <Charts data={data} />
       )}
 
       {tab === 'Weekly' && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-gray-500">Week:</label>
-            <select value={weekOffset} onChange={(e) => setWeekOffset(Number(e.target.value))}
-              className="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white">
-              <option value={0}>This week</option>
-              <option value={1}>Last week</option>
-              <option value={2}>2 weeks ago</option>
-              <option value={3}>3 weeks ago</option>
-            </select>
-            <span className="text-xs text-gray-400">{wk.label}</span>
-          </div>
-          <ReportView jdId={jdId} range={wk} volumeTitle="Applications this period (by week)" />
-          <div className="max-w-2xl">
-            <ScheduleCard cadence="weekly" blurb="A bite-sized weekly digest — new applicants, pipeline movement, interviews, offers, hires. Good for hiring managers." />
-          </div>
+        <div className="max-w-2xl">
+          <ScheduleCard cadence="weekly" blurb="A bite-sized weekly digest — new applicants, pipeline movement, interviews, offers, hires. Good for hiring managers." />
         </div>
       )}
-
       {tab === 'Quarterly' && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-gray-500">Quarter:</label>
-            <select value={qOffset} onChange={(e) => setQOffset(Number(e.target.value))}
-              className="px-3 py-1.5 border border-gray-300 rounded-md text-sm bg-white">
-              <option value={0}>{quarterRange(0).label} (in progress)</option>
-              <option value={1}>{quarterRange(1).label}</option>
-              <option value={2}>{quarterRange(2).label}</option>
-              <option value={3}>{quarterRange(3).label}</option>
-              <option value={4}>{quarterRange(4).label}</option>
-            </select>
-            <span className="text-xs text-gray-400">vs {quarterRange(qOffset + 1).label}</span>
-          </div>
-          <ReportView jdId={jdId} range={qr} volumeTitle="Applications this quarter (by week)" />
-          <div className="max-w-2xl">
-            <ScheduleCard cadence="quarterly" blurb="A quarterly summary for leadership — the same metrics rolled up per quarter with prior-quarter comparison." />
-          </div>
+        <div className="max-w-2xl">
+          <ScheduleCard cadence="quarterly" blurb="A quarterly summary for leadership — the same metrics rolled up per quarter with prior-quarter comparison." />
         </div>
       )}
-
     </div>
   );
 }

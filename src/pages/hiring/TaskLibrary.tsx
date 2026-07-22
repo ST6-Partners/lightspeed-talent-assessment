@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, Fragment } from 'react';
 import { Plus, X, Trash2, Pencil, ChevronRight, ChevronDown } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
@@ -37,15 +37,6 @@ export default function TaskLibrary() {
   const createMutation = trpc.tasks.create.useMutation({ onSuccess: () => { refetch(); close(); } });
   const updateMutation = trpc.tasks.update.useMutation({ onSuccess: () => { refetch(); close(); } });
   const deleteMutation = trpc.tasks.delete.useMutation({ onSuccess: () => refetch() });
-
-  // Scoring config: pass mark + auto-reject
-  const scoringCfg = trpc.workSample.getScoringConfig.useQuery();
-  const saveScoringCfg = trpc.workSample.setScoringConfig.useMutation({ onSuccess: () => scoringCfg.refetch() });
-  const [passMark, setPassMark] = useState('60');
-  const [autoReject, setAutoReject] = useState(false);
-  useEffect(() => {
-    if (scoringCfg.data) { setPassMark(String(scoringCfg.data.passThreshold)); setAutoReject(!!scoringCfg.data.autoRejectEnabled); }
-  }, [scoringCfg.data]);
 
   const close = () => { setShowForm(false); setEditingId(null); setForm(EMPTY); };
 
@@ -134,33 +125,6 @@ export default function TaskLibrary() {
             </tbody>
           </table>
         )}
-      </div>
-
-      {/* Scoring config: pass mark + auto-reject */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-        <div className="text-sm font-semibold text-gray-700 mb-1">AI scoring</div>
-        <p className="text-xs text-gray-500 mb-3">Submissions are scored automatically against each task's rubric. Set the pass mark, and choose whether candidates who score below it are rejected automatically.</p>
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="text-xs text-gray-700 flex items-center gap-2">
-            Pass mark (0–100)
-            <input type="number" min={0} max={100} value={passMark}
-              onChange={(e) => setPassMark(e.target.value)}
-              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm" />
-          </label>
-          <label className="text-xs text-gray-700 flex items-center gap-2">
-            <input type="checkbox" checked={autoReject} onChange={(e) => setAutoReject(e.target.checked)} />
-            Auto-reject candidates who score below the pass mark
-          </label>
-          <button
-            onClick={() => saveScoringCfg.mutate({ passThreshold: Math.max(0, Math.min(100, parseInt(passMark) || 0)), autoRejectEnabled: autoReject })}
-            disabled={saveScoringCfg.isLoading}
-            className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50"
-          >
-            {saveScoringCfg.isLoading ? 'Saving…' : 'Save'}
-          </button>
-          {saveScoringCfg.isSuccess && <span className="text-xs text-green-700">Saved.</span>}
-        </div>
-        {autoReject && <div className="text-[11px] text-amber-600 mt-2">Auto-reject is on. Failing candidates in early stages are moved to Rejected automatically. Calibrate the pass mark against real submissions before relying on this.</div>}
       </div>
 
       {showForm && (

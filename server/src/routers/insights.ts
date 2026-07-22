@@ -12,6 +12,7 @@ import { CANDIDATE_STAGES } from '../domain/stages.js';
 import { router, protectedProcedure } from '../trpc.js';
 import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { db } from '../db.js';
+import { getWorkSampleScoringConfig } from '../services/workSampleConfig.js';
 import { getReportConfig, setReportConfig, cronForReport, type ReportCadence } from '../services/reportConfig.js';
 import { rescheduleCronJob } from '../services/job-runner.js';
 
@@ -167,6 +168,42 @@ export const insightsRouter = router({
       avg: Math.round(interviewScores.reduce((a, b) => a + b, 0) / interviewScores.length),
     } : null;
 
+    // ── Work sample stats (pass mark from scoring config) ──
+    const wsCfg = await getWorkSampleScoringConfig(ctx.db);
+    const wsRows = await ctx.db
+      .select({ score: candidates.workSampleScore })
+      .from(candidates)
+      .where(scoped(isNotNull(candidates.workSampleScore)));
+    const wsScores = wsRows.map(r => r.score!);
+    const workSampleStats = wsScores.length > 0 ? {
+      total: wsScores.length,
+      avg: Math.round(wsScores.reduce((a, b) => a + b, 0) / wsScores.length),
+      passThreshold: wsCfg.passThreshold,
+      passed: wsScores.filter(s => s >= wsCfg.passThreshold).length,
+      failed: wsScores.filter(s => s < wsCfg.passThreshold).length,
+    } : null;
+
+    // ── Time to hire (median days, application → Hired) ────
+    const tthScope = sql`${jdId ? sql` AND c.jd_id = ${jdId}` : sql``}${from ? sql` AND c.created_at >= ${from.toISOString()}` : sql``}${to ? sql` AND c.created_at <= ${to.toISOString()}` : sql``}`;
+    const timeToHireRows = await ctx.db.execute(sql`
+      SELECT
+        COUNT(*) AS hired,
+        ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY days)::numeric, 1) AS median_days
+      FROM (
+        SELECT c.id, EXTRACT(EPOCH FROM (MIN(h.created_at) - c.created_at)) / 86400 AS days
+        FROM candidates c
+        JOIN candidate_stage_history h ON h.candidate_id = c.id AND h.to_stage = 'Hired'
+        WHERE 1=1${tthScope}
+        GROUP BY c.id, c.created_at
+      ) t
+      WHERE days >= 0
+    `);
+    const tthRow = ((timeToHireRows as any).rows as any[])[0];
+    const timeToHire = tthRow && Number(tthRow.hired) > 0 ? {
+      hired: Number(tthRow.hired),
+      medianDays: tthRow.median_days != null ? parseFloat(tthRow.median_days as string) : null,
+    } : null;
+
     // ── Stage-to-stage conversions ─────────────────────────
     const conversions = await ctx.db
       .select({
@@ -250,6 +287,8 @@ export const insightsRouter = router({
       ccat: ccatStats,
       epp: eppStats,
       interview: interviewStats,
+      workSample: workSampleStats,
+      timeToHire,
       summary: {
         totalApplicants,
         totalHired: Number(hired?.count ?? 0),

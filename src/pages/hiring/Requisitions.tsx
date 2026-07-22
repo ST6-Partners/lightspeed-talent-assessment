@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Plus, X, Pencil, Trash2, Send } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
+import SubTabs from '../../components/SubTabs';
+import Postings from './Postings';
 
 const STATUS_COLORS: Record<string, string> = {
   Draft: 'bg-gray-100 text-gray-600',
@@ -31,7 +33,7 @@ const EMPTY_FORM = {
   salaryMin: '', salaryMax: '', reason: '', priority: 'Medium',
 };
 
-export default function Requisitions() {
+function RequisitionsList() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<typeof EMPTY_FORM>({ ...EMPTY_FORM });
@@ -325,6 +327,20 @@ export default function Requisitions() {
           </table>
         )}
       </div>
+    </div>
+  );
+}
+
+const REQ_TABS = ['Requisitions', 'Open Roles'];
+
+// Requisitions is now a tabbed admin surface: the requisition list plus the
+// Open Roles view (moved here from the Core Data hub).
+export default function Requisitions() {
+  const [tab, setTab] = useState('Requisitions');
+  return (
+    <div>
+      <SubTabs tabs={REQ_TABS} active={tab} onChange={setTab} />
+      {tab === 'Requisitions' ? <RequisitionsList /> : <Postings />}
     </div>
   );
 }

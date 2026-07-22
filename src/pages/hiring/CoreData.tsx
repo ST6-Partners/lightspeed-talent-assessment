@@ -4,7 +4,7 @@
 // opens this page; each card navigates to its section.
 // ============================================================
 import { Link } from 'react-router-dom';
-import { Contact, Building2, Tag, Award, FileText, Megaphone } from 'lucide-react';
+import { Contact, Building2, Tag, Award, FileText } from 'lucide-react';
 
 const ITEMS = [
   { path: '/hiring/employees',   label: 'Employees',        icon: Contact,   desc: 'The people directory behind internal moves, org data, and reviews.' },
@@ -12,7 +12,6 @@ const ITEMS = [
   { path: '/hiring/titles',      label: 'Titles',           icon: Tag,       desc: 'Standard job titles and levels used across requisitions.' },
   { path: '/hiring/values',      label: 'Company Values',   icon: Award,     desc: 'The values candidates are scored against during assessment.' },
   { path: '/hiring/jobs',        label: 'Job Descriptions', icon: FileText,  desc: 'The library of role descriptions that feed intake and postings.' },
-  { path: '/hiring/postings',    label: 'Open Roles',       icon: Megaphone, desc: 'Positions currently posted to candidates.' },
 ];
 
 export default function CoreData() {

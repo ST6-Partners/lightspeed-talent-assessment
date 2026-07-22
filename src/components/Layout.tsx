@@ -40,6 +40,10 @@ const coreNav = [
   { path: '/hiring/titles', label: 'Titles', icon: Tag },
   { path: '/hiring/values', label: 'Company Values', icon: Award },
   { path: '/hiring/jobs', label: 'Job Descriptions', icon: FileText },
+];
+
+// Open Roles moved out of Core Data — it now lives as a tab under Requisitions.
+const requisitionsSubNav = [
   { path: '/hiring/postings', label: 'Open Roles', icon: Megaphone },
 ];
 
@@ -70,7 +74,7 @@ function BrandMark({ size = 34 }: { size?: number }) {
   );
 }
 
-const allNav = [...topNav, ...talentNav, fairnessNav, coreDataLink, ...coreNav];
+const allNav = [...topNav, ...talentNav, fairnessNav, coreDataLink, ...coreNav, ...requisitionsSubNav];
 
 export default function Layout() {
   const location = useLocation();
