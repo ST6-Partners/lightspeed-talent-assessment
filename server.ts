@@ -235,11 +235,13 @@ async function main() {
         return res.status(403).json({ error: 'Forbidden — admin only' });
       }
 
-      const filename = req.headers['x-filename'] as string;
+      const rawFilename = req.headers['x-filename'] as string;
       const mimeType = req.headers['content-type'] || 'application/octet-stream';
-      if (!filename) {
+      if (!rawFilename) {
         return res.status(400).json({ error: 'Missing x-filename header' });
       }
+      let filename = rawFilename;
+      try { filename = decodeURIComponent(rawFilename); } catch { /* keep raw if not encoded */ }
 
       const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
       const key = `work-samples/${Date.now()}-${safe}`;

@@ -55,7 +55,8 @@ export default function JobDescriptions() {
         method: 'POST',
         headers: {
           'Content-Type': file.type || 'application/octet-stream',
-          'x-filename': file.name,
+          // Header values must be Latin-1; encode so non-ASCII filenames work.
+          'x-filename': encodeURIComponent(file.name),
         },
         body: buffer,
       });
@@ -64,7 +65,7 @@ export default function JobDescriptions() {
         setUploadError(result.error || 'Upload failed');
         return;
       }
-      setForm((f) => ({ ...f, workSampleUploadUrl: result.url, workSampleUploadName: result.filename || file.name }));
+      setForm((f) => ({ ...f, workSampleUploadUrl: result.url, workSampleUploadName: file.name }));
     } catch (err: any) {
       setUploadError(err?.message || 'Upload failed');
     } finally {
