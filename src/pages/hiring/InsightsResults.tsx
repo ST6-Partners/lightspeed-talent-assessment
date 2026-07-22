@@ -145,7 +145,7 @@ export default function InsightsResults() {
       </div>
 
       <p className="text-[11px] text-ls-ink-3 mt-3">
-        Insights Discovery® is a registered trademark of The Insights Group Ltd. Nikolas Ueber is a real uploaded profile; other candidates are illustrative samples modelled on the same format.
+        Insights Discovery® is a registered trademark of The Insights Group Ltd. All candidates shown are illustrative samples (no real profile data).
       </p>
     </div>
   );
