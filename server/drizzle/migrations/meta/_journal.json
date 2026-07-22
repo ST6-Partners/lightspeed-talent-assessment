@@ -519,6 +519,13 @@
       "when": 1960000044000,
       "tag": "0073_sent_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1960000045000,
+      "tag": "0074_jd_work_sample_upload",
+      "breakpoints": true
     }
   ]
 }

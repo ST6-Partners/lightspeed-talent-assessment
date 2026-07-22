@@ -23,7 +23,8 @@ const EMPTY_FORM = {
   requiredQualifications: '',
   preferredQualifications: '',
   eppValues: [] as string[],
-  workSampleTaskId: '',
+  workSampleUploadUrl: '',
+  workSampleUploadName: '',
   workSampleRequired: false,
 };
 
@@ -41,8 +42,35 @@ export default function JobDescriptions() {
 
   const { data: requisitions } = trpc.requisitions.list.useQuery();
   const { data: jobDescriptions, refetch } = trpc.jobDescriptions.list.useQuery();
-  const { data: workSampleTasks } = trpc.tasks.list.useQuery();
   const { data: jdQuestions } = trpc.intake.questionsForReq.useQuery({ reqId: form.reqId }, { enabled: !!editingId && !!form.reqId });
+  const [uploadingWorkSample, setUploadingWorkSample] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const handleWorkSampleUpload = async (file: File) => {
+    setUploadError(null);
+    setUploadingWorkSample(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const resp = await fetch('/api/upload/work-sample', {
+        method: 'POST',
+        headers: {
+          'Content-Type': file.type || 'application/octet-stream',
+          'x-filename': file.name,
+        },
+        body: buffer,
+      });
+      const result = await resp.json();
+      if (!resp.ok || !result.success) {
+        setUploadError(result.error || 'Upload failed');
+        return;
+      }
+      setForm((f) => ({ ...f, workSampleUploadUrl: result.url, workSampleUploadName: result.filename || file.name }));
+    } catch (err: any) {
+      setUploadError(err?.message || 'Upload failed');
+    } finally {
+      setUploadingWorkSample(false);
+    }
+  };
 
   const closeForm = () => { setShowForm(false); setEditingId(null); resetForm(); };
 
@@ -77,7 +105,8 @@ export default function JobDescriptions() {
       requiredQualifications: jd.requiredQualifications ?? '',
       preferredQualifications: jd.preferredQualifications ?? '',
       eppValues: Array.isArray(jd.eppValues) ? (jd.eppValues as string[]) : [],
-      workSampleTaskId: jd.workSampleTaskId ?? '',
+      workSampleUploadUrl: jd.workSampleUploadUrl ?? '',
+      workSampleUploadName: jd.workSampleUploadName ?? '',
       workSampleRequired: jd.workSampleRequired ?? false,
     });
     setShowForm(true);
@@ -85,13 +114,10 @@ export default function JobDescriptions() {
 
   const handleSave = () => {
     if (!form.reqId || !form.jobTitle) return;
-    const payload = { ...form, workSampleTaskId: form.workSampleTaskId || null };
+    const payload = { ...form };
     if (editingId) updateMutation.mutate({ id: editingId, ...payload });
     else createMutation.mutate(payload);
   };
-
-  const taskLabel = (id: string | null | undefined) =>
-    id ? (workSampleTasks?.find((t: any) => t.id === id)?.title ?? 'Unknown task') : 'Not set';
 
   const handleDelete = (jd: any) => {
     deleteMutation.mutate({ id: jd.id });
@@ -208,17 +234,32 @@ export default function JobDescriptions() {
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-1">Work Sample</label>
-              <select
-                value={form.workSampleTaskId}
-                onChange={(e) => setForm({ ...form, workSampleTaskId: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
-              >
-                <option value="">— none selected —</option>
-                {workSampleTasks?.map((t: any) => (
-                  <option key={t.id} value={t.id}>{t.title}{t.status !== 'Live' ? ` (${t.status})` : ''}</option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-400 mt-1">Which work sample this role uses. The instructions themselves live in the Work Sample tab.</p>
+              {form.workSampleUploadUrl ? (
+                <div className="flex items-center justify-between gap-3 px-3 py-2 border border-gray-300 rounded-md text-sm">
+                  <a href={form.workSampleUploadUrl} target="_blank" rel="noreferrer" className="text-ls-primary hover:underline truncate">
+                    {form.workSampleUploadName || 'Uploaded work sample'}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, workSampleUploadUrl: '', workSampleUploadName: '' })}
+                    className="text-xs text-gray-400 hover:text-red-600 shrink-0"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <label className={`flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-md text-sm cursor-pointer hover:border-gray-500 ${uploadingWorkSample ? 'opacity-60 pointer-events-none' : ''}`}>
+                  <Plus size={14} className="text-gray-400" />
+                  <span className="text-gray-600">{uploadingWorkSample ? 'Uploading…' : 'Upload a work sample'}</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleWorkSampleUpload(f); e.target.value = ''; }}
+                  />
+                </label>
+              )}
+              {uploadError && <p className="text-xs text-red-600 mt-1">{uploadError}</p>}
+              <p className="text-xs text-gray-400 mt-1">Optional placeholder — attach a work sample file for this role. (Built-in work sample tasks are paused.)</p>
               <label className="flex items-center gap-2 mt-3 text-sm text-gray-700">
                 <input type="checkbox" checked={form.workSampleRequired}
                   onChange={(e) => setForm({ ...form, workSampleRequired: e.target.checked })}
@@ -300,7 +341,7 @@ export default function JobDescriptions() {
                     {(jd as any).pendingReview && (
                       <span className="ml-2 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-amber-200 text-amber-800 align-middle">NEW JD for review</span>
                     )}
-                    <div className="text-gray-400 text-xs font-normal mt-0.5">Work sample: {taskLabel(jd.workSampleTaskId)}</div>
+                    <div className="text-gray-400 text-xs font-normal mt-0.5">Work sample: {(jd as any).workSampleUploadName ? (jd as any).workSampleUploadName : 'None uploaded'}</div>
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs font-medium">{getReqDept(jd.reqId)}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{getReqLabel(jd.reqId)}</td>

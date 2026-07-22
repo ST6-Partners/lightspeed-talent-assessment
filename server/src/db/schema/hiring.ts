@@ -130,6 +130,11 @@ export const jobDescriptions = pgTable('job_descriptions', {
   // Optional per role: when true, this role includes a Work Sample step (after
   // the team interview). Default false — work sample is no longer automatic.
   workSampleRequired: boolean('work_sample_required').notNull().default(false),
+  // Placeholder work-sample upload (per JD). Actual work-sample task content is
+  // tabled; each role can attach an uploaded work sample file instead of a
+  // library task. Stored as an /api/files/... URL + original filename.
+  workSampleUploadUrl: text('work_sample_upload_url'),
+  workSampleUploadName: text('work_sample_upload_name'),
   status: jdStatusEnum('status').notNull().default('Draft'),
   // Intake-generated JD awaiting hiring-manager review (NEW JD for review)
   pendingReview: boolean('pending_review').notNull().default(false),

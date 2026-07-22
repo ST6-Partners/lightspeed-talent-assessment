@@ -42,6 +42,8 @@ const JdInput = z.object({
   workSampleInstructions: z.string().optional(),
   workSampleTaskId: z.string().uuid().nullable().optional(),
   workSampleRequired: z.boolean().optional(),
+  workSampleUploadUrl: z.string().nullable().optional(),
+  workSampleUploadName: z.string().nullable().optional(),
 });
 
 export const jobDescriptionsRouter = router({

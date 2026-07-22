@@ -225,6 +225,43 @@ async function main() {
     }
   });
 
+  // ── Work-sample file upload (per JD placeholder) ───────────
+  app.post('/api/upload/work-sample', express.raw({ type: '*/*', limit: '25mb' }), async (req, res) => {
+    try {
+      const user = await resolveSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+      const role = user.role;
+      if (!role || !['admin', 'sysadmin'].includes(role)) {
+        return res.status(403).json({ error: 'Forbidden — admin only' });
+      }
+
+      const filename = req.headers['x-filename'] as string;
+      const mimeType = req.headers['content-type'] || 'application/octet-stream';
+      if (!filename) {
+        return res.status(400).json({ error: 'Missing x-filename header' });
+      }
+
+      const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
+      const key = `work-samples/${Date.now()}-${safe}`;
+
+      const result = await uploadFile(key, req.body as Buffer);
+      if (!result.ok) {
+        return res.status(500).json({ error: result.error });
+      }
+
+      res.json({
+        success: true,
+        key: result.key,
+        url: `/api/files/${result.key}`,
+        mimeType,
+        filename: safe,
+      });
+    } catch (err: any) {
+      console.error('Work-sample upload error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Serve files from Object Storage ────────────────────────
   app.get('/api/files/*', async (req, res) => {
     try {
