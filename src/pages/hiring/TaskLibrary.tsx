@@ -32,6 +32,8 @@ export default function TaskLibrary() {
 
   const { data: tasks, refetch } = trpc.tasks.list.useQuery();
   const { data: departments } = trpc.departments.list.useQuery();
+  const { data: jds } = trpc.jobDescriptions.list.useQuery();
+  const uploadedJds = (jds ?? []).filter((j: any) => j.workSampleUploadUrl);
   const createMutation = trpc.tasks.create.useMutation({ onSuccess: () => { refetch(); close(); } });
   const updateMutation = trpc.tasks.update.useMutation({ onSuccess: () => { refetch(); close(); } });
   const deleteMutation = trpc.tasks.delete.useMutation({ onSuccess: () => refetch() });
@@ -98,6 +100,40 @@ export default function TaskLibrary() {
           <Plus size={16} />
           New Task
         </button>
+      </div>
+
+      {/* Work samples uploaded to a JD */}
+      <div className="bg-white rounded-lg border border-gray-200 mb-6">
+        <div className="px-4 py-3 border-b border-gray-100">
+          <div className="text-sm font-semibold text-gray-700">Uploaded work samples</div>
+          <p className="text-xs text-gray-500 mt-0.5">Work samples uploaded to a job description show up here.</p>
+        </div>
+        {uploadedJds.length === 0 ? (
+          <div className="p-6 text-center text-gray-400 text-sm">No work samples uploaded yet. Upload one from a job description.</div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-4 py-3">Job description</th>
+                <th className="px-4 py-3">Work sample file</th>
+                <th className="px-4 py-3">Step</th>
+              </tr>
+            </thead>
+            <tbody>
+              {uploadedJds.map((j: any) => (
+                <tr key={j.id} className="border-b border-gray-50 hover:bg-gray-50 text-sm">
+                  <td className="px-4 py-3 font-medium text-gray-900">{j.jobTitle}</td>
+                  <td className="px-4 py-3">
+                    <a href={j.workSampleUploadUrl} target="_blank" rel="noreferrer" className="text-ls-primary hover:underline">
+                      {j.workSampleUploadName || 'Open file'}
+                    </a>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs">{j.workSampleRequired ? 'Included in pipeline' : 'Not in pipeline'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Scoring config: pass mark + auto-reject */}
