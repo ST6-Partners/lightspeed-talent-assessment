@@ -1138,6 +1138,35 @@ export async function emailInternalInterestAlert(to: string, d: { applicantName:
   });
 }
 
+// ── Interviewer can't interview → notify their manager ─────
+// Sent when an assigned interviewer flags they're unavailable for a round, so
+// their manager (or HR, if no manager is on file) can arrange coverage.
+export async function emailInterviewerUnavailableManager(d: {
+  to: string;
+  interviewerName?: string | null;
+  interviewerEmail: string;
+  candidateName: string;
+  jobTitle?: string;
+  roundName?: string;
+  scheduledAt?: string | Date | null;
+  reason?: string;
+}) {
+  const who = d.interviewerName || d.interviewerEmail;
+  const when = d.scheduledAt ? new Date(d.scheduledAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : null;
+  await sendEmail({
+    to: d.to,
+    templateId: 'interviewer_unavailable_manager',
+    subject: `Interview coverage needed: ${who} can’t interview ${d.candidateName}`,
+    html: wrap(`
+      ${h1('An interviewer needs coverage')}
+      ${p(`<strong>${esc(who)}</strong> has flagged that they can’t do a scheduled interview and asked us to let you know.`)}
+      ${p(`Candidate: <strong>${esc(d.candidateName)}</strong>${d.jobTitle ? ` &middot; Role: <strong>${esc(d.jobTitle)}</strong>` : ''}${d.roundName ? ` &middot; Round: ${esc(d.roundName)}` : ''}${when ? ` &middot; Scheduled: ${esc(when)}` : ''}`)}
+      ${d.reason ? p(`Reason given: &ldquo;${esc(d.reason)}&rdquo;`) : ''}
+      ${p('Please help arrange alternative coverage or a new time so the candidate isn’t held up.')}
+    `),
+  });
+}
+
 // ── Per-round interviewer prep (with cross-round briefing) ──
 // Sent to the interviewer BEFORE a round. Includes the read on the
 // candidate from earlier COMPLETED rounds (numeric scores hidden) and a

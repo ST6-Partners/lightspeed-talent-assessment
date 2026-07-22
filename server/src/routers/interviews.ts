@@ -15,13 +15,14 @@ import { router, protectedProcedure } from '../trpc.js';
 import { db } from '../db.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
 import { candidates, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
+import { employees } from '../db/schema/employees.js';
 import { interviewQuestions } from '../db/schema/intake.js';
 import {
   seedRoundsFromPlan,
   generateRoundFeedback,
   buildPriorRoundsBriefing,
 } from '../services/interviewRounds.js';
-import { emailInterviewRoundPrep } from '../services/email.js';
+import { emailInterviewRoundPrep, emailInterviewerUnavailableManager } from '../services/email.js';
 
 const roundStatus = z.enum(['planned', 'scheduled', 'completed']);
 
@@ -253,5 +254,42 @@ export const interviewsRouter = router({
       await db.update(candidateInterviews).set({ prepSentAt: new Date(), updatedAt: new Date() })
         .where(eq(candidateInterviews.id, round.id));
       return { ok: true, priorRounds: briefing.rounds.length, followUps: briefing.followUps.length };
+    }),
+
+  // The assigned interviewer can't do this round (special circumstance /
+  // unavailable). Notify their manager (looked up from the employee directory
+  // by interviewer email) so coverage can be arranged; fall back to HR when no
+  // manager is on file.
+  notifyManagerUnavailable: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), reason: z.string().max(1000).optional() }))
+    .mutation(async ({ input }) => {
+      const round = await loadRound(input.id);
+      if (!round.interviewerEmail) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Set an interviewer email on this round first.' });
+      }
+      const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, round.candidateId) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not found.' });
+      const jd = candidate.jdId
+        ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null;
+
+      const emp = (await db.select().from(employees).where(eq(employees.email, round.interviewerEmail)).limit(1))[0];
+      const managerEmail = emp?.managerEmail || null;
+      const to = managerEmail || process.env.HR_EMAIL || null;
+      if (!to) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'No manager is on file for this interviewer and no HR email is configured.' });
+      }
+
+      await emailInterviewerUnavailableManager({
+        to,
+        interviewerName: round.interviewerName,
+        interviewerEmail: round.interviewerEmail,
+        candidateName: `${candidate.firstName} ${candidate.lastName}`,
+        jobTitle: jd?.jobTitle ?? undefined,
+        roundName: round.roundName,
+        scheduledAt: round.scheduledAt ?? null,
+        reason: input.reason,
+      });
+      return { ok: true, notified: to, viaHrFallback: !managerEmail };
     }),
 });

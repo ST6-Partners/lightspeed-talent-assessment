@@ -61,6 +61,8 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
   const [fbEdit, setFbEdit] = useState(false);
   const [draftRead, setDraftRead] = useState('');
   const [draftFus, setDraftFus] = useState<any[]>([]);
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [notifyReason, setNotifyReason] = useState('');
 
   const update = trpc.interviews.updateRound.useMutation({ onSuccess: onChanged, onError: (err) => { alert(err.message); onChanged?.(); } });
   const remove = trpc.interviews.removeRound.useMutation({ onSuccess: onChanged });
@@ -74,6 +76,10 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
     setFbOpen(true);
   };
   const sendPrep = trpc.interviews.sendPrep.useMutation({ onSuccess: onChanged });
+  const notifyMgr = trpc.interviews.notifyManagerUnavailable.useMutation({
+    onSuccess: (r: any) => { setNotifyOpen(false); setNotifyReason(''); alert(`Manager notified: ${r.notified}${r.viaHrFallback ? ' (sent to HR — no manager on file for this interviewer)' : ''}`); },
+    onError: (err) => alert(err.message),
+  });
   const briefing = trpc.interviews.briefing.useQuery({ id: round.id }, { enabled: showBriefing });
 
   const fus = Array.isArray(round.followUps) ? round.followUps : [];
@@ -130,7 +136,28 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
               Email prep + briefing
             </button>
             {round.prepSentAt && <span className="text-[11px] text-green-600">prep emailed</span>}
+            <button onClick={() => setNotifyOpen((v) => !v)} disabled={!round.interviewerEmail}
+              title={round.interviewerEmail ? '' : 'Add an interviewer email first'}
+              className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded font-medium hover:bg-gray-50 disabled:opacity-50">
+              Can’t interview — notify manager
+            </button>
           </div>
+
+          {notifyOpen && (
+            <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2">
+              <div className="text-xs text-gray-600">Let {round.interviewerName || 'the interviewer'}’s manager know they can’t do this interview. Add a short reason (e.g. unavailable dates) — it’s included in the email.</div>
+              <textarea value={notifyReason} onChange={(e) => setNotifyReason(e.target.value)} rows={2}
+                placeholder="Reason / unavailable dates (optional)"
+                className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs" />
+              <div className="flex gap-2">
+                <button onClick={() => notifyMgr.mutate({ id: round.id, reason: notifyReason.trim() || undefined })} disabled={notifyMgr.isLoading}
+                  className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
+                  {notifyMgr.isLoading ? 'Sending…' : 'Notify manager'}
+                </button>
+                <button onClick={() => { setNotifyOpen(false); setNotifyReason(''); }} className="text-xs px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-white">Cancel</button>
+              </div>
+            </div>
+          )}
 
           {/* Transcript -> feedback (hidden once feedback has been generated) */}
           {round.status !== 'completed' && (
