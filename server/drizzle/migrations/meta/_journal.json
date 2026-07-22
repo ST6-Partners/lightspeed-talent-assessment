@@ -540,6 +540,13 @@
       "when": 1960000047000,
       "tag": "0076_seed_lightspeed_roster",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1960000048000,
+      "tag": "0077_complete_core_data",
+      "breakpoints": true
     }
   ]
 }
