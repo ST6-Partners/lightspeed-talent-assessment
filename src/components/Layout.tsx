@@ -19,6 +19,7 @@ const topNav = [
 const talentNav = [
   { path: '/hiring/intake', label: 'Intake', icon: ClipboardPen },
   { path: '/hiring/requisitions', label: 'Requisitions', icon: ClipboardList },
+  { path: '/hiring/postings', label: 'Open Roles', icon: Megaphone },
   { path: '/hiring/candidates', label: 'Candidates', icon: Users },
   { path: '/hiring/review', label: 'Review', icon: ClipboardCheck },
   { path: '/hiring/internal', label: 'Internal Pipeline', icon: UserCheck },
@@ -40,11 +41,6 @@ const coreNav = [
   { path: '/hiring/titles', label: 'Titles', icon: Tag },
   { path: '/hiring/values', label: 'Company Values', icon: Award },
   { path: '/hiring/jobs', label: 'Job Descriptions', icon: FileText },
-];
-
-// Open Roles moved out of Core Data — it now lives as a tab under Requisitions.
-const requisitionsSubNav = [
-  { path: '/hiring/postings', label: 'Open Roles', icon: Megaphone },
 ];
 
 const coreDataLink = { path: '/hiring/core-data', label: 'Core Data', icon: Database };
@@ -74,7 +70,7 @@ function BrandMark({ size = 34 }: { size?: number }) {
   );
 }
 
-const allNav = [...topNav, ...talentNav, fairnessNav, coreDataLink, ...coreNav, ...requisitionsSubNav];
+const allNav = [...topNav, ...talentNav, fairnessNav, coreDataLink, ...coreNav];
 
 export default function Layout() {
   const location = useLocation();
