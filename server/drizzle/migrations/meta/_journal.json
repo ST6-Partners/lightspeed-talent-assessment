@@ -526,6 +526,13 @@
       "when": 1960000045000,
       "tag": "0074_jd_work_sample_upload",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1960000046000,
+      "tag": "0075_uploaded_files",
+      "breakpoints": true
     }
   ]
 }

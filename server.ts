@@ -242,24 +242,46 @@ async function main() {
       }
       let filename = rawFilename;
       try { filename = decodeURIComponent(rawFilename); } catch { /* keep raw if not encoded */ }
+      const safe = filename.replace(/[^a-zA-Z0-9._ -]/g, '_').slice(0, 200);
 
-      const safe = filename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
-      const key = `work-samples/${Date.now()}-${safe}`;
-
-      const result = await uploadFile(key, req.body as Buffer);
-      if (!result.ok) {
-        return res.status(500).json({ error: result.error });
+      const buf = req.body as Buffer;
+      if (!buf || !buf.length) {
+        return res.status(400).json({ error: 'Empty file' });
       }
 
-      res.json({
-        success: true,
-        key: result.key,
-        url: `/api/files/${result.key}`,
-        mimeType,
-        filename: safe,
-      });
+      // Stored in Postgres (the app runs on Railway, where Replit object
+      // storage is unavailable). base64 in a text column; served back via
+      // /api/uploaded/:key.
+      const key = crypto.randomUUID();
+      await pool.query(
+        'INSERT INTO uploaded_files (key, filename, mime_type, data) VALUES ($1, $2, $3, $4)',
+        [key, safe, mimeType, buf.toString('base64')],
+      );
+
+      res.json({ success: true, key, url: `/api/uploaded/${key}`, mimeType, filename: safe });
     } catch (err: any) {
       console.error('Work-sample upload error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Serve DB-stored uploads (work samples) ─────────────────
+  app.get('/api/uploaded/:key', async (req, res) => {
+    try {
+      const user = await resolveSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+      const key = req.params.key;
+      const r = await pool.query('SELECT filename, mime_type, data FROM uploaded_files WHERE key = $1', [key]);
+      const row = r.rows[0];
+      if (!row) return res.status(404).json({ error: 'File not found' });
+      const buf = Buffer.from(row.data as string, 'base64');
+      res.setHeader('Content-Type', (row.mime_type as string) || 'application/octet-stream');
+      if (row.filename) {
+        res.setHeader('Content-Disposition', `inline; filename="${String(row.filename).replace(/"/g, '')}"`);
+      }
+      res.send(buf);
+    } catch (err: any) {
+      console.error('Uploaded file serve error:', err);
       res.status(500).json({ error: err.message });
     }
   });
