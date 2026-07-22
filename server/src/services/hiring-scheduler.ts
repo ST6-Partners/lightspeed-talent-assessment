@@ -25,6 +25,7 @@ import { buildPeriodMetrics } from './reportMetrics.js';
 import { getReportConfig, cronForReport } from './reportConfig.js';
 import { emailScorecardReminder } from './email.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
+import { businessHoursBetween } from '../routers/interviews.js';
 import { valueReviews } from '../db/schema/values.js';
 
 function schedAppBaseUrl(): string {
@@ -239,8 +240,11 @@ async function runAssessmentAutoReject({ force = false }: { force?: boolean } = 
 //   >= 1 day open, no booking, no reminder yet  → nudge the candidate
 //   >= 2 days open, no booking, no HR alert yet → flag HR (past the ~48h window)
 async function runInterviewBookingReminder({ force = false }: { force?: boolean } = {}): Promise<JobResult> {
-  const oneDayAgo = daysAgo(1);
-  const twoDaysAgo = daysAgo(2);
+  // The booking window counts business hours only — weekends don't burn it.
+  // Nudge the candidate after 1 business day (24 business hours) and flag HR
+  // after 2 business days (48 business hours) of the window being open.
+  const NUDGE_BIZ_HOURS = 24;
+  const HR_FLAG_BIZ_HOURS = 48;
 
   const rows = await db.query.candidates.findMany({
     where: and(isNotNull(candidates.interviewBookingOpenedAt), isNull(candidates.interviewScheduledAt)),
@@ -263,9 +267,11 @@ async function runInterviewBookingReminder({ force = false }: { force?: boolean 
     const jobTitle = jd?.jobTitle ?? undefined;
     const candidateName = `${candidate.firstName} ${candidate.lastName}`;
     const daysOpen = Math.floor((Date.now() - openedAt.getTime()) / 86_400_000);
+    // Business hours the window has been open (Mon–Fri only; weekends excluded).
+    const bizHoursOpen = businessHoursBetween(openedAt.getTime(), Date.now());
 
-    // Candidate nudge at >= 1 day.
-    if (openedAt <= oneDayAgo && candidate.interviewBookingToken) {
+    // Candidate nudge at >= 1 business day open.
+    if (bizHoursOpen >= NUDGE_BIZ_HOURS && candidate.interviewBookingToken) {
       if (force || !(await alreadySentTemplate(candidate.id, 'interview_booking_reminder'))) {
         const bookingUrl = `${schedAppBaseUrl()}/book-interview/${candidate.interviewBookingToken}`;
         try {
@@ -278,8 +284,8 @@ async function runInterviewBookingReminder({ force = false }: { force?: boolean 
       }
     }
 
-    // HR stall alert at >= 2 days.
-    if (openedAt <= twoDaysAgo) {
+    // HR stall alert at >= 2 business days (the ~48 business-hour window).
+    if (bizHoursOpen >= HR_FLAG_BIZ_HOURS) {
       if (force || !(await alreadySentTemplate(candidate.id, 'interview_booking_stalled_hr'))) {
         try {
           await emailBookingStalledHR({ candidateName, jobTitle, daysOpen });
