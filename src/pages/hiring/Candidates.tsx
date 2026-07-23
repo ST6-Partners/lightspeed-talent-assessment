@@ -89,9 +89,6 @@ export default function Candidates() {
   const bulkAdvanceMutation = trpc.candidates.bulkAdvanceStage.useMutation({
     onSuccess: () => { refetch(); setSelectedIds(new Set()); setBulkMoveTarget(''); },
   });
-  const bulkDeleteMutation = trpc.candidates.bulkDelete.useMutation({
-    onSuccess: () => { refetch(); setSelectedIds(new Set()); },
-  });
   const updateMutation = trpc.candidates.update.useMutation({
     onSuccess: () => refetch(),
   });
@@ -122,19 +119,6 @@ export default function Candidates() {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  };
-  const toggleSelectGroup = (ids: string[]) => {
-    setSelectedIds((prev) => {
-      const allSelected = ids.every((id) => prev.has(id));
-      const next = new Set(prev);
-      ids.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
-      return next;
-    });
-  };
-  const doBulkDelete = () => {
-    if (selectedIds.size === 0) return;
-    if (!confirm(`Delete ${selectedIds.size} candidate(s)? This can't be undone.`)) return;
-    bulkDeleteMutation.mutate({ ids: Array.from(selectedIds) });
   };
   const doBulkMove = () => {
     if (selectedIds.size === 0 || !bulkMoveTarget) return;
@@ -330,13 +314,6 @@ export default function Candidates() {
               className="px-3 py-1.5 text-xs rounded-md border border-red-300 text-red-700 font-medium hover:bg-red-50"
             >
               Reject
-            </button>
-            <button
-              onClick={doBulkDelete}
-              disabled={bulkDeleteMutation.isLoading}
-              className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-600 font-medium hover:bg-gray-100 disabled:opacity-50"
-            >
-              {bulkDeleteMutation.isLoading ? 'Deleting...' : 'Delete'}
             </button>
             <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-gray-500 hover:text-gray-700">
               Clear selection
@@ -590,14 +567,6 @@ export default function Candidates() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
-                            <th className="px-2 py-2.5 w-8">
-                              <input
-                                type="checkbox"
-                                checked={g.cands.length > 0 && g.cands.every((c: any) => selectedIds.has(c.id))}
-                                onChange={() => toggleSelectGroup(g.cands.map((c: any) => c.id))}
-                                className="rounded border-gray-300"
-                              />
-                            </th>
                             <th className="px-4 py-2.5">Name</th>
                             <th className="px-4 py-2.5">Email</th>
                             <th className="px-4 py-2.5">Stage</th>
