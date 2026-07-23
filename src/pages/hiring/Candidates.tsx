@@ -15,6 +15,7 @@ const STAGE_COLORS: Record<string, string> = {
   'Phone Screen': 'bg-teal-100 text-teal-700',
   'Interview Scheduled': 'bg-yellow-100 text-yellow-700',
   Interviewed: 'bg-orange-100 text-orange-700',
+  'Reference Check': 'bg-rose-100 text-rose-700',
   Offered: 'bg-emerald-100 text-emerald-700',
   Hired: 'bg-green-100 text-green-700',
   Rejected: 'bg-red-100 text-red-700',

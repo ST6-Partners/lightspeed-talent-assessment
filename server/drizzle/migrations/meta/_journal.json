@@ -554,6 +554,20 @@
       "when": 1960000049000,
       "tag": "0078_ccat_invalid_result",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1960000050000,
+      "tag": "0079_requisition_work_sample_required",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1960000051000,
+      "tag": "0080_reference_check_stage",
+      "breakpoints": true
     }
   ]
 }

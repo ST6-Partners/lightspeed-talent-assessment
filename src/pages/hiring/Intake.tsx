@@ -50,7 +50,7 @@ interface Person { personRef: string; roleInProcess?: string; roundRef?: string;
 interface Aware { personRef: string; source: 'auto' | 'manual'; }
 
 const EMPTY = {
-  openingType: '', reasonType: '', roleChangeNote: '', baseJdId: '',
+  openingType: '', reasonType: '', roleChangeNote: '', baseJdId: '', workSampleRequired: true,
   department: '', hiringManager: '', numOpenings: 1, priority: 'Medium',
   employmentType: 'Full-Time', location: '', workArrangement: 'On-site', hybridDays: '',
   salaryMin: '', salaryMax: '', compBasis: [] as string[], variableComp: '',
@@ -170,6 +170,7 @@ export default function Intake() {
       const f: any = full;
       const nextForm = {
         openingType: openingOf(f.reasonType ?? ''), reasonType: f.reasonType ?? '', roleChangeNote: f.roleChangeNote ?? '', baseJdId: f.baseJdId ?? '',
+        workSampleRequired: f.workSampleRequired ?? true,
         department: f.department ?? '', hiringManager: f.hiringManager ?? '',
         numOpenings: f.numOpenings ?? 1, priority: f.priority ?? 'Medium',
         employmentType: f.employmentType ?? 'Full-Time', location: f.location ?? '',
@@ -243,6 +244,7 @@ export default function Intake() {
     reasonType: form.reasonType ? (form.reasonType as any) : undefined,
     baseJdId: form.baseJdId || null,
     roleChangeNote: form.roleChangeNote || undefined,
+    workSampleRequired: form.workSampleRequired,
     department: form.department, hiringManager: form.hiringManager,
     numOpenings: Number(form.numOpenings) || 1, priority: form.priority as any,
     employmentType: form.employmentType as any, location: form.location || undefined,
@@ -456,6 +458,21 @@ export default function Intake() {
                     placeholder="e.g. was senior, now hiring junior"
                     roleContext={form.department || 'unspecified role'}
                   />
+                </div>
+              )}
+
+              {(form.reasonType === 'replacement_diff' || form.reasonType === 'termination_diff' || form.reasonType === 'new_headcount') && (
+                <div className="col-span-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={form.workSampleRequired}
+                      onChange={(e) => setForm({ ...form, workSampleRequired: e.target.checked })}
+                      className="rounded border-gray-300 text-ls-primary focus:ring-ls-cyan"
+                    />
+                    Include a work sample step for this role
+                  </label>
+                  <p className="text-xs text-gray-400 mt-1">A new JD is being generated for this reason — decide up front whether candidates go through a work sample. Uncheck if this role skips straight from interviews to offer.</p>
                 </div>
               )}
             </div>

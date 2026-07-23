@@ -31,6 +31,7 @@ export const STAGE_SLA_DAYS: Record<string, number> = {
   'Phone Screen': STAGE_SLA_DEFAULT_DAYS,
   'Interview Scheduled': STAGE_SLA_DEFAULT_DAYS,
   'Interviewed': STAGE_SLA_DEFAULT_DAYS,
+  'Reference Check': STAGE_SLA_DEFAULT_DAYS,
   'Offered': STAGE_SLA_DEFAULT_DAYS,
 };
 

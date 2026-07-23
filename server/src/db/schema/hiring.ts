@@ -30,6 +30,8 @@ export const candidateStageEnum = pgEnum('candidate_stage', [
   'Phone Screen',
   'Interview Scheduled',
   'Interviewed',
+  // Reference Check follows the (optional, per-role) Work Sample, before an offer.
+  'Reference Check',
   'Offered',
   'Hired',
   'Rejected',
@@ -84,6 +86,10 @@ export const jobRequisitions = pgTable('job_requisitions', {
   targetOfferDate: date('target_offer_date'),
   approvalMode: varchar('approval_mode', { length: 20 }).notNull().default('explicit'),
   baseJdId: uuid('base_jd_id'),
+  // Intake-time answer to "should this role have a work sample step?" -- only
+  // meaningful for the non-backfill reasons (a new JD gets generated); applied
+  // to the new job_descriptions row's own workSampleRequired at approval time.
+  workSampleRequired: boolean('work_sample_required').notNull().default(true),
   approvalPlan: jsonb('approval_plan').default([]),
   // ── Role profile & search criteria (migration 0030 — Jody feedback) ──
   mustHaves: text('must_haves'),

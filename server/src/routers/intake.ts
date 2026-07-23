@@ -200,23 +200,6 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
 
 // Email + test-inbox record: tell the hiring manager a NEW JD is waiting for their
 // review in the JD tab (fires for every different-JD / new-headcount approval).
-async function notifyJdReview(db: DrizzleClient, req: any, jdTitle: string | undefined, jdId: string): Promise<void> {
-  const to = approverEmail('hiring manager');
-  const reviewUrl = `${appBaseUrl()}/jd-review/${jdId}`;
-  const role = `${req.department}${jdTitle ? ' \u00b7 ' + jdTitle : ''}`;
-  const subject = `New JD to review & sign off: ${role}`;
-  const body = `A new job description for ${role} was generated from the approved intake and is waiting for your review. Open the Talent Assessment app \u2192 Job Descriptions, review the details, and approve it to clear the "NEW JD for review" flag. The role is NOT opened and no hiring kickoff is sent until you approve. Review & sign off: ${reviewUrl}`;
-  try {
-    await db.insert(inboundEmails).values({
-      fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com', fromName: 'Lightspeed Hiring',
-      toEmail: to, subject, body, replyTag: 'jd_review', source: 'simulated',
-      raw: { kind: 'jd_review', reqId: req.id, jdId, reviewUrl, approvalUrl: reviewUrl },
-    });
-  } catch (err) { console.error('[intake] jd-review inbox record failed:', err); }
-  const html = `<p>A new job description for <strong>${role}</strong> needs your review. <strong>The role is not opened and no hiring kickoff is sent until you approve.</strong></p><p><a href="${reviewUrl}" style="display:inline-block;padding:10px 18px;background:#15803d;color:#fff;border-radius:7px;text-decoration:none;font-weight:600;">Review &amp; sign off</a></p><p style="font-size:12px;color:#888;">Or paste this link: ${reviewUrl}</p>`;
-  try { await sendEmail({ to, subject, html, templateId: 'jd_review' }); } catch (err) { console.error('[intake] jd-review send failed:', err); }
-}
-
 // Shared: open the role (status -> Open) and send the hiring kickoff. Fires
 // immediately for backfill (same JD); for new-JD reasons it fires only after the
 // hiring manager signs off on the JD.
@@ -315,7 +298,7 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
     // task (Draft, pending curation) linked to the JD; replacement/termination
     // inherit the base JD's linked work sample when it has one.
     let workSampleTaskId: string | null = null;
-    if (reason === 'new_headcount') {
+    if (reason === 'new_headcount' && req.workSampleRequired) {
       try {
         const ws = await generateWorkSampleTask({ department: req.department, jobTitle: jd.jobTitle, workSampleInstructions: jd.workSampleInstructions, jdSummary: jd.summary });
         const dept = await db.query.departments.findFirst({ where: eq(departments.name, req.department) });
@@ -340,7 +323,9 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
       reqId: req.id, jobTitle: jd.jobTitle, summary: jd.summary,
       responsibilities: jd.responsibilities, requiredQualifications: jd.requiredQualifications,
       preferredQualifications: jd.preferredQualifications, eppValues: jd.eppValues,
-      workSampleInstructions: jd.workSampleInstructions, workSampleTaskId, status: 'Draft', pendingReview: true,
+      workSampleInstructions: jd.workSampleInstructions, workSampleTaskId,
+      workSampleRequired: !!req.workSampleRequired,
+      status: 'Published', pendingReview: false, publishedAt: new Date(),
     }).returning();
     try {
       questions = await generateStandardQuestions({
@@ -349,9 +334,13 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
       });
       await db.insert(interviewQuestions).values({ reqId: req.id, questions, source: 'ai' });
     } catch (err) { console.error('[intake] question generation failed:', err); }
-    try { await notifyJdReview(db, req, jdTitle, newJd.id); } catch (err) { console.error('[intake] JD-review notify failed:', err); }
-    // New-JD reasons: the role stays closed and no kickoff is sent until the hiring
-    // manager signs off on the JD (see approveJdAndOpenRole).
+    // New-JD reasons: the intake approval chain (hiring manager -> ELT -> finance ->
+    // HR) already notified everyone who needs to sign off, so we don't send a
+    // second, separate "review this JD" email -- the JD publishes immediately and
+    // the role opens + kickoff fires right away, same as backfill. (The /jd-review
+    // token page and jobDescriptions.approveReview still work as a manual review
+    // path if ever needed, but nothing sets pendingReview true anymore.)
+    await openRoleAndSendKickoff(db, req, jdTitle, newJd.id);
   }
 }
 
@@ -377,6 +366,7 @@ const IntakeInput = z.object({
   reasonType: z.enum(['backfill', 'new_headcount', 'replacement_diff', 'termination_diff']).optional(),
   roleChangeNote: z.string().optional(),
   baseJdId: z.string().uuid().nullable().optional(),
+  workSampleRequired: z.boolean().default(true),
   approvalPlan: z.array(z.object({ role: z.string().min(1), concurrent: z.boolean().default(false) })).optional(),
   reason: z.string().optional(),
   // Section 2 — role

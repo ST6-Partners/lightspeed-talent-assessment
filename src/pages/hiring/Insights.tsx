@@ -27,7 +27,7 @@ function readableInk(i: number, n: number) {
 }
 const SOURCE_COLORS = ['#2E89B8', '#4EABD2', '#14b8a6', '#6FBCE0', '#8A969E', '#c4b5fd', '#f59e0b'];
 // Pipeline stages shown in the funnel (closed/rejected stages excluded).
-const FUNNEL_STAGES = ['Applied', 'Assessment', 'Values Review', 'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Work Sample', 'Offered', 'Hired'];
+const FUNNEL_STAGES = ['Applied', 'Assessment', 'Values Review', 'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Work Sample', 'Reference Check', 'Offered', 'Hired'];
 
 // ── Small building blocks ──────────────────────────────────
 function Card({ title, children, className = '' }: { title?: string; children: any; className?: string }) {
