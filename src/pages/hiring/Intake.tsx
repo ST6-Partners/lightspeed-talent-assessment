@@ -15,12 +15,32 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const DEPARTMENTS = ['Engineering', 'Product', 'Sales', 'Marketing', 'Operations', 'Finance', 'HR', 'Customer Success', 'Legal', 'Other'];
-const REASONS = [
-  { v: 'backfill', l: 'Backfill (same JD)' },
-  { v: 'new_headcount', l: 'New headcount' },
-  { v: 'replacement_diff', l: 'Replacement — different JD' },
-  { v: 'termination_diff', l: 'Termination — different JD' },
+// The intake "reason" is captured as two plain questions instead of one blurry
+// dropdown. Q1 (openingType) = new role vs replacing an existing one. Q2 (only
+// when replacing) = keep the same JD or write a new/updated one. The pair maps
+// onto the stored reasonType enum the backend already understands:
+//   new role                -> new_headcount
+//   replacing + same JD     -> backfill
+//   replacing + updated JD  -> replacement_diff
+// termination_diff is still accepted on read for historical reqs; the form no
+// longer produces it (a termination with a changed JD is just "updated").
+const OPENING_TYPES = [
+  { v: 'new', l: 'New role (this seat did not exist before)' },
+  { v: 'replacing', l: 'Replacing an existing role' },
 ];
+const JD_CHOICES = [
+  { v: 'same', l: 'Same as before (reuse the existing JD)' },
+  { v: 'updated', l: 'Updated or different (start from the old JD)' },
+];
+// Derive the two dropdown selections from the stored reasonType.
+const openingOf = (rt: string) =>
+  rt === 'new_headcount' ? 'new'
+  : (rt === 'backfill' || rt === 'replacement_diff' || rt === 'termination_diff') ? 'replacing'
+  : '';
+const jdChoiceOf = (rt: string) =>
+  rt === 'backfill' ? 'same'
+  : (rt === 'replacement_diff' || rt === 'termination_diff') ? 'updated'
+  : '';
 const COMP_BASIS = [{ v: 'budget', l: 'Budget' }, { v: 'market', l: 'Market data' }, { v: 'philosophy', l: 'Pay philosophy' }];
 const ROLE_LABEL: Record<string, string> = { hiring_manager: 'Hiring Manager', elt: 'ELT Leader', finance: 'Finance', hr: 'HR' };
 const APPROVAL_BADGE: Record<string, string> = { pending: 'bg-gray-100 text-gray-500', approved: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700', changes_requested: 'bg-amber-100 text-amber-700' };
@@ -30,7 +50,7 @@ interface Person { personRef: string; roleInProcess?: string; roundRef?: string;
 interface Aware { personRef: string; source: 'auto' | 'manual'; }
 
 const EMPTY = {
-  reasonType: '', roleChangeNote: '', baseJdId: '',
+  openingType: '', reasonType: '', roleChangeNote: '', baseJdId: '',
   department: '', hiringManager: '', numOpenings: 1, priority: 'Medium',
   employmentType: 'Full-Time', location: '', workArrangement: 'On-site', hybridDays: '',
   salaryMin: '', salaryMax: '', compBasis: [] as string[], variableComp: '',
@@ -149,7 +169,7 @@ export default function Intake() {
     if (full && editingId) {
       const f: any = full;
       const nextForm = {
-        reasonType: f.reasonType ?? '', roleChangeNote: f.roleChangeNote ?? '', baseJdId: f.baseJdId ?? '',
+        openingType: openingOf(f.reasonType ?? ''), reasonType: f.reasonType ?? '', roleChangeNote: f.roleChangeNote ?? '', baseJdId: f.baseJdId ?? '',
         department: f.department ?? '', hiringManager: f.hiringManager ?? '',
         numOpenings: f.numOpenings ?? 1, priority: f.priority ?? 'Medium',
         employmentType: f.employmentType ?? 'Full-Time', location: f.location ?? '',
@@ -366,45 +386,74 @@ export default function Intake() {
             <h3 className="text-sm font-semibold text-ls-primary mb-2">1 · Why we're opening this role</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={lbl}>Reason</label>
+                <label className={lbl}>Why are you opening this?</label>
                 <select
-                  value={form.reasonType}
+                  value={form.openingType}
                   onChange={(e) => {
                     const v = e.target.value;
-                    setForm({
-                      ...form,
-                      reasonType: v,
-                      // New headcount has no base JD; backfill has no change note.
-                      ...(v === 'new_headcount' ? { baseJdId: '' } : {}),
-                      ...(v === 'backfill' ? { roleChangeNote: '' } : {}),
-                    });
+                    if (v === 'new') {
+                      // Brand-new role: no base JD; the description below drives the JD.
+                      setForm({ ...form, openingType: 'new', reasonType: 'new_headcount', baseJdId: '' });
+                    } else if (v === 'replacing') {
+                      // JD choice not made yet — Q2 appears next. Hold reasonType until
+                      // they pick same vs updated; clear the new-role description.
+                      setForm({ ...form, openingType: 'replacing', reasonType: '', roleChangeNote: '' });
+                    } else {
+                      setForm({ ...form, openingType: '', reasonType: '' });
+                    }
                   }}
                   className={inp}
                 >
-                  <option value="">Select reason</option>
-                  {REASONS.map((r) => <option key={r.v} value={r.v}>{r.l}</option>)}
+                  <option value="">Select...</option>
+                  {OPENING_TYPES.map((o) => <option key={o.v} value={o.v}>{o.l}</option>)}
                 </select>
               </div>
-              {(form.reasonType === 'replacement_diff' || form.reasonType === 'termination_diff') && (
+
+              {form.openingType === 'replacing' && (
                 <div>
-                  <SharpenField
-                    label="How the role should differ (optional)"
-                    value={form.roleChangeNote}
-                    onChange={(v) => setForm({ ...form, roleChangeNote: v })}
-                    rows={2}
-                    placeholder="e.g. was senior, now hiring junior"
-                    roleContext={form.department || 'unspecified role'}
-                  />
+                  <label className={lbl}>Which job description?</label>
+                  <select
+                    value={jdChoiceOf(form.reasonType)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === 'same') {
+                        // Same JD: reuse the existing one as-is, no change note.
+                        setForm({ ...form, reasonType: 'backfill', roleChangeNote: '' });
+                      } else if (v === 'updated') {
+                        setForm({ ...form, reasonType: 'replacement_diff' });
+                      } else {
+                        setForm({ ...form, reasonType: '' });
+                      }
+                    }}
+                    className={inp}
+                  >
+                    <option value="">Select...</option>
+                    {JD_CHOICES.map((c) => <option key={c.v} value={c.v}>{c.l}</option>)}
+                  </select>
                 </div>
               )}
+
               {form.reasonType === 'new_headcount' && (
-                <div>
+                <div className="col-span-2">
                   <SharpenField
                     label="Describe the new role"
                     value={form.roleChangeNote}
                     onChange={(v) => setForm({ ...form, roleChangeNote: v })}
                     rows={3}
                     placeholder="Describe the new role: what the person will do, focus areas, key skills. The full JD, work sample, and interview questions are generated from this."
+                    roleContext={form.department || 'unspecified role'}
+                  />
+                </div>
+              )}
+
+              {(form.reasonType === 'replacement_diff' || form.reasonType === 'termination_diff') && (
+                <div className="col-span-2">
+                  <SharpenField
+                    label="How the role should differ (optional)"
+                    value={form.roleChangeNote}
+                    onChange={(v) => setForm({ ...form, roleChangeNote: v })}
+                    rows={2}
+                    placeholder="e.g. was senior, now hiring junior"
                     roleContext={form.department || 'unspecified role'}
                   />
                 </div>
@@ -437,7 +486,7 @@ export default function Intake() {
                   {['Low', 'Medium', 'High', 'Critical'].map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              {form.reasonType !== 'new_headcount' && (
+              {(form.reasonType === 'backfill' || form.reasonType === 'replacement_diff' || form.reasonType === 'termination_diff') && (
                 <div className="col-span-2">
                   <label className={lbl}>Existing job description{form.reasonType === 'backfill' ? '' : ' (base the new JD on this)'}</label>
                   <select value={form.baseJdId} onChange={(e) => { const id = e.target.value; const jd: any = ((allJds as any[]) || []).find((j) => j.id === id); setForm({ ...form, baseJdId: id, mustHaves: jd ? (jd.requiredQualifications || '') : '', niceToHaves: jd ? (jd.preferredQualifications || '') : '' }); }} className={inp} disabled={!form.department}>
