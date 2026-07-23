@@ -32,6 +32,11 @@ import { logDecision } from './decisionLog.js';
 // Below it, they are automatically rejected. (Flowchart: "Score 30+".)
 export const ASSESSMENT_PASS_THRESHOLD = 30;
 
+// Hard cutoff, independent of score: Criteria flagged the CCAT/EPP submission
+// itself as an invalid result (validity/consistency check failure — the red
+// "Warning: Invalid Result" banner on the Criteria report). No score can
+// override this — it auto-rejects even if ccatScore looks like a pass.
+
 export type AssessmentDecision =
   | { decision: 'advanced'; score: number }
   | { decision: 'rejected'; score: number }
@@ -60,6 +65,12 @@ export async function applyAssessmentDecision(
   if (!candidate) return { decision: 'skipped', reason: 'candidate not found' };
   if (candidate.currentStage !== 'Assessment') {
     return { decision: 'skipped', reason: `not in Assessment (currently ${candidate.currentStage})` };
+  }
+  // Invalid result is a hard cutoff independent of score — check it even if
+  // ccatScore hasn't landed yet (an invalid submission may not carry a usable
+  // raw score at all).
+  if (candidate.ccatInvalidResult) {
+    return rejectForInvalidResult(db, candidate, candidate.ccatScore ?? null);
   }
   if (candidate.ccatScore == null) {
     return { decision: 'skipped', reason: 'no CCAT score on file yet' };
@@ -174,4 +185,61 @@ export async function applyAssessmentDecision(
 
   console.log(`[AssessmentDecision] ${candidate.email} scored ${score} -> rejected`);
   return { decision: 'rejected', score };
+}
+
+// ── Hard cutoff: invalid result (independent of score) ─────
+async function rejectForInvalidResult(
+  db: any,
+  candidate: any,
+  score: number | null,
+): Promise<AssessmentDecision> {
+  await logDecision(db, {
+    candidateId: candidate.id,
+    decisionType: 'assessment_gate',
+    outcome: 'rejected',
+    score: score ?? undefined,
+    decidedByType: 'deterministic',
+    reason: 'Assessment flagged as an invalid result by Criteria Corp — hard auto-reject regardless of score.',
+    inputs: { ccatScore: score, ccatInvalidResult: true },
+  });
+
+  const jd = candidate.jdId
+    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+    : null;
+  const jobTitle: string | undefined = jd?.jobTitle ?? undefined;
+
+  await db.update(candidates)
+    .set({
+      currentStage: 'Rejected',
+      rejectionReason: 'Assessment result flagged invalid by Criteria Corp',
+      updatedAt: new Date(),
+    })
+    .where(eq(candidates.id, candidate.id));
+
+  await db.insert(candidateStageHistory).values({
+    candidateId: candidate.id,
+    fromStage: 'Assessment',
+    toStage: 'Rejected',
+    changedBy: null, // automated — no user
+    reason: 'Auto-rejected: assessment flagged as an invalid result (hard cutoff)',
+  });
+
+  await dispatchStageEmail('Rejected', 'Assessment', {
+    firstName: candidate.firstName,
+    lastName: candidate.lastName,
+    email: candidate.email,
+    jobTitle,
+  }).catch((err: unknown) => console.error('[AssessmentDecision] invalid-result rejection email failed:', err));
+
+  await emailAssessmentFailedHR({
+    firstName: candidate.firstName,
+    lastName: candidate.lastName,
+    email: candidate.email,
+    jobTitle,
+    ccatScore: score ?? -1,
+    threshold: ASSESSMENT_PASS_THRESHOLD,
+  }).catch((err: unknown) => console.error('[AssessmentDecision] invalid-result HR email failed:', err));
+
+  console.log(`[AssessmentDecision] ${candidate.email} flagged invalid result -> rejected`);
+  return { decision: 'rejected', score: score ?? -1 };
 }

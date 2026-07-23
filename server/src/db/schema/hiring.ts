@@ -158,6 +158,11 @@ export const candidates = pgTable('candidates', {
   source: varchar('source', { length: 100 }),
   currentStage: candidateStageEnum('current_stage').notNull().default('Applied'),
   rejectionReason: text('rejection_reason'),
+  // Hard cutoff: Criteria Corp flagged this CCAT/EPP submission as an invalid
+  // result (validity/consistency check failure -- shows as a red "Warning:
+  // Invalid Result" banner on the Criteria score report). Overrides the score
+  // threshold -- the assessment gate auto-rejects regardless of ccatScore.
+  ccatInvalidResult: boolean('ccat_invalid_result').notNull().default(false),
   // Criteria Corp identifiers
   criteriaCorpId: varchar('criteria_corp_id', { length: 100 }),
   ccatScore: integer('ccat_score'),

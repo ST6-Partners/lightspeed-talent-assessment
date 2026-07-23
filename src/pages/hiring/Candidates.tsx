@@ -50,6 +50,9 @@ export default function Candidates() {
   const [deptFilter, setDeptFilter] = useState('');
   const [collapsedRoles, setCollapsedRoles] = useState<Record<string, boolean>>({});
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMoveTarget, setBulkMoveTarget] = useState<Stage | ''>('');
+  const BULK_REJECT = '__bulk__';
 
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(
     stageFilter ? { stage: stageFilter } : undefined
@@ -80,6 +83,15 @@ export default function Candidates() {
   const unrejectMutation = trpc.candidates.unreject.useMutation({
     onSuccess: () => refetch(),
   });
+  const bulkRejectMutation = trpc.candidates.bulkReject.useMutation({
+    onSuccess: () => { refetch(); setSelectedIds(new Set()); setRejectingId(null); setRejectReason(''); },
+  });
+  const bulkAdvanceMutation = trpc.candidates.bulkAdvanceStage.useMutation({
+    onSuccess: () => { refetch(); setSelectedIds(new Set()); setBulkMoveTarget(''); },
+  });
+  const bulkDeleteMutation = trpc.candidates.bulkDelete.useMutation({
+    onSuccess: () => { refetch(); setSelectedIds(new Set()); },
+  });
   const updateMutation = trpc.candidates.update.useMutation({
     onSuccess: () => refetch(),
   });
@@ -102,6 +114,31 @@ export default function Candidates() {
   });
   const doDelete = (id: string) => {
     deleteMutation.mutate({ id });
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectGroup = (ids: string[]) => {
+    setSelectedIds((prev) => {
+      const allSelected = ids.every((id) => prev.has(id));
+      const next = new Set(prev);
+      ids.forEach((id) => (allSelected ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  };
+  const doBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} candidate(s)? This can't be undone.`)) return;
+    bulkDeleteMutation.mutate({ ids: Array.from(selectedIds) });
+  };
+  const doBulkMove = () => {
+    if (selectedIds.size === 0 || !bulkMoveTarget) return;
+    bulkAdvanceMutation.mutate({ ids: Array.from(selectedIds), toStage: bulkMoveTarget as Stage });
   };
 
   const resetForm = () => setForm({
@@ -201,6 +238,14 @@ export default function Candidates() {
     return (
       <tr key={c.id} onClick={() => setSelectedId(selectedId === c.id ? null : c.id)}
         className={`border-b border-gray-50 text-sm cursor-pointer transition-colors ${selectedId === c.id ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
+        <td className="px-2 py-3 w-8" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={selectedIds.has(c.id)}
+            onChange={() => toggleSelected(c.id)}
+            className="rounded border-gray-300"
+          />
+        </td>
         <td className="px-4 py-3 font-medium text-gray-900">
           <div className="flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center text-[11px] font-semibold shrink-0">{`${(c.firstName?.[0] ?? '')}${(c.lastName?.[0] ?? '')}`}</span>
@@ -258,6 +303,46 @@ export default function Candidates() {
             Add Candidate
           </button>
         </div>
+
+        {/* Bulk action bar — appears once candidates are selected via checkbox */}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-3 mb-4 px-4 py-2.5 rounded-lg bg-blue-50 border border-blue-100 flex-wrap">
+            <span className="text-sm font-medium text-blue-900">{selectedIds.size} selected</span>
+            <select
+              value={bulkMoveTarget}
+              onChange={(e) => setBulkMoveTarget(e.target.value as Stage | '')}
+              className="px-2 py-1.5 text-xs rounded-md border border-gray-300 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+            >
+              <option value="">Move to stage...</option>
+              {STAGES.filter((s) => s !== 'Not Selected').map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <button
+              onClick={doBulkMove}
+              disabled={!bulkMoveTarget || bulkAdvanceMutation.isLoading}
+              className="px-3 py-1.5 text-xs rounded-md bg-ls-primary text-white font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+            >
+              {bulkAdvanceMutation.isLoading ? 'Moving...' : 'Move'}
+            </button>
+            <button
+              onClick={() => setRejectingId(BULK_REJECT)}
+              className="px-3 py-1.5 text-xs rounded-md border border-red-300 text-red-700 font-medium hover:bg-red-50"
+            >
+              Reject
+            </button>
+            <button
+              onClick={doBulkDelete}
+              disabled={bulkDeleteMutation.isLoading}
+              className="px-3 py-1.5 text-xs rounded-md border border-gray-300 text-gray-600 font-medium hover:bg-gray-100 disabled:opacity-50"
+            >
+              {bulkDeleteMutation.isLoading ? 'Deleting...' : 'Delete'}
+            </button>
+            <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-gray-500 hover:text-gray-700">
+              Clear selection
+            </button>
+          </div>
+        )}
 
         <TimelineAlerts />
 
@@ -421,22 +506,26 @@ export default function Candidates() {
           </div>
         )}
 
-        {/* Reject modal */}
+        {/* Reject modal — doubles as the bulk-reject prompt when rejectingId is the BULK_REJECT sentinel */}
         {rejectingId && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg border border-gray-200 p-5 w-96">
-              <div className="text-sm font-semibold text-gray-700 mb-3">Reject Candidate</div>
+              <div className="text-sm font-semibold text-gray-700 mb-3">
+                {rejectingId === BULK_REJECT ? `Reject ${selectedIds.size} Candidates` : 'Reject Candidate'}
+              </div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Reason *</label>
               <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)}
                 rows={3} placeholder="e.g. CCAT score below threshold, not the right fit..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan mb-3" />
               <div className="flex gap-2">
                 <button
-                  onClick={() => rejectMutation.mutate({ id: rejectingId, reason: rejectReason })}
-                  disabled={!rejectReason || rejectMutation.isLoading}
+                  onClick={() => rejectingId === BULK_REJECT
+                    ? bulkRejectMutation.mutate({ ids: Array.from(selectedIds), reason: rejectReason })
+                    : rejectMutation.mutate({ id: rejectingId, reason: rejectReason })}
+                  disabled={!rejectReason || rejectMutation.isLoading || bulkRejectMutation.isLoading}
                   className="px-4 py-2 bg-red-600 text-white rounded-md text-sm font-medium hover:bg-red-700 disabled:opacity-50"
                 >
-                  {rejectMutation.isLoading ? 'Rejecting...' : 'Reject'}
+                  {(rejectMutation.isLoading || bulkRejectMutation.isLoading) ? 'Rejecting...' : 'Reject'}
                 </button>
                 <button onClick={() => { setRejectingId(null); setRejectReason(''); }} className="px-4 py-2 text-gray-600 text-sm">Cancel</button>
               </div>
@@ -501,6 +590,14 @@ export default function Candidates() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-2 py-2.5 w-8">
+                              <input
+                                type="checkbox"
+                                checked={g.cands.length > 0 && g.cands.every((c: any) => selectedIds.has(c.id))}
+                                onChange={() => toggleSelectGroup(g.cands.map((c: any) => c.id))}
+                                className="rounded border-gray-300"
+                              />
+                            </th>
                             <th className="px-4 py-2.5">Name</th>
                             <th className="px-4 py-2.5">Email</th>
                             <th className="px-4 py-2.5">Stage</th>
@@ -546,6 +643,14 @@ export default function Candidates() {
                             <tbody>
                               {g.closed.map((c: any) => (
                                 <tr key={c.id} className="border-b border-gray-50 text-sm">
+                                  <td className="px-2 py-2 w-8">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedIds.has(c.id)}
+                                      onChange={() => toggleSelected(c.id)}
+                                      className="rounded border-gray-300"
+                                    />
+                                  </td>
                                   <td className="px-2 py-2 font-medium text-gray-700">
                                     <span className="inline-flex items-center gap-1.5">
                                       {c.firstName} {c.lastName}

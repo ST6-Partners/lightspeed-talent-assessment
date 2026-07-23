@@ -547,6 +547,13 @@
       "when": 1960000048000,
       "tag": "0077_complete_core_data",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1960000049000,
+      "tag": "0078_ccat_invalid_result",
+      "breakpoints": true
     }
   ]
 }

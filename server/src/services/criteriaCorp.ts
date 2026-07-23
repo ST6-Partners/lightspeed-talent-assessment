@@ -53,6 +53,10 @@ export interface CcatScores {
   ccatMathLogic: number | null;
   ccatSpatial: number | null;
   eppProfile: Record<string, number> | null;  // 12-trait EPP percentiles (Criteria trait names)
+  // True when Criteria flags the submission as an invalid result (failed
+  // validity/consistency checks -- shows as a red "Warning: Invalid Result"
+  // banner on the Criteria score report). Hard cutoff regardless of score.
+  invalidResult: boolean;
   assessmentCompletedAt: string | null;       // ISO timestamp
   status: 'completed' | 'pending' | 'expired';
 }
@@ -167,6 +171,9 @@ export async function getScores(
         'Self-Confidence':   Math.floor(Math.random() * 45) + 40,
         'Stress Tolerance':  Math.floor(Math.random() * 45) + 40,
       },
+      // Mock: deterministically not invalid. Flip to `true` locally to exercise
+      // the hard-cutoff path against sandbox data.
+      invalidResult: false,
       assessmentCompletedAt: new Date().toISOString(),
       status: 'completed',
     };
@@ -189,6 +196,10 @@ export async function getScores(
     ccatMathLogic:        body.scores?.ccat?.mathLogic ?? null,
     ccatSpatial:          body.scores?.ccat?.spatial ?? null,
     eppProfile:           body.scores?.epp ?? null,
+    // ⚠️  Best-guess field -- confirm the exact key/location against a real
+    //     Criteria response (may live under scores.ccat, scores.epp, or a
+    //     top-level validity/flags object) once CRITERIA_API_KEY is live.
+    invalidResult:        Boolean(body.scores?.ccat?.invalid ?? body.scores?.epp?.invalid ?? body.invalidResult ?? false),
     assessmentCompletedAt: body.completedAt ?? null,
     status:               body.status ?? 'pending',
   };
@@ -210,9 +221,10 @@ export interface CriteriaWebhookPayload {
   packageId: string;
   completedAt: string;
   scores: {
-    ccat?: { rawScore: number; percentile: number; verbal?: number; mathLogic?: number; spatial?: number };
+    ccat?: { rawScore: number; percentile: number; verbal?: number; mathLogic?: number; spatial?: number; invalid?: boolean };
     epp?: Record<string, number>;
   };
+  invalidResult?: boolean;
 }
 
 export function parseCriteriaWebhook(body: any): CriteriaWebhookPayload | null {

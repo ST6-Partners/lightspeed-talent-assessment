@@ -408,6 +408,96 @@ async function advanceFromReview(db: any, userId: string | null, existing: any, 
   return candidate;
 }
 
+// Shared reject logic — used by both the single `reject` mutation and
+// `bulkReject` so bulk actions behave identically to a one-off reject
+// (same stage history, decision log, and rejection email).
+async function rejectCandidateCore(db: any, userId: string, id: string, reason: string): Promise<any> {
+  const existing = await db.query.candidates.findFirst({ where: eq(candidates.id, id) });
+  if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+  if (existing.currentStage === 'Rejected') {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Candidate is already rejected' });
+  }
+
+  const [candidate] = await db.update(candidates)
+    .set({ currentStage: 'Rejected', rejectionReason: reason, updatedAt: new Date() })
+    .where(eq(candidates.id, id))
+    .returning();
+
+  await db.insert(candidateStageHistory).values({
+    candidateId: id,
+    fromStage: existing.currentStage,
+    toStage: 'Rejected',
+    changedBy: userId,
+    reason,
+  });
+
+  await logDecision(db, {
+    candidateId: id,
+    decisionType: 'manual_stage_change',
+    outcome: 'rejected',
+    decidedByType: 'human',
+    decidedBy: userId,
+    reason,
+    inputs: { fromStage: existing.currentStage, toStage: 'Rejected' },
+  });
+
+  const jobTitle = await getJobTitle(db, existing.jdId);
+  dispatchStageEmail('Rejected', existing.currentStage, {
+    firstName: existing.firstName,
+    lastName: existing.lastName,
+    email: existing.email,
+    jobTitle,
+  }).catch((err: unknown) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
+
+  await auditChange(db, userId, id, 'candidates', 'update');
+  trackActivity(db, userId, 'reject_candidate', 'candidates', { candidateId: id }).catch((err: unknown) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
+  return candidate;
+}
+
+// Shared "quiet" bulk stage move — deliberately mirrors the existing
+// backward-move convention ("a quiet correction — no emails, no re-running
+// the assessment review") rather than the full single-candidate advanceStage
+// side-effect chain (work-sample links, interview scheduling, auto-close-on-
+// hire, etc). Applying that full chain across an arbitrary bulk selection
+// would risk firing a batch of emails/side effects the user didn't ask for
+// in one click, so bulk moves record the stage change + audit trail only.
+// Individual candidates that need the full pipeline (assessment review,
+// work-sample email, interview prep) should still go through the per-row
+// Advance action.
+async function bulkMoveStageCore(db: any, userId: string, id: string, toStage: string, reason: string): Promise<any> {
+  const existing = await db.query.candidates.findFirst({ where: eq(candidates.id, id) });
+  if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+  if (existing.currentStage === toStage) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Candidate is already in that stage' });
+  }
+
+  const [candidate] = await db.update(candidates)
+    .set({ currentStage: toStage, updatedAt: new Date() })
+    .where(eq(candidates.id, id))
+    .returning();
+
+  await db.insert(candidateStageHistory).values({
+    candidateId: id,
+    fromStage: existing.currentStage,
+    toStage,
+    changedBy: userId,
+    reason,
+  });
+
+  await logDecision(db, {
+    candidateId: id,
+    decisionType: 'manual_stage_change',
+    outcome: 'moved',
+    decidedByType: 'human',
+    decidedBy: userId,
+    reason,
+    inputs: { fromStage: existing.currentStage, toStage, bulk: true },
+  });
+
+  await auditChange(db, userId, id, 'candidates', 'update');
+  return candidate;
+}
+
 export const candidatesRouter = router({
   // Timeline / SLA alerts (flowchart node X): stalled candidates + overdue reqs.
   // Computed on the fly — no stored state.
@@ -544,6 +634,7 @@ export const candidatesRouter = router({
   update: protectedProcedure
     .input(z.object({ id: z.string().uuid() }).merge(CandidateInput.partial()).extend({
       ccatScore: z.number().int().optional(),
+      ccatInvalidResult: z.boolean().optional(),
       eppValuesMatchScore: z.number().int().optional(),
       workSampleScore: z.number().int().optional(),
       resumeReviewScore: z.number().int().optional(),
@@ -567,8 +658,9 @@ export const candidatesRouter = router({
         .where(eq(candidates.id, id))
         .returning();
 
-      // If a CCAT score was just set/changed, run the automatic pass/fail decision.
-      if (input.ccatScore !== undefined) {
+      // If a CCAT score or the invalid-result flag was just set/changed, run the
+      // automatic assessment gate (score threshold + the invalid-result hard cutoff).
+      if (input.ccatScore !== undefined || input.ccatInvalidResult !== undefined) {
         await applyAssessmentDecision(ctx.db, id);
       }
 
@@ -751,50 +843,81 @@ export const candidatesRouter = router({
       reason: z.string().min(1),
     }))
     .mutation(async ({ ctx, input }) => {
-      const existing = await ctx.db.query.candidates.findFirst({
-        where: eq(candidates.id, input.id),
-      });
-      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
-      if (existing.currentStage === 'Rejected') {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Candidate is already rejected' });
+      return rejectCandidateCore(ctx.db, ctx.user.id, input.id, input.reason);
+    }),
+
+  // Bulk-reject a set of candidates with one shared reason. Reuses the exact
+  // same per-candidate logic as `reject` (stage history, decision log,
+  // rejection email) — just looped. Failures on individual ids don't stop
+  // the rest of the batch; the response reports both.
+  bulkReject: protectedProcedure
+    .input(z.object({
+      ids: z.array(z.string().uuid()).min(1),
+      reason: z.string().min(1),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const succeeded: string[] = [];
+      const failed: { id: string; error: string }[] = [];
+      for (const id of input.ids) {
+        try {
+          await rejectCandidateCore(ctx.db, ctx.user.id, id, input.reason);
+          succeeded.push(id);
+        } catch (err: any) {
+          failed.push({ id, error: err?.message ?? 'Unknown error' });
+        }
       }
+      return { succeeded, failed };
+    }),
 
-      const [candidate] = await ctx.db.update(candidates)
-        .set({ currentStage: 'Rejected', rejectionReason: input.reason, updatedAt: new Date() })
-        .where(eq(candidates.id, input.id))
-        .returning();
+  // Bulk-move a set of candidates to one target stage. See bulkMoveStageCore
+  // for why this is a quiet correction (no side-effect chain) rather than the
+  // full advanceStage pipeline.
+  bulkAdvanceStage: protectedProcedure
+    .input(z.object({
+      ids: z.array(z.string().uuid()).min(1),
+      toStage: z.enum(STAGES),
+      reason: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.toStage === 'Not Selected') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '"Not Selected" is applied automatically when a role closes or fills — it can\'t be set manually.',
+        });
+      }
+      const reason = input.reason || `Bulk move to ${input.toStage}`;
+      const succeeded: string[] = [];
+      const failed: { id: string; error: string }[] = [];
+      for (const id of input.ids) {
+        try {
+          await bulkMoveStageCore(ctx.db, ctx.user.id, id, input.toStage, reason);
+          succeeded.push(id);
+        } catch (err: any) {
+          failed.push({ id, error: err?.message ?? 'Unknown error' });
+        }
+      }
+      return { succeeded, failed };
+    }),
 
-      await ctx.db.insert(candidateStageHistory).values({
-        candidateId: input.id,
-        fromStage: existing.currentStage,
-        toStage: 'Rejected',
-        changedBy: ctx.user.id,
-        reason: input.reason,
-      });
-
-      // Phase 2 — record the manual human rejection in the decision log.
-      await logDecision(ctx.db, {
-        candidateId: input.id,
-        decisionType: 'manual_stage_change',
-        outcome: 'rejected',
-        decidedByType: 'human',
-        decidedBy: ctx.user.id,
-        reason: input.reason,
-        inputs: { fromStage: existing.currentStage, toStage: 'Rejected' },
-      });
-
-      // Fire rejection email (non-blocking)
-      const jobTitle = await getJobTitle(ctx.db, existing.jdId);
-      dispatchStageEmail('Rejected', existing.currentStage, {
-        firstName: existing.firstName,
-        lastName: existing.lastName,
-        email: existing.email,
-        jobTitle,
-      }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
-
-      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
-      trackActivity(ctx.db, ctx.user.id, 'reject_candidate', 'candidates', { candidateId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
-      return candidate;
+  // Bulk hard-delete (build/testing convenience — mirrors the single `delete`).
+  bulkDelete: protectedProcedure
+    .input(z.object({ ids: z.array(z.string().uuid()).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const succeeded: string[] = [];
+      const failed: { id: string; error: string }[] = [];
+      for (const id of input.ids) {
+        try {
+          const existing = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, id) });
+          if (!existing) throw new Error('Candidate not found');
+          await ctx.db.delete(candidates).where(eq(candidates.id, id));
+          await auditChange(ctx.db, ctx.user.id, id, 'candidates', 'delete');
+          trackActivity(ctx.db, ctx.user.id, 'delete_candidate', 'candidates', { candidateId: id }).catch((err: unknown) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
+          succeeded.push(id);
+        } catch (err: any) {
+          failed.push({ id, error: err?.message ?? 'Unknown error' });
+        }
+      }
+      return { succeeded, failed };
     }),
 
   // Unreject a candidate — reverses a manual rejection made in error. Restores
@@ -1949,6 +2072,7 @@ export const candidatesRouter = router({
           ccatMathLogic:         scores.ccatMathLogic ?? undefined,
           ccatSpatial:           scores.ccatSpatial ?? undefined,
           eppProfile:            scores.eppProfile ?? undefined,
+          ccatInvalidResult:     scores.invalidResult,
           assessmentCompletedAt: scores.assessmentCompletedAt ? new Date(scores.assessmentCompletedAt) : undefined,
           updatedAt:             new Date(),
         })
