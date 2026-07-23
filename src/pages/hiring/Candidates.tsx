@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info, Archive } from 'lucide-react';
+import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info, Archive, RotateCcw } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { CANDIDATE_STAGES, PIPELINE_STAGES, CLOSED_STAGES as CLOSED } from '../../../server/src/domain/stages.js';
 import RoleRankingDropdown from './RoleRankingDropdown';
@@ -76,6 +76,9 @@ export default function Candidates() {
   });
   const rejectMutation = trpc.candidates.reject.useMutation({
     onSuccess: () => { refetch(); setRejectingId(null); setRejectReason(''); },
+  });
+  const unrejectMutation = trpc.candidates.unreject.useMutation({
+    onSuccess: () => refetch(),
   });
   const updateMutation = trpc.candidates.update.useMutation({
     onSuccess: () => refetch(),
@@ -543,7 +546,21 @@ export default function Candidates() {
                             <tbody>
                               {g.closed.map((c: any) => (
                                 <tr key={c.id} className="border-b border-gray-50 text-sm">
-                                  <td className="px-2 py-2 font-medium text-gray-700">{c.firstName} {c.lastName}</td>
+                                  <td className="px-2 py-2 font-medium text-gray-700">
+                                    <span className="inline-flex items-center gap-1.5">
+                                      {c.firstName} {c.lastName}
+                                      {c.currentStage === 'Rejected' && (
+                                        <button
+                                          onClick={() => unrejectMutation.mutate({ id: c.id })}
+                                          disabled={unrejectMutation.isLoading}
+                                          className="p-1 text-gray-400 hover:text-green-600 transition-colors"
+                                          title="Unreject — restore to previous stage"
+                                        >
+                                          <RotateCcw size={13} />
+                                        </button>
+                                      )}
+                                    </span>
+                                  </td>
                                   <td className="px-2 py-2">
                                     <span className={`inline-flex px-2 py-0.5 text-[11px] rounded-full ${STAGE_COLORS[c.currentStage] ?? 'bg-gray-100 text-gray-600'}`}>
                                       {c.currentStage}

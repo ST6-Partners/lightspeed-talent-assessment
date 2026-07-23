@@ -797,6 +797,58 @@ export const candidatesRouter = router({
       return candidate;
     }),
 
+  // Unreject a candidate — reverses a manual rejection made in error. Restores
+  // the candidate to the stage they were in immediately before the rejection
+  // (read from candidate_stage_history), clears the rejection reason, and logs
+  // the reversal the same way every other stage change is logged. Does not
+  // re-fire the original stage-entry email (the candidate already received
+  // whatever email brought them to that stage the first time).
+  unreject: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.candidates.findFirst({
+        where: eq(candidates.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (existing.currentStage !== 'Rejected') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Candidate is not currently rejected' });
+      }
+
+      // Find the stage the candidate was in right before this rejection.
+      const lastRejection = await ctx.db.query.candidateStageHistory.findFirst({
+        where: eq(candidateStageHistory.candidateId, input.id),
+        orderBy: [desc(candidateStageHistory.createdAt)],
+      });
+      const restoredStage = (lastRejection?.toStage === 'Rejected' ? lastRejection.fromStage : null) ?? 'Applied';
+
+      const [candidate] = await ctx.db.update(candidates)
+        .set({ currentStage: restoredStage, rejectionReason: null, updatedAt: new Date() })
+        .where(eq(candidates.id, input.id))
+        .returning();
+
+      await ctx.db.insert(candidateStageHistory).values({
+        candidateId: input.id,
+        fromStage: 'Rejected',
+        toStage: restoredStage,
+        changedBy: ctx.user.id,
+        reason: 'Unrejected — rejection reversed',
+      });
+
+      await logDecision(ctx.db, {
+        candidateId: input.id,
+        decisionType: 'manual_stage_change',
+        outcome: 'moved',
+        decidedByType: 'human',
+        decidedBy: ctx.user.id,
+        reason: 'Unrejected — rejection reversed',
+        inputs: { fromStage: 'Rejected', toStage: restoredStage },
+      });
+
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'unreject_candidate', 'candidates', { candidateId: input.id }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
+      return candidate;
+    }),
+
   // Resolve a candidate in the Review queue (below the auto-advance bar). A human
   // either approves them (clears the flag so they proceed) or rejects them; both log.
   resolveReview: protectedProcedure
