@@ -21,6 +21,7 @@ import {
   seedRoundsFromPlan,
   generateRoundFeedback,
   buildPriorRoundsBriefing,
+  maybeAdvanceOnAllRoundsComplete,
 } from '../services/interviewRounds.js';
 import { emailInterviewRoundPrep, emailInterviewerUnavailableManager } from '../services/email.js';
 
@@ -162,6 +163,11 @@ export const interviewsRouter = router({
       const [row] = await db.update(candidateInterviews).set(patch)
         .where(eq(candidateInterviews.id, input.id)).returning();
       if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Interview round not found.' });
+      // A manual status edit can also be the one that completes the last round.
+      if (input.status === 'completed') {
+        await maybeAdvanceOnAllRoundsComplete(row.candidateId)
+          .catch((err) => console.error('[interviews] all-rounds-complete check failed:', err));
+      }
       return row;
     }),
 

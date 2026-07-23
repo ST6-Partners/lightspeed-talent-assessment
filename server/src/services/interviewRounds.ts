@@ -14,16 +14,66 @@
 import { eq, and, lt, asc } from 'drizzle-orm';
 import { db } from '../db.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
-import { candidates, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { interviewPlan } from '../db/schema/intake.js';
 import { getCompanyTalkingPoints, type CompanyTalkingPoints } from './companyTalkingPoints.js';
 import { scoreWalkthroughFromTranscript } from './workSampleScoring.js';
 import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
+import { logDecision } from './decisionLog.js';
 import {
   analyzeInterviewTranscript,
   synthesizeInterviewTranscript,
   type InterviewFollowUp,
 } from './ai.js';
+
+// Stages the candidate can be auto-advanced FROM when every round wraps up.
+// Anyone already further along (Work Sample, Reference Check, Offered,
+// Rejected, ...) is left alone -- this only fires once, for whoever is still
+// sitting in the interview phase when the last round completes.
+const INTERVIEW_PHASE_STAGES = ['Interview Scheduled', 'Interviewed'];
+
+/**
+ * Called after ANY round's status flips to 'completed' (AI feedback or a
+ * manual status edit). If every round for this candidate is now completed,
+ * marks the interview done and auto-advances the candidate straight to
+ * Reference Check. No-op if there are no rounds yet, not all rounds are
+ * done, or the candidate has already moved past the interview phase.
+ */
+export async function maybeAdvanceOnAllRoundsComplete(
+  candidateId: string,
+  changedBy: string | null = null,
+): Promise<void> {
+  const rounds = await db.select().from(candidateInterviews)
+    .where(eq(candidateInterviews.candidateId, candidateId));
+  if (rounds.length === 0) return;
+  if (!rounds.every((r) => r.status === 'completed')) return;
+
+  const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
+  if (!candidate || !INTERVIEW_PHASE_STAGES.includes(candidate.currentStage)) return;
+
+  const fromStage = candidate.currentStage;
+  await db.update(candidates)
+    .set({ currentStage: 'Reference Check', updatedAt: new Date() })
+    .where(eq(candidates.id, candidateId));
+
+  await db.insert(candidateStageHistory).values({
+    candidateId,
+    fromStage,
+    toStage: 'Reference Check',
+    changedBy,
+    reason: `Interview marked complete — all ${rounds.length} round(s) done, auto-advanced to Reference Check`,
+  });
+
+  await logDecision(db, {
+    candidateId,
+    decisionType: 'manual_stage_change',
+    outcome: 'advanced',
+    decidedByType: 'deterministic',
+    decidedBy: changedBy,
+    reason: `All ${rounds.length} interview round(s) completed`,
+    inputs: { fromStage, toStage: 'Reference Check', roundCount: rounds.length },
+  });
+}
 
 export interface BriefingRound {
   roundName: string;
@@ -190,6 +240,11 @@ export async function generateRoundFeedback(roundId: string, transcriptIn?: stri
     await scoreWalkthroughFromTranscript(db, round.candidateId, transcript)
       .catch((err) => console.error('[walkthrough] work-sample scoring failed:', err));
   }
+
+  // This round just completed -- if that was the LAST one still open, mark the
+  // interview done and auto-advance to Reference Check.
+  await maybeAdvanceOnAllRoundsComplete(round.candidateId)
+    .catch((err) => console.error('[interview-rounds] all-rounds-complete check failed:', err));
 
   return { roundId, transcript, feedback };
 }
