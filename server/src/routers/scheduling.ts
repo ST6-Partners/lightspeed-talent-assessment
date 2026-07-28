@@ -18,8 +18,25 @@ import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
-import { candidates, jobDescriptions } from '../db/schema/hiring.js';
-import { emailBookingInvite, emailScreeningCallInvite } from '../services/email.js';
+import { candidates, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
+import { employees } from '../db/schema/employees.js';
+import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, HIRING_TEAM_INBOX } from '../services/email.js';
+
+// Capability tokens for the interviewer "can't interview for this role" link that
+// ships in the intake-approval availability email. reqId is a random UUID, so the
+// encoded token is effectively unguessable (same idea as the work-sample/EEO links).
+export function encodeInterviewerDeclineToken(reqId: string, email: string): string {
+  return Buffer.from(`${reqId}|${email}`, 'utf8').toString('base64url');
+}
+function decodeInterviewerDeclineToken(token: string): { reqId: string; email: string } | null {
+  try {
+    const parts = Buffer.from(token, 'base64url').toString('utf8').split('|');
+    const reqId = parts.shift() ?? '';
+    const email = parts.join('|');
+    if (!reqId || !email) return null;
+    return { reqId, email };
+  } catch { return null; }
+}
 import { defaultSchedulingUrl, phoneScreenSchedulingUrl, isCalendlyConfigured } from '../services/calendly.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
@@ -198,5 +215,41 @@ export const schedulingRouter = router({
         // External booking link to open (phone-screen / Zoom Scheduler mode).
         schedulingUrl: mode === 'phone_screen' ? (phoneScreenSchedulingUrl() || null) : null,
       };
+    }),
+
+  // ── PUBLIC: interviewer opens the "can't interview for this role" link from
+  // the intake-approval availability email. Context for the confirmation page.
+  getInterviewerDeclineContext: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const dec = decodeInterviewerDeclineToken(input.token);
+      if (!dec) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid.' });
+      const req = (await ctx.db.select().from(jobRequisitions).where(eq(jobRequisitions.id, dec.reqId)).limit(1))[0];
+      if (!req) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is no longer valid.' });
+      const jd = (await ctx.db.select().from(jobDescriptions).where(eq(jobDescriptions.reqId, req.id)).limit(1))[0];
+      return { role: `${req.department}${jd?.jobTitle ? ' · ' + jd.jobTitle : ''}`, interviewerEmail: dec.email };
+    }),
+
+  // ── PUBLIC: interviewer confirms they can't take the role — notify their manager.
+  declineInterview: publicProcedure
+    .input(z.object({ token: z.string().min(1), reason: z.string().max(1000).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const dec = decodeInterviewerDeclineToken(input.token);
+      if (!dec) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid.' });
+      const req = (await ctx.db.select().from(jobRequisitions).where(eq(jobRequisitions.id, dec.reqId)).limit(1))[0];
+      if (!req) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is no longer valid.' });
+      const jd = (await ctx.db.select().from(jobDescriptions).where(eq(jobDescriptions.reqId, req.id)).limit(1))[0];
+      const emp = (await ctx.db.select().from(employees).where(eq(employees.email, dec.email)).limit(1))[0];
+      const to = emp?.managerEmail || process.env.HR_EMAIL || HIRING_TEAM_INBOX;
+      await emailInterviewerDeclinedRoleManager({
+        to,
+        interviewerName: (emp as any)?.name ?? null,
+        interviewerEmail: dec.email,
+        department: req.department,
+        jobTitle: jd?.jobTitle ?? undefined,
+        hiringManager: req.hiringManager,
+        reason: input.reason,
+      });
+      return { ok: true, viaHrFallback: !emp?.managerEmail };
     }),
 });

@@ -8,6 +8,7 @@ import WorkSample from './pages/WorkSample';
 import EeoSurvey from './pages/EeoSurvey';
 import Fairness from './pages/hiring/Fairness';
 import BookInterview from './pages/BookInterview';
+import InterviewerUnavailable from './pages/InterviewerUnavailable';
 import ApplyInternal from './pages/ApplyInternal';
 import Approve from './pages/Approve';
 import Chat from './pages/Chat';
@@ -38,6 +39,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/work-sample/:token" element={<WorkSample />} />
       <Route path="/eeo-survey/:token" element={<EeoSurvey />} />
+      <Route path="/interviewer-unavailable/:token" element={<InterviewerUnavailable />} />
       <Route path="/book-interview/:token" element={<BookInterview />} />
       <Route path="/apply-internal/:jdId" element={<ApplyInternal />} />
       <Route path="/approve/:token" element={<Approve />} />

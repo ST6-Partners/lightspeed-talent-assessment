@@ -953,7 +953,7 @@ export function buildKickoffEmail(d: KickoffData): { subject: string; html: stri
 // so it's resolved before scheduling rather than surfacing mid-process.
 export function buildInterviewerAvailabilityEmail(d: {
   department: string; jobTitle?: string; hiringManager: string;
-  schedulingUrl: string; rounds: { roundName: string }[];
+  schedulingUrl: string; rounds: { roundName: string }[]; declineUrl?: string;
 }): { subject: string; html: string; text: string } {
   const role = `${d.department}${d.jobTitle ? ' · ' + d.jobTitle : ''}`;
   const subject = `Action needed: set your interview availability — ${role}`;
@@ -972,12 +972,35 @@ export function buildInterviewerAvailabilityEmail(d: {
       <p style="font-size:12px;color:#7a8aa0;margin:14px 0 0;">Or paste this link: ${d.schedulingUrl}</p>
     </div>
     <div style="margin:16px 0 4px;padding:14px 18px;background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid #ea580c;border-radius:10px;">
-      <p style="font-size:14px;font-weight:700;color:#7c2d12;margin:0 0 4px;">Can’t take this on, or need an exception?</p>
-      <p style="font-size:13px;color:#7c2d12;margin:0;">Tell your manager now so coverage can be arranged before interviews are booked — flagging it at this stage keeps it from surfacing mid-process.</p>
+      <p style="font-size:14px;font-weight:700;color:#7c2d12;margin:0 0 6px;">Can’t take this on, or need an exception?</p>
+      <p style="font-size:13px;color:#7c2d12;margin:0 0 ${d.declineUrl ? '12px' : '0'};">Flag it now so coverage is arranged before interviews are booked — raising it at this stage keeps it from surfacing mid-process.</p>
+      ${d.declineUrl ? `<a href="${d.declineUrl}" style="display:inline-block;padding:10px 18px;background:#ea580c;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:13px;">I can’t interview for this role &rarr;</a><p style="font-size:12px;color:#b45309;margin:12px 0 0;">This notifies your manager so they can arrange coverage.</p>` : ''}
     </div>
   `);
-  const text = `You're on the interview team for ${role} (hiring manager: ${d.hiringManager}). Please set your availability now: ${d.schedulingUrl}\n\nCan't take this on or need an exception? Tell your manager now so coverage is arranged before interviews are booked.`;
+  const text = `You're on the interview team for ${role} (hiring manager: ${d.hiringManager}). Please set your availability now: ${d.schedulingUrl}\n\nCan't take this on or need an exception?${d.declineUrl ? ` Let your manager know here: ${d.declineUrl}` : ' Tell your manager now so coverage is arranged before interviews are booked.'}`;
   return { subject, html, text };
+}
+
+// Manager notification when an interviewer declines a role UPFRONT (from the
+// intake-approval availability email), so coverage is arranged before candidates
+// reach the interview stage.
+export async function emailInterviewerDeclinedRoleManager(d: {
+  to: string; interviewerName?: string | null; interviewerEmail: string;
+  department: string; jobTitle?: string; hiringManager: string; reason?: string;
+}): Promise<void> {
+  const who = d.interviewerName || d.interviewerEmail;
+  const role = `${d.department}${d.jobTitle ? ' · ' + d.jobTitle : ''}`;
+  await sendEmail({
+    to: d.to,
+    templateId: 'interviewer_declined_role',
+    subject: `Interview coverage needed: ${who} can’t interview for ${role}`,
+    html: wrap(`
+      ${h1('An interviewer needs coverage')}
+      ${p(`<strong>${esc(who)}</strong> was set as an interviewer for <strong>${esc(role)}</strong> (hiring manager: ${esc(d.hiringManager)}) and has flagged that they can’t take it on.`)}
+      ${d.reason ? p(`Reason given: &ldquo;${esc(d.reason)}&rdquo;`) : ''}
+      ${p('Please help arrange alternative coverage so this role’s interview plan is set before candidates reach the interview stage.')}
+    `),
+  });
 }
 
 // ============================================================

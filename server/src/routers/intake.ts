@@ -24,6 +24,7 @@ import { users } from '../db/schema/core.js';
 import { auditChange } from '../services/audit.js';
 import { trackActivity } from '../services/telemetry.js';
 import { announceRoleInternally } from '../services/internalAnnounce.js';
+import { encodeInterviewerDeclineToken } from './scheduling.js';
 
 function appBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -172,6 +173,14 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
   // Show the interviewer verification copy whenever an interview process exists (any round),
   // or a team member is flagged as an interviewer — not gated on an email being entered.
   const hasInterviewers = rounds.length > 0 || interviewerRefs.size > 0;
+  // Inbox verification copy carries a real (first-interviewer) decline link so it's testable.
+  const inboxAvailability = interviewerEmails.length
+    ? buildInterviewerAvailabilityEmail({
+        department: req.department, jobTitle: extras?.jdTitle, hiringManager: req.hiringManager,
+        schedulingUrl: `${appBaseUrl()}/hiring/interviews`, rounds,
+        declineUrl: `${appBaseUrl()}/interviewer-unavailable/${encodeInterviewerDeclineToken(req.id, interviewerEmails[0])}`,
+      })
+    : availability;
 
   // Record verification copies into the team inbox: the base hiring kickoff (what the team +
   // awareness list receive) and, when there are interviewers, a separate interview-team version
@@ -187,8 +196,8 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
       await db.insert(inboundEmails).values({
         fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
         fromName: 'Lightspeed Hiring',
-        toEmail: HIRING_TEAM_INBOX, subject: availability.subject,
-        body: availability.text, replyTag: 'interviewer_availability', source: 'simulated',
+        toEmail: HIRING_TEAM_INBOX, subject: inboxAvailability.subject,
+        body: inboxAvailability.text, replyTag: 'interviewer_availability', source: 'simulated',
         raw: { kind: 'interviewer_availability', reqId: req.id },
       });
     }
@@ -196,8 +205,15 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
 
   // Real send. Interviewers get ONE combined email (all of them on the same message) with the
   // availability CTA; everyone else (non-interviewing team + awareness list) gets the base kickoff.
-  if (interviewerEmails.length) {
-    try { await sendEmail({ to: interviewerEmails, subject: availability.subject, html: availability.html, templateId: 'interviewer_availability' }); }
+  // Each interviewer gets their own availability email with a personal
+  // "can't interview for this role" link that notifies their manager upfront.
+  for (const email of interviewerEmails) {
+    const declineUrl = `${appBaseUrl()}/interviewer-unavailable/${encodeInterviewerDeclineToken(req.id, email)}`;
+    const perEmail = buildInterviewerAvailabilityEmail({
+      department: req.department, jobTitle: extras?.jdTitle, hiringManager: req.hiringManager,
+      schedulingUrl: `${appBaseUrl()}/hiring/interviews`, rounds, declineUrl,
+    });
+    try { await sendEmail({ to: email, subject: perEmail.subject, html: perEmail.html, templateId: 'interviewer_availability' }); }
     catch (err) { console.error('[intake] interviewer availability send failed:', err); }
   }
   for (const to of otherEmails) {
