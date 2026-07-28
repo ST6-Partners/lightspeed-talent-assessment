@@ -106,7 +106,7 @@ export default function ReviewQueue() {
             <div className="grid grid-cols-2 gap-2 mb-4">
               {([
                 ['CCAT Score', selected.ccatScore],
-                ['EPP Match', pct(selected.eppValuesMatchScore)],
+                ['Role Fit Match', pct(selected.eppValuesMatchScore)],
                 ['Resume Review', pct(selected.resumeReviewScore)],
                 ['Work Sample', selected.workSampleScore ?? '—'],
               ] as [string, any][]).map(([label, value]) => (

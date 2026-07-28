@@ -598,7 +598,7 @@ export default function Candidates() {
                             <th className="px-4 py-2.5">Email</th>
                             <th className="px-4 py-2.5">Stage</th>
                             <th className="px-4 py-2.5">CCAT</th>
-                            <th className="px-4 py-2.5">EPP Match</th>
+                            <th className="px-4 py-2.5">Role Fit Match</th>
                             <th className="px-4 py-2.5 w-24">Actions</th>
                           </tr>
                         </thead>
@@ -716,7 +716,7 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">CCAT</div><div className="text-base font-bold text-gray-900">{c.ccatScore ?? '—'}<span className="text-xs text-gray-400">/50</span></div></div>
             <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Percentile</div><div className="text-base font-bold text-gray-900">{c.ccatPercentile != null ? `${c.ccatPercentile}th` : '—'}</div></div>
-            <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">EPP Match</div><div className="text-base font-bold text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</div></div>
+            <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Role Fit Match</div><div className="text-base font-bold text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</div></div>
           </div>
           {(c.ccatVerbal != null || c.ccatMathLogic != null || c.ccatSpatial != null) && (
             <div className="text-gray-500">Verbal <b className="text-gray-700">{c.ccatVerbal ?? '—'}</b> · Math &amp; Logic <b className="text-gray-700">{c.ccatMathLogic ?? '—'}</b> · Spatial <b className="text-gray-700">{c.ccatSpatial ?? '—'}</b></div>
@@ -728,7 +728,7 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
       return (
         <div className="space-y-3">
           <div className="grid grid-cols-3 gap-2">
-            <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">EPP Match</div><div className="text-base font-bold text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</div></div>
+            <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Role Fit Match</div><div className="text-base font-bold text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</div></div>
             <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Values Match</div><div className="text-base font-bold text-gray-900">{c.companyValuesMatchScore != null ? `${c.companyValuesMatchScore}%` : '—'}</div></div>
             <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Resume Review</div><div className="text-base font-bold text-gray-900">{c.resumeReviewScore ?? '—'}</div></div>
           </div>
@@ -1373,7 +1373,7 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged, defaul
           <div className="space-y-1.5 border border-gray-100 rounded p-2">
             <ScoreBar label="Requirements" score={req && req.totalCount ? Math.round((req.metCount / req.totalCount) * 100) : null} sub={req ? (req.totalCount ? `${req.metCount}/${req.totalCount} required met` : 'No required qualifications listed') : undefined} />
             <ScoreBar label="Skills fit" score={skills ? skills.score : null} sub={skills && skills.mode === 'keyword' ? 'Keyword fallback \u2014 advisory only' : undefined} />
-            <ScoreBar label="EPP match" score={result.eppMatch ?? null} sub={eppScans?.hasEpp ? `avg across ${eppScans.traitCount} EPP traits` : 'No EPP results on file yet'} />
+            <ScoreBar label="Role fit match" score={result.eppMatch ?? null} sub={eppScans?.hasEpp ? `avg across ${eppScans.traitCount} EPP traits` : 'No EPP results on file yet'} />
             <ScoreBar label="Company values match" score={result.companyValuesMatch ?? null} sub={eppScans?.hasEpp ? `across ${eppScans.scoredValues} company values` : 'No EPP results on file yet'} />
           </div>
 
