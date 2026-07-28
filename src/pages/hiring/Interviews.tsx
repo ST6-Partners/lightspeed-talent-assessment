@@ -182,7 +182,6 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
                         <div className="px-3 pb-2 space-y-2">
                           {tp.whoWeAre && (<div><div className="text-[11px] font-semibold text-gray-700">Who we are</div><p className="text-[11px] text-gray-600 whitespace-pre-wrap">{tp.whoWeAre}</p></div>)}
                           {tp.values.length > 0 && (<div><div className="text-[11px] font-semibold text-gray-700">Our values</div><ul className="text-[11px] text-gray-600 list-disc pl-4">{tp.values.map((v: any, i: number) => (<li key={i}><strong>{v.name}</strong>{v.pillar ? <span className="text-gray-400"> ({v.pillar})</span> : null}{v.description ? `: ${v.description}` : ''}</li>))}</ul></div>)}
-                          {tp.departments.length > 0 && (<div><div className="text-[11px] font-semibold text-gray-700">Departments</div><ul className="text-[11px] text-gray-600 list-disc pl-4">{tp.departments.map((d: any, i: number) => (<li key={i}>{d.name}{d.size ? `: ${d.size}` : ''}</li>))}</ul></div>)}
                         </div>
                       )}
                     </div>
