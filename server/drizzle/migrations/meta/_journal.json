@@ -582,6 +582,13 @@
       "when": 1960000053000,
       "tag": "0082_requisition_role_title",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1960000054000,
+      "tag": "0083_delete_roundless_scorecards",
+      "breakpoints": true
     }
   ]
 }

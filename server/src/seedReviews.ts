@@ -5,6 +5,7 @@ import { companyValues, valueReviews, candidateValueScores } from './db/schema/v
 import { candidateEppScores } from './db/schema/epp.js';
 import { employees } from './db/schema/employees.js';
 import { candidates } from './db/schema/hiring.js';
+import { candidateInterviews } from './db/schema/interviews.js';
 import { sql, eq } from 'drizzle-orm';
 
 const band = (p: number) => (p >= 85 ? 5 : p >= 70 ? 4 : p >= 55 ? 3 : p >= 30 ? 2 : 1);
@@ -35,6 +36,9 @@ export async function seedReviews() {
 
   let reviewCount = 0;
   for (const cand of chosen) {
+    // Scorecards are always tied to an interview round — skip candidates with none.
+    const candRounds = await db.select().from(candidateInterviews).where(eq(candidateInterviews.candidateId, cand.id));
+    if (!candRounds.length) { console.log(`  [reviews] ${cand.firstName} ${cand.lastName} has no rounds — skipping.`); continue; }
     const eppRows = await db.select().from(candidateEppScores).where(eq(candidateEppScores.candidateId, cand.id));
     const byTrait: Record<string, number> = {};
     eppRows.forEach((r: any) => { byTrait[r.trait] = r.percentile; });
@@ -44,8 +48,9 @@ export async function seedReviews() {
     for (let i = 0; i < reviewers.length; i++) {
       const rev = reviewers[i];
       const bias = i === 0 ? 0 : -1; // second reviewer slightly tougher
+      const round = candRounds[i] ?? candRounds[0]; // reviewer i -> round i (or the first)
       const [review] = await db.insert(valueReviews).values({
-        candidateId: cand.id, reviewerId: rev.id,
+        candidateId: cand.id, reviewerId: rev.id, interviewId: round.id,
         reviewedAt: new Date(Date.now() - (i + 1) * 2 * 86400_000),
       }).returning({ id: valueReviews.id });
 

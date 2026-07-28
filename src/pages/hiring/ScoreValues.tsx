@@ -62,6 +62,11 @@ export default function ScoreValues() {
   const eppQuery = trpc.values.getCandidateEpp.useQuery({ candidateId }, { enabled: !!candidateId });
   const reviewsQuery = trpc.values.getCandidateReviews.useQuery({ candidateId }, { enabled: !!candidateId });
   const roundsQuery = trpc.interviews.list.useQuery({ candidateId }, { enabled: !!candidateId });
+  // Scorecards are always tied to a round — default to the first not-yet-complete round.
+  useEffect(() => {
+    const rs = roundsQuery.data ?? [];
+    if (candidateId && rs.length && !interviewId) setInterviewId((rs.find((r: any) => r.status !== 'completed') ?? rs[0]).id);
+  }, [roundsQuery.data, candidateId]); // eslint-disable-line react-hooks/exhaustive-deps
   const updateBriefing = trpc.interviews.updateFeedback.useMutation({
     onSuccess: () => { roundsQuery.refetch(); setBriefingPromptFor(null); setBriefingEditMode(false); },
     onError: (err) => alert(err.message),
@@ -208,7 +213,7 @@ export default function ScoreValues() {
     saveMutation.mutate({
       reviewId: currentReviewId ?? undefined,
       candidateId, reviewerId, reviewedAt,
-      interviewId: interviewId || null,
+      interviewId,
       scores: Object.entries(scores).map(([valueId, score]) => ({ valueId, score })),
       capabilityScores: Object.entries(capScores).map(([capabilityItemId, score]) => ({ capabilityItemId, score })),
     });
@@ -216,7 +221,7 @@ export default function ScoreValues() {
 
   const isExisting = currentReviewId != null;
   const isDirty = snap(reviewerId, reviewedAt, interviewId, scores) !== baseline;
-  const canSave = !!reviewerId && (Object.values(scores).some((n) => typeof n === 'number') || Object.values(capScores).some((n) => typeof n === 'number'));
+  const canSave = !!reviewerId && !!interviewId && (Object.values(scores).some((n) => typeof n === 'number') || Object.values(capScores).some((n) => typeof n === 'number'));
 
   return (
     <div className="max-w-3xl">
@@ -256,15 +261,19 @@ export default function ScoreValues() {
         {candidateId && (roundsQuery.data ?? []).length > 0 && (
           <div className="mt-4">
             <label className="block text-xs font-medium text-ls-ink-2 mb-1">
-              Interview round <span className="text-ls-ink-3 font-normal">(optional — ties this scorecard to a round in the Interviews tab)</span>
+              Interview round <span className="text-red-500">*</span> <span className="text-ls-ink-3 font-normal">(a scorecard is always tied to a round)</span>
             </label>
             <select value={interviewId} onChange={(e) => setInterviewId(e.target.value)}
               className="w-full px-3 py-2 border border-ls-line rounded-lg text-sm bg-white focus:outline-none focus:border-ls-cyan focus:ring-2 focus:ring-ls-primary-50">
-              <option value="">General — not tied to a specific round</option>
               {(roundsQuery.data ?? []).map((r: any) => (
                 <option key={r.id} value={r.id}>{r.roundName}{r.status ? ` · ${r.status}` : ''}</option>
               ))}
             </select>
+          </div>
+        )}
+        {candidateId && (roundsQuery.data ?? []).length === 0 && (
+          <div className="mt-4 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+            This candidate has no interview rounds yet. Scorecards are filled per round — add rounds in the Interviews tab first.
           </div>
         )}
 

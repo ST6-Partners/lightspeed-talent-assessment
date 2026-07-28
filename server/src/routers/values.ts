@@ -114,7 +114,7 @@ export const valuesRouter = router({
       reviewId: z.string().uuid().optional(),
       candidateId: z.string().uuid(),
       reviewerId: z.string().uuid().optional(),
-      interviewId: z.string().uuid().nullable().optional(),
+      interviewId: z.string().uuid(), // a scorecard is always tied to an interview round
       reviewedAt: z.string().optional(),
       scores: z.array(z.object({
         valueId: z.string().uuid(),
