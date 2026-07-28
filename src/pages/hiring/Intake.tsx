@@ -196,7 +196,7 @@ export default function Intake() {
   }, [full, editingId]);
 
   const close = () => { setShowForm(false); setEditingId(null); setForm({ ...EMPTY }); setRounds([]); setTeam([]); setAwareness([]); setErr(null); setSaved(false); };
-  const startCreate = () => { close(); setShowForm(true); };
+  const startCreate = () => { close(); setRounds([{ roundName: 'Round 1' }, { roundName: 'Round 2' }]); setShowForm(true); };
   const startEdit = (r: any) => { setErr(null); setEditingId(r.id); setShowForm(true); };
 
   const saveMutation = trpc.intake.saveDraft.useMutation({
@@ -249,7 +249,7 @@ export default function Intake() {
     salaryMin: form.salaryMin ? parseInt(form.salaryMin) : undefined,
     salaryMax: form.salaryMax ? parseInt(form.salaryMax) : undefined,
     compBasis: form.compBasis as any, variableComp: form.variableComp || undefined,
-    interviewRounds: Number(form.interviewRounds) || 1, questionSource: form.questionSource as any,
+    interviewRounds: rounds.filter((r) => r.roundName && r.roundName.trim()).length || 1, questionSource: form.questionSource as any,
     teamAvailabilityConfirmed: form.teamAvailabilityConfirmed,
     timelineTemplate: form.timelineTemplate as any,
     targetPostDate: form.targetPostDate || undefined, targetOfferDate: form.targetOfferDate || undefined,
@@ -682,10 +682,6 @@ export default function Intake() {
           {/* 5 — Interview structure */}
           <section>
             <h3 className="text-sm font-semibold text-ls-primary mb-2">5 · Interview structure</h3>
-            <div className="mb-3 max-w-[240px]">
-              <label className={lbl}>Number of rounds</label>
-              <input type="number" min={1} max={5} value={form.interviewRounds} onChange={(e) => setForm({ ...form, interviewRounds: parseInt(e.target.value) || 1 })} className={inp} />
-            </div>
             <label className={lbl}>Rounds</label>
             {rounds.map((r, i) => (
               <div key={i} className="flex gap-2 mb-2">
