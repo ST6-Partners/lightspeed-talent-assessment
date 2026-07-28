@@ -886,7 +886,7 @@ function CandidateDetail({ candidate, wsApplicable, nextStage, onReject, onChang
   const update = trpc.candidates.update.useMutation({ onSuccess: onChanged });
 
   return (
-    <div className="max-w-3xl">
+    <div className="w-full">
       <PipelineStages
         candidate={c}
         wsApplicable={wsApplicable}
