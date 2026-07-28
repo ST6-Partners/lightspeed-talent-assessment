@@ -738,7 +738,7 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
           {c.companyValuesNotes ? (
             <div><div className="font-semibold text-gray-700 mb-0.5">Role-fit notes</div><div className="whitespace-pre-wrap">{c.companyValuesNotes}</div></div>
           ) : null}
-          <CombinedScreenSection candidateId={c.id} existingSummary={c.screenSummary ?? null} onChanged={onChanged} defaultOpen />
+          <CombinedScreenSection candidateId={c.id} existingSummary={c.screenSummary ?? null} onChanged={onChanged} defaultOpen resumeUrl={c.resumeUrl ?? null} hasStoredResume={!!c.resumeText} />
         </div>
       );
     case 'Phone Screen':
@@ -1315,8 +1315,7 @@ function ScoreBar({ label, score, sub }: { label: string; score: number | null; 
   );
 }
 
-function CombinedScreenSection({ candidateId, existingSummary, onChanged, defaultOpen }: { candidateId: string; existingSummary: string | null; onChanged?: () => void; defaultOpen?: boolean }) {
-  const [resumeText, setResumeText] = useState('');
+function CombinedScreenSection({ candidateId, existingSummary, onChanged, defaultOpen, resumeUrl, hasStoredResume }: { candidateId: string; existingSummary: string | null; onChanged?: () => void; defaultOpen?: boolean; resumeUrl?: string | null; hasStoredResume?: boolean }) {
   const [needsSponsorship, setNeedsSponsorship] = useState(false);
   const [result, setResult] = useState<any>(null);
   const screen = trpc.candidates.runScreen.useMutation({
@@ -1335,20 +1334,18 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged, defaul
         One automated screen for the 200 \u2192 20 gate. It checks the resume against the job's <strong>required</strong> qualifications (missing any, or needing sponsorship, auto-rejects), grades <strong>skills fit</strong> and <strong>values match</strong>, and gives one recommendation. Skills and values inform the call but never reject on their own. Scores are provisional \u2014 calibrate before relying on them.
       </div>
 
-      <textarea
-        value={resumeText}
-        onChange={(e) => setResumeText(e.target.value)}
-        rows={5}
-        placeholder="Paste the candidate's resume text here..."
-        className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-ls-cyan"
-      />
+      {resumeUrl ? (
+        <a href={resumeUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ls-primary font-semibold border border-dashed border-ls-primary rounded-md px-2.5 py-1 text-xs">See resume →</a>
+      ) : (
+        <div className="text-xs text-gray-400 italic">{hasStoredResume ? 'Resume on file.' : 'No resume on file yet — it attaches automatically when the candidate applies.'}</div>
+      )}
       <label className="flex items-center gap-1.5 text-xs text-gray-600">
         <input type="checkbox" checked={needsSponsorship} onChange={(e) => setNeedsSponsorship(e.target.checked)} />
         Requires international sponsorship (knockout)
       </label>
       <button
-        onClick={() => screen.mutate({ id: candidateId, resumeText, needsSponsorship })}
-        disabled={!resumeText.trim() || screen.isLoading}
+        onClick={() => screen.mutate({ id: candidateId, needsSponsorship })}
+        disabled={!hasStoredResume || screen.isLoading}
         className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
       >
         {screen.isLoading ? 'Screening\u2026' : 'Run screen'}

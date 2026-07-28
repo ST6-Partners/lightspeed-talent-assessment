@@ -1163,12 +1163,20 @@ export const candidatesRouter = router({
   runScreen: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
-      resumeText: z.string().min(1),
+      // Optional now — the resume is attached to the application, so the screen
+      // runs off the candidate's stored resume by default. An explicit override
+      // is still accepted (e.g. re-paste), but nobody has to paste anything.
+      resumeText: z.string().optional(),
       needsSponsorship: z.boolean().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+
+      // Use the pasted text if provided, otherwise the resume stored on the
+      // candidate at application time.
+      const resumeText = (input.resumeText?.trim() || (candidate as any).resumeText || '').trim();
+      if (!resumeText) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No resume on file for this candidate to screen.' });
 
       const jd = candidate.jdId
         ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
@@ -1178,11 +1186,11 @@ export const candidatesRouter = router({
       const jobTitle = jd?.jobTitle ?? undefined;
 
       // 1) Requirements gate (must-haves + nice-to-haves).
-      const requirements = await screenResumeRequirements(input.resumeText, required);
-      const niceToHaves = await screenResumeRequirements(input.resumeText, preferred);
+      const requirements = await screenResumeRequirements(resumeText, required);
+      const niceToHaves = await screenResumeRequirements(resumeText, preferred);
 
       // 2) Skills fit (graded).
-      const skills = await scoreSkillsFit(input.resumeText, {
+      const skills = await scoreSkillsFit(resumeText, {
         jobTitle,
         summary: (jd as any)?.summary ?? null,
         responsibilities: (jd as any)?.responsibilities ?? null,
