@@ -28,7 +28,6 @@ type Stage = typeof STAGES[number];
 // (and every candidate's currentStage) is unchanged — this only relabels a few
 // stages to match the agreed pipeline wording. Stages not listed render as-is.
 const STAGE_LABEL: Record<string, string> = {
-  'Values Review': 'Candidate Review',
   'Interview Scheduled': 'Scheduled Interview',
 };
 const stageLabel = (s: string): string => STAGE_LABEL[s] ?? s;
@@ -729,7 +728,7 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
           <a href={`/hiring/assessments?id=${c.id}`} className="inline-flex items-center gap-1 text-ls-primary font-semibold border border-dashed border-ls-primary rounded-md px-2.5 py-1">See assessment →</a>
         </div>
       );
-    case 'Values Review':
+    case 'Candidate Review':
       return (
         <div className="space-y-2">
           <div className="flex gap-4 flex-wrap">
