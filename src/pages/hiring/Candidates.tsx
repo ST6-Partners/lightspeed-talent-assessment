@@ -873,17 +873,7 @@ function CandidateDetail({ candidate, wsApplicable, nextStage, onReject, onChang
   onChanged: () => void;
 }) {
   const c = candidate;
-  const [showWsScoring, setShowWsScoring] = useState(false);
   const advance = trpc.candidates.advanceStage.useMutation({ onSuccess: onChanged });
-  const rescore = trpc.workSample.rescore.useMutation({ onSuccess: onChanged });
-  const sendWs = trpc.workSample.send.useMutation({
-    onSuccess: (res: any) => {
-      onChanged();
-      if (res?.mode === 'live_walkthrough') alert('This work sample is a live walkthrough. A "Work Sample Walkthrough" round was created — schedule it in the Interviews tab.');
-    },
-  });
-  const wsReview = trpc.workSample.setReview.useMutation({ onSuccess: onChanged });
-  const update = trpc.candidates.update.useMutation({ onSuccess: onChanged });
 
   return (
     <div className="w-full">
@@ -895,96 +885,6 @@ function CandidateDetail({ candidate, wsApplicable, nextStage, onReject, onChang
         onReject={() => onReject(c.id)}
         advancing={advance.isLoading}
       />
-
-      <div className="grid grid-cols-3 gap-2 mb-4 mt-5">
-        {[
-          { label: 'CCAT Score', value: c.ccatScore },
-          { label: 'EPP Match', value: c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : null },
-          { label: 'Work Sample', value: c.workSampleScore },
-          { label: 'Resume Review', value: c.resumeReviewScore },
-          { label: 'Interview Score', value: c.interviewScore },
-        ].map(({ label, value, hint }: any) => (
-          <div key={label} className={`bg-white border border-gray-200 rounded p-2 ${hint ? 'cursor-help' : ''}`} title={hint}>
-            <div className="text-xs text-gray-500 flex items-center gap-1">{label}{hint && <Info size={13} className="text-ls-primary shrink-0" aria-label={hint} />}</div>
-            <div className="text-sm font-medium text-gray-900">{value ?? '—'}</div>
-          </div>
-        ))}
-      </div>
-
-      {c.companyValuesNotes && (
-        <Section title="Role Fit (values)">
-          <div className="text-xs text-gray-700 whitespace-pre-wrap">{c.companyValuesNotes}</div>
-        </Section>
-      )}
-
-      <Section title="Work Sample">
-        {c.workSampleSubmittedAt ? (
-          <div className="space-y-2">
-            <div className="text-xs text-green-700">Submitted {new Date(c.workSampleSubmittedAt).toLocaleString()}</div>
-            <div className="bg-gray-50 rounded p-2 text-xs text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">{c.workSampleSubmission || '(no written response)'}</div>
-            {c.workSampleLink && (<a href={c.workSampleLink} target="_blank" rel="noreferrer" className="text-xs text-ls-primary underline break-all">{c.workSampleLink}</a>)}
-            <div className="pt-1">
-              <button onClick={() => rescore.mutate({ id: c.id })} disabled={rescore.isLoading} className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50">
-                {rescore.isLoading ? 'Scoring…' : c.workSampleScore != null ? 'Re-score with AI' : 'Score with AI'}
-              </button>
-              <div className="text-[11px] text-gray-400 mt-1">AI draft against the task rubric — advisory, never auto-rejects.</div>
-            </div>
-          </div>
-        ) : (<div className="text-xs text-gray-400 italic">No submission yet.</div>)}
-
-        {c.workSampleScore != null && (
-          <div className="pt-1">
-            <button onClick={() => setShowWsScoring(!showWsScoring)} className="flex items-center gap-1 text-xs font-medium text-ls-primary">
-              <ChevronDown size={12} className={`transition-transform ${showWsScoring ? '' : '-rotate-90'}`} />
-              {showWsScoring ? 'Hide scoring breakdown' : 'View scoring breakdown'}
-            </button>
-            {showWsScoring && (
-              <div className="mt-2 border border-gray-200 rounded-lg p-3 bg-white">
-                <div className="flex items-baseline gap-2 mb-2"><span className="text-lg font-semibold text-gray-900">{c.workSampleScore}</span><span className="text-xs text-gray-500">/ 100 overall</span></div>
-                {c.workSampleNotes ? (<div className="text-[11px] text-gray-700 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">{c.workSampleNotes}</div>) : (<div className="text-xs text-gray-400 italic">Scored, but no breakdown was saved.</div>)}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="pt-1">
-          <button onClick={() => sendWs.mutate({ id: c.id })} disabled={sendWs.isLoading} className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
-            {sendWs.isLoading ? 'Sending…' : c.workSampleToken ? 'Resend work-sample link' : 'Send work-sample link'}
-          </button>
-          {sendWs.data?.url && (
-            <div className="mt-2">
-              <div className="text-xs text-gray-500 mb-0.5">Link emailed — shareable URL:</div>
-              <div className="flex gap-1">
-                <input readOnly value={sendWs.data.url} onFocus={(e) => e.currentTarget.select()} className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50" />
-                <button onClick={() => navigator.clipboard?.writeText(sendWs.data!.url!)} className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50">Copy</button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="pt-1">
-          <EditableField label="Work Sample Score (0–100)" value={c.workSampleScore != null ? String(c.workSampleScore) : ''} onSave={(v) => wsReview.mutate({ id: c.id, score: v.trim() === '' ? null : Math.max(0, Math.min(100, parseInt(v) || 0)) })} />
-          <EditableTextarea label="Work Sample Review Notes" value={c.workSampleNotes ?? ''} onSave={(v) => wsReview.mutate({ id: c.id, notes: v })} />
-        </div>
-      </Section>
-
-      <Section title="Interviews">
-        <div className="text-xs text-gray-600">Interviewer, scheduling, rounds, questions, transcript and feedback are managed on the <a href={`/hiring/interviews?id=${c.id}`} className="text-ls-primary underline">Interviews tab</a>.</div>
-      </Section>
-
-      <CombinedScreenSection key={c.id} candidateId={c.id} existingSummary={c.screenSummary ?? null} onChanged={onChanged} />
-
-      {c.isInternal
-        ? <InternalOfferSection key={`ioffer-${c.id}`} candidateId={c.id} onChanged={onChanged} />
-        : <OfferSection key={`offer-${c.id}`} candidateId={c.id} onChanged={onChanged} />}
-
-      <Section title="General Notes">
-        <EditableTextarea label="Notes" value={c.notes ?? ''} onSave={(v) => update.mutate({ id: c.id, notes: v })} />
-      </Section>
-
-      <DecisionHistorySection key={`dh-${c.id}`} candidateId={c.id} />
-      <EeoInviteSection key={`eeo-${c.id}`} candidateId={c.id} />
-      {c.currentStage === 'Phone Screen' && <PhoneScreenSchedulingSection key={`ps-${c.id}`} candidate={c} onChanged={onChanged} />}
     </div>
   );
 }
