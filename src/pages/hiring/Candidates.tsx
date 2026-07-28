@@ -874,6 +874,7 @@ function CandidateDetail({ candidate, wsApplicable, nextStage, onReject, onChang
 }) {
   const c = candidate;
   const advance = trpc.candidates.advanceStage.useMutation({ onSuccess: onChanged });
+  const update = trpc.candidates.update.useMutation({ onSuccess: onChanged });
 
   return (
     <div className="w-full">
@@ -885,6 +886,13 @@ function CandidateDetail({ candidate, wsApplicable, nextStage, onReject, onChang
         onReject={() => onReject(c.id)}
         advancing={advance.isLoading}
       />
+
+      <div className="mt-5">
+        <Section title="General Notes">
+          <EditableTextarea label="Notes" value={c.notes ?? ''} onSave={(v) => update.mutate({ id: c.id, notes: v })} />
+        </Section>
+        <DecisionHistorySection key={`dh-${c.id}`} candidateId={c.id} />
+      </div>
     </div>
   );
 }
