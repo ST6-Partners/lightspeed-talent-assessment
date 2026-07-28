@@ -696,16 +696,30 @@ export const intakeRouter = router({
       if (req.salaryMin == null || req.salaryMax == null) missing.push('salary range');
       if (req.salaryMin != null && req.salaryMax != null && req.salaryMax < req.salaryMin) missing.push('salary range (max below min)');
       if (!req.teamAvailabilityConfirmed) missing.push('team availability confirmation');
-      // Reason + its dependent field: without these, JD generation / role opening
-      // produces a broken or empty result (e.g. a backfill with no JD to reuse).
+
+      // ── Required for EVERY reason (needed to open any role) ──
+      if (!(req.employmentType && String(req.employmentType).trim())) missing.push('employment type');
+      if (!(req.location && String(req.location).trim())) missing.push('location');
+      if (!(req.workArrangement && String(req.workArrangement).trim())) missing.push('work arrangement');
+      // At least one interview round, each with a named interviewer.
+      const planRows = await ctx.db.select().from(interviewPlan).where(eq(interviewPlan.reqId, input.id));
+      if (!planRows.length) missing.push('at least one interview round');
+      else if (planRows.some((r: any) => !(r.interviewer && String(r.interviewer).trim()))) missing.push('an interviewer for every interview round');
+
+      // ── Reason + its reason-specific fields ──
       const reason = (req.reasonType ?? '').trim();
       if (!reason) missing.push('reason for opening (New role / Modify role / Backfill)');
       if ((reason === 'backfill' || reason === 'modify_role' || reason === 'replacement_diff' || reason === 'termination_diff') && !req.baseJdId) {
         missing.push(reason === 'backfill' ? 'existing job description to reuse' : 'existing job description to base the new JD on');
       }
       if (reason === 'new_headcount') {
+        // Brand-new role: title + description drive the generated JD.
         if (!(req.roleTitle && String(req.roleTitle).trim())) missing.push('role title');
         if (!(req.roleChangeNote && String(req.roleChangeNote).trim())) missing.push('role description');
+      }
+      if (reason === 'modify_role' && !(req.roleChangeNote && String(req.roleChangeNote).trim())) {
+        // Modify role: the change description drives the updated JD (title comes from the base JD).
+        missing.push('description of the changes');
       }
       if (missing.length) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: `Cannot submit — missing: ${missing.join(', ')}.` });
