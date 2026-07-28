@@ -17,6 +17,7 @@ import { candidateInterviews } from '../db/schema/interviews.js';
 import { candidates, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { employees } from '../db/schema/employees.js';
 import { interviewQuestions } from '../db/schema/intake.js';
+import { standardQuestionSet } from '../services/ai.js';
 import {
   seedRoundsFromPlan,
   generateRoundFeedback,
@@ -85,13 +86,18 @@ export const interviewsRouter = router({
         if (home) byId.set(home.id, home);
       }
       const reqs = [...byId.values()];
-      if (!reqs.length) return { questions: [] as any[], source: null as string | null };
+      if (!reqs.length) return { questions: standardQuestionSet(''), source: 'standard' as string | null };
       const rank = (st: string | null | undefined) => (st === 'Open' ? 3 : st === 'Approved' ? 2 : st === 'Pending Approval' ? 1 : 0);
       reqs.sort((a, b) => rank(b.status) - rank(a.status) || (new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()));
       const row = (await db.select().from(interviewQuestions)
         .where(eq(interviewQuestions.reqId, reqs[0].id))
         .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0];
-      return { questions: (row?.questions as any[]) ?? [], source: (row?.source as string | null) ?? null };
+      const stored = (row?.questions as any[]) ?? [];
+      if (stored.length) return { questions: stored, source: (row?.source as string | null) ?? null };
+      // No stored question set for this req yet (e.g. seeded/older candidates that
+      // never ran the intake flow). Fall back to the canonical department standard
+      // set so the briefing always shows the ~70% fixed questions.
+      return { questions: standardQuestionSet((reqs[0] as any)?.department ?? ''), source: 'standard' as string | null };
     }),
 
   // Add one round to the end.

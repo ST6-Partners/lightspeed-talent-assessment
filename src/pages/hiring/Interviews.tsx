@@ -54,7 +54,6 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, questions, standardQuestions }: { round: any; defaultOpen: boolean; onChanged: () => void; reviews: any[]; valueName: Record<string, string>; questions: any[]; standardQuestions: any[] }) {
   const [open, setOpen] = useState(defaultOpen);
-  const [transcript, setTranscript] = useState('');
   const [showBriefing, setShowBriefing] = useState(false);
   const [briefOpen, setBriefOpen] = useState<Record<string, boolean>>({});
   const [fbOpen, setFbOpen] = useState(false);
@@ -66,7 +65,6 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
 
   const update = trpc.interviews.updateRound.useMutation({ onSuccess: onChanged, onError: (err) => { alert(err.message); onChanged?.(); } });
   const remove = trpc.interviews.removeRound.useMutation({ onSuccess: onChanged });
-  const record = trpc.interviews.recordFeedback.useMutation({ onSuccess: onChanged });
   const saveFb = trpc.interviews.updateFeedback.useMutation({ onSuccess: () => { setFbEdit(false); onChanged(); } });
 
   const startEditFb = () => {
@@ -156,19 +154,6 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
                 </button>
                 <button onClick={() => { setNotifyOpen(false); setNotifyReason(''); }} className="text-xs px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-white">Cancel</button>
               </div>
-            </div>
-          )}
-
-          {/* Transcript -> feedback (hidden once feedback has been generated) */}
-          {round.status !== 'completed' && (
-            <div>
-              <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={2}
-                placeholder="Paste this round's transcript (optional — leave blank for a generated sample)…"
-                className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs font-mono" />
-              <button onClick={() => record.mutate({ id: round.id, transcript: transcript.trim() || undefined })} disabled={record.isLoading}
-                className="mt-1.5 text-xs px-3 py-1.5 border border-gray-300 rounded font-medium hover:bg-gray-50 disabled:opacity-50">
-                {record.isLoading ? 'Processing…' : 'Add transcript → feedback'}
-              </button>
             </div>
           )}
 
