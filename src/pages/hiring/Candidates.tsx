@@ -244,7 +244,6 @@ export default function Candidates() {
         <td className="px-4 py-3 text-gray-500">{c.ccatScore ?? '\u2014'}</td>
         <td className="px-4 py-3 text-gray-500">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '\u2014'}</td>
         <td className="px-4 py-3 text-gray-500">{c.companyValuesMatchScore != null ? `${c.companyValuesMatchScore}%` : '\u2014'}</td>
-        <td className="px-4 py-3 text-gray-400">{new Date(c.createdAt).toLocaleDateString()}</td>
         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
           <div className="flex gap-1">
             {getPrevStage(c) && (
@@ -574,7 +573,6 @@ export default function Candidates() {
                             <th className="px-4 py-2.5">CCAT</th>
                             <th className="px-4 py-2.5">EPP Match</th>
                             <th className="px-4 py-2.5">Values Match</th>
-                            <th className="px-4 py-2.5">Applied</th>
                             <th className="px-4 py-2.5 w-24">Actions</th>
                           </tr>
                         </thead>
