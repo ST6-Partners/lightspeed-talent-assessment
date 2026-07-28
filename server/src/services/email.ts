@@ -259,8 +259,8 @@ export async function emailInvitedToWorkSample(data: CandidateEmailData) {
   });
 }
 
-// 4. Advancing to values review
-export async function emailAdvancingToValuesReview(data: CandidateEmailData) {
+// 4. Advancing to candidate review
+export async function emailAdvancingToCandidateReview(data: CandidateEmailData) {
   await sendEmail({
     to: data.email,
     templateId: 'advancing_values_review',
@@ -268,7 +268,7 @@ export async function emailAdvancingToValuesReview(data: CandidateEmailData) {
     html: wrap(`
       ${h1('You\'re moving to the next round')}
       ${p(`Hi ${data.firstName},`)}
-      ${p(`We've reviewed your work sample for <strong>${data.jobTitle ?? 'the position'}</strong> and we're excited to let you know you're advancing to the next stage of our process.`)}
+      ${p(`We've reviewed your application for <strong>${data.jobTitle ?? 'the position'}</strong> and we're excited to let you know you're advancing to the next stage of our process.`)}
       ${p('Our team will be in touch shortly to walk you through what comes next. This stage focuses on how well your values and working style align with the Lightspeed team.')}
       ${p('Thanks for your continued interest — we look forward to connecting soon.')}
     `),
@@ -358,7 +358,7 @@ export async function emailRejection(data: CandidateEmailData) {
     Applied: 'After carefully reviewing your application',
     Assessment: 'After reviewing your assessment results',
     'Work Sample': 'After evaluating your work sample',
-    'Values Review': 'After our values review process',
+    'Candidate Review': 'After reviewing your profile against the role',
     'Interview Scheduled': 'After further consideration',
     Interviewed: 'After your interview with our team',
     Offered: 'After reviewing our offer',
@@ -787,8 +787,8 @@ export async function dispatchStageEmail(
       await emailInvitedToWorkSample(data);
       await emailAssessmentPassedHR(data);
       break;
-    case 'Values Review':
-      await emailAdvancingToValuesReview(data);
+    case 'Candidate Review':
+      await emailAdvancingToCandidateReview(data);
       await emailWorkSampleSubmittedHR(data);
       break;
     case 'Phone Screen':

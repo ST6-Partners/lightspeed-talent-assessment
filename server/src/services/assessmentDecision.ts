@@ -123,19 +123,19 @@ export async function applyAssessmentDecision(
     }
 
     await db.update(candidates)
-      .set({ currentStage: 'Values Review', updatedAt: new Date() })
+      .set({ currentStage: 'Candidate Review', updatedAt: new Date() })
       .where(eq(candidates.id, candidate.id));
 
     await db.insert(candidateStageHistory).values({
       candidateId: candidate.id,
       fromStage: 'Assessment',
-      toStage: 'Values Review',
+      toStage: 'Candidate Review',
       changedBy: null, // automated — no user
       reason: `Auto-advanced: assessment score ${score} met threshold of ${ASSESSMENT_PASS_THRESHOLD}`,
     });
 
     // Candidate "you're advancing" + HR "assessment passed" (SendGrid)
-    await dispatchStageEmail('Values Review', 'Assessment', {
+    await dispatchStageEmail('Candidate Review', 'Assessment', {
       firstName: candidate.firstName,
       lastName: candidate.lastName,
       email: candidate.email,

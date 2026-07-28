@@ -110,7 +110,7 @@ const DISTRIBUTION: Array<{ stage: Stage | 'Rejected'; n: number; rejectedFrom?:
   { stage: 'Applied', n: 9 },
   { stage: 'Assessment', n: 6 },
   { stage: 'Work Sample', n: 5 },
-  { stage: 'Values Review', n: 4 },
+  { stage: 'Candidate Review', n: 4 },
   { stage: 'Interview Scheduled', n: 3 },
   { stage: 'Interviewed', n: 3 },
   { stage: 'Offered', n: 2 },
@@ -119,7 +119,7 @@ const DISTRIBUTION: Array<{ stage: Stage | 'Rejected'; n: number; rejectedFrom?:
   { stage: 'Rejected', n: 4, rejectedFrom: 'Applied' },
   { stage: 'Rejected', n: 6, rejectedFrom: 'Assessment' },
   { stage: 'Rejected', n: 4, rejectedFrom: 'Work Sample' },
-  { stage: 'Rejected', n: 2, rejectedFrom: 'Values Review' },
+  { stage: 'Rejected', n: 2, rejectedFrom: 'Candidate Review' },
   { stage: 'Rejected', n: 2, rejectedFrom: 'Interviewed' },
 ];
 
@@ -127,7 +127,7 @@ const REJECTION_REASON: Record<string, string> = {
   Applied: 'Resume did not meet minimum qualifications',
   Assessment: 'CCAT score below threshold',
   'Work Sample': 'Work sample did not meet the bar',
-  'Values Review': 'Values match below threshold',
+  'Candidate Review': 'Values match below threshold',
   Interviewed: 'Not the right fit after interview',
 };
 
@@ -219,8 +219,8 @@ export async function seedHiring() {
         if (isRejected && bucket.rejectedFrom === 'Work Sample') workSampleScore = rint(30, 55);
         else workSampleScore = rint(64, 95);
       }
-      if (reached('Values Review')) {
-        const drop = isRejected && bucket.rejectedFrom === 'Values Review';
+      if (reached('Candidate Review')) {
+        const drop = isRejected && bucket.rejectedFrom === 'Candidate Review';
         eppProf = eppProfile(drop ? 'low' : passed ? 'high' : 'mid');
         eppValuesMatchScore = drop ? rint(45, 68) : rint(72, 95);
       }

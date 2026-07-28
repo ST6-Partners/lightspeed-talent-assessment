@@ -22,7 +22,7 @@ const TRAITS = [
 // Stage → quality base (how strong the profile tends to be)
 const STAGE_BASE: Record<string, number> = {
   Hired: 78, Offered: 76, Interviewed: 72, 'Interview Scheduled': 70,
-  'Values Review': 68, 'Work Sample': 62, Assessment: 56, Applied: 52, Rejected: 46,
+  'Candidate Review': 68, 'Work Sample': 62, Assessment: 56, Applied: 52, Rejected: 46,
 };
 
 // Deterministic RNG seeded from a string (mulberry32 over a simple hash)

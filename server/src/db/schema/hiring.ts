@@ -24,7 +24,7 @@ export const candidateStageEnum = pgEnum('candidate_stage', [
   // Declaration order IS the funnel order (matched to the DB by migration 0061).
   'Applied',
   'Assessment',
-  'Values Review',
+  'Candidate Review',
   'Work Sample',
   // Human recruiter phone screen (logistics + fit) before the interview loop.
   'Phone Screen',

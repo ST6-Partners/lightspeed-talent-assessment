@@ -27,7 +27,7 @@ export const STAGE_SLA_DAYS: Record<string, number> = {
   'Applied': STAGE_SLA_DEFAULT_DAYS,
   'Assessment': STAGE_SLA_DEFAULT_DAYS,
   'Work Sample': STAGE_SLA_DEFAULT_DAYS,
-  'Values Review': STAGE_SLA_DEFAULT_DAYS,
+  'Candidate Review': STAGE_SLA_DEFAULT_DAYS,
   'Phone Screen': STAGE_SLA_DEFAULT_DAYS,
   'Interview Scheduled': STAGE_SLA_DEFAULT_DAYS,
   'Interviewed': STAGE_SLA_DEFAULT_DAYS,

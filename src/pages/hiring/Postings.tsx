@@ -13,7 +13,7 @@ const STAGE_BADGE: Record<string, string> = {
   Applied: 'bg-gray-100 text-gray-600',
   Assessment: 'bg-indigo-100 text-indigo-700',
   'Work Sample': 'bg-purple-100 text-purple-700',
-  'Values Review': 'bg-amber-100 text-amber-700',
+  'Candidate Review': 'bg-amber-100 text-amber-700',
   'Interview Scheduled': 'bg-blue-100 text-blue-700',
   Interviewed: 'bg-cyan-100 text-cyan-700',
   Offered: 'bg-green-100 text-green-700',

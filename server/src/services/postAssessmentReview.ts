@@ -8,7 +8,7 @@
 //      prior screen result if there's no text).
 //   3. Gate: reject if resume screening fails a required qual, or
 //      EPP match < 70, or company-values match < 70.
-//   4. On pass: advance to Values Review and email the candidate.
+//   4. On pass: advance to Candidate Review and email the candidate.
 //      Tailored interview questions are generated later, once the
 //      interview is scheduled (see services/interviewPrep.ts).
 //
@@ -114,17 +114,17 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
   // 3) Bar check — ADVISORY only. No automatic rejection here anymore. The only
   //    fully-automated reject in the funnel is the CCAT cutoff. Candidates at/above
   //    the 70% bar auto-advance; below it they move into the human review queue
-  //    (Values Review), flagged for a person to decide.
+  //    (Candidate Review), flagged for a person to decide.
   const shortfalls: string[] = [];
   if (resumeFailed) shortfalls.push(resumeMissing.length ? `resume missing required: ${resumeMissing.join('; ')}` : 'resume screening');
   if (eppMatch < MATCH_PASS_THRESHOLD) shortfalls.push(`EPP match ${eppMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
   if (valuesMatch < MATCH_PASS_THRESHOLD) shortfalls.push(`role-values match ${valuesMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
   const metBar = shortfalls.length === 0;
 
-  // Always move to Values Review (the human review stage). Never auto-reject.
+  // Always move to Candidate Review (the human review stage). Never auto-reject.
   await db.update(candidates)
     .set({
-      currentStage: 'Values Review',
+      currentStage: 'Candidate Review',
       screenRecommendation: metBar ? 'advance' : 'review',
       ...(metBar ? {} : {
         companyValuesNotes: `Below auto-advance bar (${shortfalls.join('; ')}). Flagged for human review — not auto-rejected.`,
@@ -144,13 +144,13 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
     score: Math.min(eppMatch, valuesMatch),
     decidedByType: 'deterministic',
     reason: metBar
-      ? `Met the auto-advance bar: EPP ${eppMatch}%, role-values ${valuesMatch}% (threshold ${MATCH_PASS_THRESHOLD}%), resume requirements met — auto-advanced to Values Review.`
-      : `Below the auto-advance bar (${shortfalls.join('; ')}). Advanced to Values Review for human review — not auto-rejected.`,
+      ? `Met the auto-advance bar: EPP ${eppMatch}%, role-values ${valuesMatch}% (threshold ${MATCH_PASS_THRESHOLD}%), resume requirements met — auto-advanced to Candidate Review.`
+      : `Below the auto-advance bar (${shortfalls.join('; ')}). Advanced to Candidate Review for human review — not auto-rejected.`,
     inputs: { eppMatch, valuesMatch, threshold: MATCH_PASS_THRESHOLD, resumeFailed, resumeMissing, metBar },
   });
 
   await db.insert(candidateStageHistory).values({
-    candidateId, fromStage, toStage: 'Values Review', changedBy: null,
+    candidateId, fromStage, toStage: 'Candidate Review', changedBy: null,
     reason: metBar
       ? `Auto-advanced: met the bar (EPP ${eppMatch}%, role-values ${valuesMatch}%).`
       : `Advanced for human review: below the bar (${shortfalls.join('; ')}) — not auto-rejected.`,
@@ -159,9 +159,9 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
   // Candidate "moving forward" email only when they cleared the bar automatically.
   // Below-bar candidates wait for a human decision in the Review queue.
   if (metBar) {
-    void dispatchStageEmail('Values Review', fromStage, {
+    void dispatchStageEmail('Candidate Review', fromStage, {
       firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-    }).catch((err) => console.error('[PostReview] Values Review email failed:', err));
+    }).catch((err) => console.error('[PostReview] Candidate Review email failed:', err));
   }
 
   console.log(`[PostReview] ${candidate.email} ${metBar ? 'auto-advanced (met bar)' : 'advanced for human review (below bar)'} — EPP ${eppMatch}% / values ${valuesMatch}%`);
@@ -333,8 +333,8 @@ export function simulateUpstreamScores(candidate: any, toStage: string): Record<
     patch.ccatMathLogic = clampPct(pct + (Math.floor(Math.random() * 21) - 10));
     patch.ccatSpatial = clampPct(pct + (Math.floor(Math.random() * 21) - 10));
   }
-  // Screen (Values Review) -> EPP match, company-values match, resume review.
-  if (target >= idx('Values Review')) {
+  // Screen (Candidate Review) -> EPP match, company-values match, resume review.
+  if (target >= idx('Candidate Review')) {
     if (candidate.eppValuesMatchScore == null) patch.eppValuesMatchScore = rand(70, 23);        // 70-92
     if (candidate.companyValuesMatchScore == null) patch.companyValuesMatchScore = rand(70, 23); // 70-92
     if (candidate.resumeReviewScore == null) {

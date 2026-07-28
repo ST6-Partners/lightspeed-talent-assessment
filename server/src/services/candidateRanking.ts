@@ -23,7 +23,7 @@ import { rankCandidateFit } from './ai.js';
 import { buildSeededResume } from './postAssessmentReview.js';
 
 const CONCURRENCY = 5;
-// Stages NOT ranked: everything up to and including Values Review (ranking runs
+// Stages NOT ranked: everything up to and including Candidate Review (ranking runs
 // only AFTER resume + values screening completes), plus the terminal states.
 // Ranking covers the post-screening shortlist — Phone Screen onward.
 const DROPPED_STAGES = NOT_RANKABLE_STAGES;

@@ -21,7 +21,7 @@
 export const CANDIDATE_STAGES = [
   'Applied',
   'Assessment',
-  'Values Review',
+  'Candidate Review',
   'Phone Screen',
   'Interview Scheduled',
   'Interviewed',

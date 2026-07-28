@@ -1123,7 +1123,7 @@ export const candidatesRouter = router({
           firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
         }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
       } else if (!terminal && decision === 'advanced' && idx >= 0 && idx <= 3) {
-        // Advance one stage (only through Values Review; never auto-jump interview+).
+        // Advance one stage (only through Candidate Review; never auto-jump interview+).
         const nextStage = STAGE_ORDER[idx + 1];
         await ctx.db.update(candidates)
           .set({ currentStage: nextStage as any, updatedAt: new Date() })
@@ -2119,16 +2119,16 @@ export const candidatesRouter = router({
         updatedAt: new Date(),
       }).where(eq(candidates.id, input.id));
 
-      // Company-values match gates the Work Sample -> Values Review advance.
+      // Company-values match gates the Work Sample -> Candidate Review advance.
       const THRESHOLD = 70;
       let stageAction: string | null = null;
       if (candidate.currentStage === 'Work Sample' && scans.companyValuesMatch != null) {
         if (scans.companyValuesMatch >= THRESHOLD) {
           await ctx.db.update(candidates)
-            .set({ currentStage: 'Values Review', updatedAt: new Date() })
+            .set({ currentStage: 'Candidate Review', updatedAt: new Date() })
             .where(eq(candidates.id, input.id));
           await ctx.db.insert(candidateStageHistory).values({
-            candidateId: input.id, fromStage: 'Work Sample', toStage: 'Values Review',
+            candidateId: input.id, fromStage: 'Work Sample', toStage: 'Candidate Review',
             changedBy: ctx.user.id,
             reason: `Company-values match ${scans.companyValuesMatch} met threshold of ${THRESHOLD}`,
           });

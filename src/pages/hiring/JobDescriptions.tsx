@@ -301,7 +301,7 @@ export default function JobDescriptions() {
                   <li key={i}>{q.question}{q.category ? <span className="text-gray-400"> ({q.category})</span> : null}</li>
                 ))}
               </ol>
-              <p className="text-xs text-gray-400 mt-2">The tailored ~30% is curated and emailed to the interviewer later, after the candidate's EPP/values review.</p>
+              <p className="text-xs text-gray-400 mt-2">The tailored ~30% is curated and emailed to the interviewer later, after the candidate's EPP/candidate review.</p>
             </div>
           )}
           <div className="flex gap-2 mt-4">

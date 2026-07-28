@@ -236,7 +236,7 @@ export const insightsRouter = router({
       ORDER BY CASE stage
         WHEN 'Applied'             THEN 1
         WHEN 'Assessment'          THEN 2
-        WHEN 'Values Review'       THEN 3
+        WHEN 'Candidate Review'       THEN 3
         WHEN 'Phone Screen'        THEN 4
         WHEN 'Interview Scheduled' THEN 5
         WHEN 'Interviewed'         THEN 6
