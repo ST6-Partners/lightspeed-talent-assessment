@@ -36,6 +36,7 @@ export default function Candidates() {
   const [showForm, setShowForm] = useState(false);
   const [stageFilter, setStageFilter] = useState<Stage | ''>('');
   const [internalFilter, setInternalFilter] = useState<'all' | 'internal' | 'external'>('all');
+  const [needsActionOnly, setNeedsActionOnly] = useState(false);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -185,6 +186,20 @@ export default function Candidates() {
   const matchesInternal = (c: any) =>
     internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal);
 
+  // "Needs action" = the system is waiting on a human advance/reject decision and
+  // the thing that stage waits on has already happened:
+  //   • Reference Check  — always (only a human moves it to Offer or Reject)
+  //   • Work Sample      — once the sample is submitted or scored (take-home or walkthrough)
+  //   • Phone Screen     — once the scheduled call time has passed
+  const needsAction = (c: any): boolean => {
+    switch (c.currentStage) {
+      case 'Reference Check': return true;
+      case 'Work Sample': return !!(c.workSampleSubmittedAt || c.workSampleScore != null);
+      case 'Phone Screen': return !!(c.phoneScreenScheduledAt && new Date(c.phoneScreenScheduledAt).getTime() < Date.now());
+      default: return false;
+    }
+  };
+
   // Active applicants (drives the top stat cards).
   const visibleCandidates = ((candidates ?? []) as any[]).filter((c: any) =>
     matchesInternal(c) && !CLOSED_STAGES.includes(c.currentStage)
@@ -197,7 +212,7 @@ export default function Candidates() {
   // Group EVERY candidate (active + closed) by role, so a filled/closed role
   // still shows a card with its own closed-out list.
   const groupMap = new Map<string, any[]>();
-  for (const c of ((candidates ?? []) as any[]).filter(matchesInternal)) {
+  for (const c of ((candidates ?? []) as any[]).filter((c: any) => matchesInternal(c) && (!needsActionOnly || needsAction(c)))) {
     const key = c.jdId ?? 'none';
     if (!groupMap.has(key)) groupMap.set(key, []);
     groupMap.get(key)!.push(c);
@@ -244,7 +259,7 @@ export default function Candidates() {
         <td className="px-4 py-3 font-medium text-gray-900">
           <div className="flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center text-[11px] font-semibold shrink-0">{`${(c.firstName?.[0] ?? '')}${(c.lastName?.[0] ?? '')}`}</span>
-            <span>{c.firstName} {c.lastName}{c.isInternal && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-purple-100 text-purple-700 align-middle">Internal</span>}{c.screenRecommendation === 'review' && c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && c.currentStage !== 'Not Selected' && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-red-100 text-red-700 align-middle" title="Below the auto-advance bar — awaiting human review in the Review tab">Review</span>}</span>
+            <span>{c.firstName} {c.lastName}{c.isInternal && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-purple-100 text-purple-700 align-middle">Internal</span>}{c.screenRecommendation === 'review' && c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && c.currentStage !== 'Not Selected' && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-red-100 text-red-700 align-middle" title="Below the auto-advance bar — awaiting human review in the Review tab">Review</span>}{needsAction(c) && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-700 align-middle font-medium" title="Waiting on your decision — advance or reject this candidate">Needs action</span>}</span>
           </div>
         </td>
         <td className="px-4 py-3 text-gray-500">{c.email}</td>
@@ -383,6 +398,13 @@ export default function Candidates() {
               {v === 'all' ? 'All applicants' : v === 'internal' ? 'Internal' : 'External'}
             </button>
           ))}
+          <span className="w-px h-5 bg-gray-200 self-center mx-1" />
+          <button
+            onClick={() => setNeedsActionOnly((v) => !v)}
+            title="Show only candidates the system is waiting on you to advance or reject"
+            className={`px-3 py-1 text-xs rounded-full border font-medium ${needsActionOnly ? 'bg-amber-500 text-white border-amber-600' : 'border-amber-300 text-amber-700 hover:border-amber-500'}`}>
+            Needs action
+          </button>
         </div>
 
         {showForm && (
