@@ -712,28 +712,25 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
       );
     case 'Assessment':
       return (
-        <div className="space-y-2">
-          <div className="flex gap-4 flex-wrap">
-            <span>CCAT: <b className="text-gray-900">{c.ccatScore ?? '—'}</b></span>
-            {c.ccatPercentile != null && <span>Percentile: <b className="text-gray-900">{c.ccatPercentile}</b></span>}
-            <span>EPP Match: <b className="text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</b></span>
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">CCAT</div><div className="text-base font-bold text-gray-900">{c.ccatScore ?? '—'}<span className="text-xs text-gray-400">/50</span></div></div>
+            <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Percentile</div><div className="text-base font-bold text-gray-900">{c.ccatPercentile != null ? `${c.ccatPercentile}th` : '—'}</div></div>
+            <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">EPP Match</div><div className="text-base font-bold text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</div></div>
           </div>
           {(c.ccatVerbal != null || c.ccatMathLogic != null || c.ccatSpatial != null) && (
-            <div className="flex gap-4 flex-wrap text-gray-500">
-              <span>Verbal: <b className="text-gray-700">{c.ccatVerbal ?? '—'}</b></span>
-              <span>Math &amp; Logic: <b className="text-gray-700">{c.ccatMathLogic ?? '—'}</b></span>
-              <span>Spatial: <b className="text-gray-700">{c.ccatSpatial ?? '—'}</b></span>
-            </div>
+            <div className="text-gray-500">Verbal <b className="text-gray-700">{c.ccatVerbal ?? '—'}</b> · Math &amp; Logic <b className="text-gray-700">{c.ccatMathLogic ?? '—'}</b> · Spatial <b className="text-gray-700">{c.ccatSpatial ?? '—'}</b></div>
           )}
           <a href={`/hiring/assessments?id=${c.id}`} className="inline-flex items-center gap-1 text-ls-primary font-semibold border border-dashed border-ls-primary rounded-md px-2.5 py-1">See assessment →</a>
         </div>
       );
     case 'Candidate Review':
       return (
-        <div className="space-y-2">
-          <div className="flex gap-4 flex-wrap">
-            <span>EPP Match: <b className="text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</b></span>
-            <span>Resume: <b className="text-gray-900">{c.resumeReviewScore ?? '—'}</b></span>
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">EPP Match</div><div className="text-base font-bold text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</div></div>
+            <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Values Match</div><div className="text-base font-bold text-gray-900">{c.companyValuesMatchScore != null ? `${c.companyValuesMatchScore}%` : '—'}</div></div>
+            <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Resume Review</div><div className="text-base font-bold text-gray-900">{c.resumeReviewScore ?? '—'}</div></div>
           </div>
           {c.companyValuesNotes ? (
             <div><div className="font-semibold text-gray-700 mb-0.5">Role-fit notes</div><div className="whitespace-pre-wrap">{c.companyValuesNotes}</div></div>
