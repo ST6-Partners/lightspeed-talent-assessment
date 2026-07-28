@@ -739,11 +739,11 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
           {c.companyValuesNotes ? (
             <div><div className="font-semibold text-gray-700 mb-0.5">Role-fit notes</div><div className="whitespace-pre-wrap">{c.companyValuesNotes}</div></div>
           ) : null}
-          <CombinedScreenSection candidateId={c.id} existingSummary={c.screenSummary ?? null} onChanged={onChanged} />
+          <CombinedScreenSection candidateId={c.id} existingSummary={c.screenSummary ?? null} onChanged={onChanged} defaultOpen />
         </div>
       );
     case 'Phone Screen':
-      return <PhoneScreenSchedulingSection candidate={c} onChanged={onChanged} />;
+      return <PhoneScreenSchedulingSection candidate={c} onChanged={onChanged} defaultOpen />;
     case 'Interview Scheduled': {
       if (!rounds.length) return <div className="text-gray-400 italic">No interview rounds for this req yet.</div>;
       return (
@@ -1316,7 +1316,7 @@ function ScoreBar({ label, score, sub }: { label: string; score: number | null; 
   );
 }
 
-function CombinedScreenSection({ candidateId, existingSummary, onChanged }: { candidateId: string; existingSummary: string | null; onChanged?: () => void }) {
+function CombinedScreenSection({ candidateId, existingSummary, onChanged, defaultOpen }: { candidateId: string; existingSummary: string | null; onChanged?: () => void; defaultOpen?: boolean }) {
   const [resumeText, setResumeText] = useState('');
   const [needsSponsorship, setNeedsSponsorship] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -1331,7 +1331,7 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged }: { ca
   const rec = result?.recommendation;
 
   return (
-    <Section title="Screen - resume, values, skills">
+    <Section title="Screen - resume, values, skills" defaultOpen={defaultOpen}>
       <div className="text-xs text-gray-500">
         One automated screen for the 200 \u2192 20 gate. It checks the resume against the job's <strong>required</strong> qualifications (missing any, or needing sponsorship, auto-rejects), grades <strong>skills fit</strong> and <strong>values match</strong>, and gives one recommendation. Skills and values inform the call but never reject on their own. Scores are provisional \u2014 calibrate before relying on them.
       </div>
@@ -1800,13 +1800,13 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
   );
 }
 
-export function PhoneScreenSchedulingSection({ candidate, onChanged }: { candidate: any; onChanged?: () => void }) {
+export function PhoneScreenSchedulingSection({ candidate, onChanged, defaultOpen }: { candidate: any; onChanged?: () => void; defaultOpen?: boolean }) {
   const status = trpc.scheduling.phoneScreenStatusFor.useQuery({ candidateId: candidate.id });
   const open = trpc.scheduling.openPhoneScreen.useMutation({ onSuccess: () => { status.refetch(); onChanged?.(); } });
   const s = status.data;
   const scheduled = s?.scheduledAt ? new Date(s.scheduledAt) : null;
   return (
-    <Section title="Screening call">
+    <Section title="Screening call" defaultOpen={defaultOpen}>
       {scheduled ? (
         <div className="text-sm text-green-700 font-medium">Call booked for {scheduled.toLocaleString()}</div>
       ) : s?.opened ? (
@@ -1886,8 +1886,8 @@ export function SchedulingSection({ candidate, onChanged }: { candidate: any; on
   );
 }
 
-export function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function Section({ title, children, defaultOpen }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen ?? false);
   return (
     <div className="mb-4 border-t border-gray-100 pt-3">
       <button
