@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X, Pencil, Trash2, Send } from 'lucide-react';
+import { X, Pencil, Trash2, Send } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -59,7 +59,6 @@ export default function Requisitions() {
 
   const resetForm = () => setForm({ ...EMPTY_FORM });
 
-  const startCreate = () => { setEditingId(null); resetForm(); setShowForm(true); };
 
   const startEdit = (r: any) => {
     setEditingId(r.id);
@@ -104,13 +103,6 @@ export default function Requisitions() {
           <h1 className="text-2xl font-bold text-gray-900">Job Requisitions</h1>
           <p className="text-gray-500 text-sm mt-1">Create and track open headcount requests</p>
         </div>
-        <button
-          onClick={() => (showForm ? closeForm() : startCreate())}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-ls-primary text-white rounded-lg text-sm font-medium hover:bg-ls-primary-600"
-        >
-          <Plus size={16} />
-          New Requisition
-        </button>
       </div>
 
       {showForm && (
