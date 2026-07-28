@@ -216,16 +216,21 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
                 {questions.length > 0 && (() => {
                   const key = 'tailoredq';
                   const isOpen = briefOpen[key] ?? true;
+                  // Keep the tailored (~30%) set proportional to the standard (~70%)
+                  // set from the linked JD, so it doesn't dwarf it. 30:70 of the
+                  // standard count (e.g. 7 standard -> ~3 tailored).
+                  const stdCount = standardQuestions.length || 7;
+                  const tailored = questions.slice(0, Math.max(1, Math.round(stdCount * 3 / 7)));
                   return (
                     <div className="border border-gray-200 rounded">
                       <button type="button" onClick={() => setBriefOpen((st) => ({ ...st, [key]: !(st[key] ?? true) }))}
                         className="flex items-center gap-1.5 w-full text-left px-2 py-1.5">
                         {isOpen ? <ChevronDown size={11} className="text-gray-400 shrink-0" /> : <ChevronRight size={11} className="text-gray-400 shrink-0" />}
-                        <span className="text-[11px] font-semibold text-gray-700">Tailored questions for this candidate · ~30% ({questions.length})</span>
+                        <span className="text-[11px] font-semibold text-gray-700">Tailored questions for this candidate · ~30% ({tailored.length})</span>
                       </button>
                       {isOpen && (
                         <ul className="text-[11px] text-gray-600 list-disc pl-6 pr-2 py-2 space-y-1">
-                          {questions.map((qq: any, i: number) => (
+                          {tailored.map((qq: any, i: number) => (
                             <li key={i}>{qq.category ? <strong>{qq.category}: </strong> : null}{qq.question}</li>
                           ))}
                         </ul>
