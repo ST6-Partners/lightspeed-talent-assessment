@@ -268,7 +268,7 @@ export default function Intake() {
   const handleSave = () => { setErr(null); setSaved(false); if (!form.department || !form.hiringManager) { setErr('Department and hiring manager are required.'); return; } saveMutation.mutate(buildPayload() as any); };
   const handleSubmit = async () => {
     setErr(null);
-    if (!form.department || !form.hiringManager) { setErr('Department and hiring manager are required.'); return; }
+    if (!form.reasonType || !form.department || !form.hiringManager) { setErr('Reason, department, and hiring manager are required.'); return; }
     const saved = await saveMutation.mutateAsync(buildPayload() as any);
     submitMutation.mutate({ id: saved.id });
   };
@@ -384,7 +384,7 @@ export default function Intake() {
             <h3 className="text-sm font-semibold text-ls-primary mb-2">1 · Why we're opening this role</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={lbl}>Why are you opening this?</label>
+                <label className={lbl}>Why are you opening this? *</label>
                 <select
                   value={form.reasonType}
                   onChange={(e) => {
