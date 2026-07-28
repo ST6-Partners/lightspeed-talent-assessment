@@ -11,7 +11,7 @@ import { capabilityItems, candidateCapabilityScores } from '../db/schema/capabil
 import { candidates, jobDescriptions } from '../db/schema/hiring.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
 import { recommendCapabilityScores } from '../services/ai.js';
-import { sendNextRoundPrep } from '../services/interviewRounds.js';
+import { sendNextRoundPrep, maybeAdvanceOnAllRoundsComplete } from '../services/interviewRounds.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { employees } from '../db/schema/employees.js';
 import { auditChange } from '../services/audit.js';
@@ -162,7 +162,17 @@ export const valuesRouter = router({
       // their prep + briefing (which now includes this round's read).
       if (input.interviewId) {
         const rd = await ctx.db.query.candidateInterviews.findFirst({ where: eq(candidateInterviews.id, input.interviewId) });
-        if (rd) await sendNextRoundPrep(rd.candidateId, rd.sortOrder).catch((err) => console.error('[values] next-round prep auto-send failed:', err));
+        if (rd) {
+          // Submitting a round's scorecard closes that round; if every round is
+          // now complete the candidate auto-advances (Reference Check).
+          if (rd.status !== 'completed') {
+            await ctx.db.update(candidateInterviews)
+              .set({ status: 'completed', updatedAt: new Date() })
+              .where(eq(candidateInterviews.id, input.interviewId));
+            await maybeAdvanceOnAllRoundsComplete(rd.candidateId).catch((err) => console.error('[values] round-complete advance failed:', err));
+          }
+          await sendNextRoundPrep(rd.candidateId, rd.sortOrder).catch((err) => console.error('[values] next-round prep auto-send failed:', err));
+        }
       }
       return { ok: true, reviewId };
     }),
