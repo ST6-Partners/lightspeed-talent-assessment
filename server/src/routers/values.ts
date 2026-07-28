@@ -11,6 +11,7 @@ import { capabilityItems, candidateCapabilityScores } from '../db/schema/capabil
 import { candidates, jobDescriptions } from '../db/schema/hiring.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
 import { recommendCapabilityScores } from '../services/ai.js';
+import { sendNextRoundPrep } from '../services/interviewRounds.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { employees } from '../db/schema/employees.js';
 import { auditChange } from '../services/audit.js';
@@ -157,6 +158,12 @@ export const valuesRouter = router({
         return rid!;
       });
       await auditChange(ctx.db, ctx.user.id, reviewId, 'value_reviews', input.reviewId ? 'update' : 'create');
+      // Submitting a round's scorecard auto-sends the NEXT round's interviewer
+      // their prep + briefing (which now includes this round's read).
+      if (input.interviewId) {
+        const rd = await ctx.db.query.candidateInterviews.findFirst({ where: eq(candidateInterviews.id, input.interviewId) });
+        if (rd) await sendNextRoundPrep(rd.candidateId, rd.sortOrder).catch((err) => console.error('[values] next-round prep auto-send failed:', err));
+      }
       return { ok: true, reviewId };
     }),
 

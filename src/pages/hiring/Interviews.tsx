@@ -73,7 +73,6 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
     setFbEdit(true);
     setFbOpen(true);
   };
-  const sendPrep = trpc.interviews.sendPrep.useMutation({ onSuccess: onChanged });
   const notifyMgr = trpc.interviews.notifyManagerUnavailable.useMutation({
     onSuccess: (r: any) => { setNotifyOpen(false); setNotifyReason(''); alert(`Manager notified: ${r.notified}${r.viaHrFallback ? ' (sent to HR — no manager on file for this interviewer)' : ''}`); },
     onError: (err) => alert(err.message),
@@ -128,12 +127,9 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
 
           {/* Actions */}
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={() => sendPrep.mutate({ id: round.id })} disabled={sendPrep.isLoading || !round.interviewerEmail}
-              title={round.interviewerEmail ? '' : 'Add an interviewer email first'}
-              className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
-              Email prep + briefing
-            </button>
-            {round.prepSentAt && <span className="text-[11px] text-green-600">prep emailed</span>}
+            {round.prepSentAt
+              ? <span className="text-[11px] text-green-600">Prep + briefing emailed automatically</span>
+              : <span className="text-[11px] text-gray-400">Prep + briefing sends automatically{round.interviewerEmail ? '' : ' once an interviewer email is set'}</span>}
             <button onClick={() => setNotifyOpen((v) => !v)} disabled={!round.interviewerEmail}
               title={round.interviewerEmail ? '' : 'Add an interviewer email first'}
               className="text-xs px-3 py-1.5 border border-gray-300 text-gray-700 rounded font-medium hover:bg-gray-50 disabled:opacity-50">

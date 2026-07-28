@@ -20,11 +20,67 @@ import { getCompanyTalkingPoints, type CompanyTalkingPoints } from './companyTal
 import { scoreWalkthroughFromTranscript } from './workSampleScoring.js';
 import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
 import { logDecision } from './decisionLog.js';
+import { emailInterviewRoundPrep } from './email.js';
 import {
   analyzeInterviewTranscript,
   synthesizeInterviewTranscript,
   type InterviewFollowUp,
 } from './ai.js';
+
+// ── Prep-email automation ──────────────────────────────────
+// The interviewer prep email (with the cross-round briefing) sends
+// AUTOMATICALLY: round 1 when the interview is scheduled, and each later round
+// when the PRIOR round's scorecard is submitted. These helpers do the send;
+// the triggers live in the interviews + values routers and the Calendly flow.
+// Idempotent per round via prepSentAt.
+
+/** Email one round's interviewer their prep + cross-round briefing. No-op if the
+ *  round is missing, has no interviewer email, or was already sent (unless forced). */
+export async function sendRoundPrep(roundId: string, opts: { force?: boolean } = {}): Promise<boolean> {
+  const round = await db.query.candidateInterviews.findFirst({ where: eq(candidateInterviews.id, roundId) });
+  if (!round || !round.interviewerEmail) return false;
+  if (!opts.force && round.prepSentAt) return false;
+  const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, round.candidateId) });
+  if (!candidate) return false;
+  const jd = candidate.jdId
+    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+    : null;
+  const briefing = await buildPriorRoundsBriefing(round.candidateId, round.sortOrder);
+  await emailInterviewRoundPrep({
+    to: round.interviewerEmail,
+    interviewerName: round.interviewerName,
+    firstName: candidate.firstName,
+    lastName: candidate.lastName,
+    jobTitle: jd?.jobTitle ?? undefined,
+    roundName: round.roundName,
+    questions: ((candidate as any).interviewQuestions ?? []) as any,
+    briefing,
+  });
+  await db.update(candidateInterviews).set({ prepSentAt: new Date(), updatedAt: new Date() })
+    .where(eq(candidateInterviews.id, roundId));
+  return true;
+}
+
+/** Send prep for a candidate's FIRST round (lowest sortOrder) — used when the
+ *  interview is first scheduled. */
+export async function sendFirstRoundPrep(candidateId: string): Promise<boolean> {
+  const rounds = await db.select().from(candidateInterviews)
+    .where(eq(candidateInterviews.candidateId, candidateId))
+    .orderBy(asc(candidateInterviews.sortOrder));
+  if (!rounds.length) return false;
+  return sendRoundPrep(rounds[0].id);
+}
+
+/** Send prep for the round immediately after `afterSortOrder` — used when a
+ *  round's scorecard is submitted, so the NEXT interviewer is briefed. */
+export async function sendNextRoundPrep(candidateId: string, afterSortOrder: number): Promise<boolean> {
+  const rounds = await db.select().from(candidateInterviews)
+    .where(eq(candidateInterviews.candidateId, candidateId))
+    .orderBy(asc(candidateInterviews.sortOrder));
+  const next = rounds.find((r: any) => r.sortOrder > afterSortOrder);
+  if (!next) return false;
+  return sendRoundPrep(next.id);
+}
 
 // Stages the candidate can be auto-advanced FROM when every round wraps up.
 // Anyone already further along (Work Sample, Reference Check, Offered,

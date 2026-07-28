@@ -23,6 +23,7 @@ import {
   generateRoundFeedback,
   buildPriorRoundsBriefing,
   maybeAdvanceOnAllRoundsComplete,
+  sendRoundPrep,
 } from '../services/interviewRounds.js';
 import { emailInterviewRoundPrep, emailInterviewerUnavailableManager } from '../services/email.js';
 
@@ -173,6 +174,16 @@ export const interviewsRouter = router({
       if (input.status === 'completed') {
         await maybeAdvanceOnAllRoundsComplete(row.candidateId)
           .catch((err) => console.error('[interviews] all-rounds-complete check failed:', err));
+      }
+      // Round 1's prep + briefing goes out automatically when the interview is
+      // scheduled (i.e. this round gets a time and it's the candidate's first).
+      if (input.scheduledAt) {
+        const all = await db.select().from(candidateInterviews)
+          .where(eq(candidateInterviews.candidateId, row.candidateId))
+          .orderBy(asc(candidateInterviews.sortOrder));
+        if (all.length && all[0].id === row.id) {
+          await sendRoundPrep(row.id).catch((err) => console.error('[interviews] round-1 prep auto-send failed:', err));
+        }
       }
       return row;
     }),

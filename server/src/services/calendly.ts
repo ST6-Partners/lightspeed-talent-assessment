@@ -26,6 +26,7 @@ import { and } from 'drizzle-orm';
 import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
 import { emailInterviewBookedCandidate, emailBookingStalledHR } from './email.js';
 import { prepInterviewQuestions } from './interviewPrep.js';
+import { sendFirstRoundPrep } from './interviewRounds.js';
 
 export function isCalendlyConfigured(): boolean {
   return Boolean(process.env.CALENDLY_WEBHOOK_SIGNING_KEY);
@@ -188,6 +189,9 @@ export async function applyCalendlyEvent(event: string, payload: any): Promise<{
 
     // Tailored interview questions are generated once the interview is scheduled.
     void prepInterviewQuestions(db, candidate.id).catch((err) => console.error('[Calendly] interview question prep failed:', err));
+
+    // Round 1's prep + briefing goes out automatically when the interview is booked.
+    void sendFirstRoundPrep(candidate.id).catch((err) => console.error('[Calendly] round-1 prep auto-send failed:', err));
 
     await emailInterviewBookedCandidate({
       email: candidate.email,
