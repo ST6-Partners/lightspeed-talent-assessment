@@ -9,7 +9,7 @@
 // entry for the Assessment stage transition.
 // ============================================================
 
-import { eq, and, lte, gte, lt, isNull, isNotNull, inArray } from 'drizzle-orm';
+import { eq, and, lte, gte, lt, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { candidates, candidateStageHistory, emailLog, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { approvals } from '../db/schema/intake.js';
@@ -30,6 +30,7 @@ import { valueReviews } from '../db/schema/values.js';
 import { users } from '../db/schema/core.js';
 import { notifications } from '../db/schema/notifications.js';
 import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
+import { runAdverseImpactAudit } from './adverseImpact.js';
 
 function schedAppBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -656,6 +657,76 @@ async function runWalkthroughDecisionReminder(): Promise<JobResult> {
   return { affected: sent, details: sent ? `Nudged ${sent} walkthrough decision(s).` : 'No walkthrough decisions pending.' };
 }
 
+// ── Job: bias (adverse-impact) alert ───────────────────────
+// Scans every role that has assessment-gate decisions, runs the SAME four-fifths
+// audit the Bias tab shows, and drops a bell notification (+ team email) when a
+// group is flagged (clearing the gate at < 80% of the top group's rate). Deduped:
+// re-alerts a given role at most once per 7 days so a persistent flag doesn't nag.
+const BIAS_ALERT_COOLDOWN_MS = 7 * 24 * 3600 * 1000;
+
+async function runBiasAlert(): Promise<JobResult> {
+  const res: any = await db.execute(sql`
+    SELECT DISTINCT jd.id AS "jdId", jd.job_title AS "jobTitle"
+    FROM decision_log dl
+    JOIN candidates c ON c.id = dl.candidate_id
+    JOIN job_descriptions jd ON jd.id = c.jd_id
+    WHERE dl.decision_type = 'assessment_gate'
+  `);
+  const roles = (res.rows ?? res) as { jdId: string; jobTitle: string }[];
+  const team = await hiringTeamUsers();
+  if (!team.length) return { affected: 0, details: 'No admin users to notify.' };
+  const cutoff = new Date(Date.now() - BIAS_ALERT_COOLDOWN_MS);
+  let alerted = 0;
+
+  for (const role of roles) {
+    let audit;
+    try { audit = await runAdverseImpactAudit(db, role.jdId); }
+    catch (err) { console.error('[bias-alert] audit failed for', role.jdId, err); continue; }
+
+    const flags: string[] = [];
+    for (const dim of audit.dimensions) {
+      for (const g of dim.groups) {
+        if (g.status === 'flagged') {
+          const rate = g.passRate != null ? `${g.passRate}% pass` : '';
+          const ratio = g.ratio != null ? `${g.ratio}x the top group` : '';
+          const detail = [rate, ratio].filter(Boolean).join(', ');
+          flags.push(`${dim.label} — ${g.group}${detail ? ` (${detail})` : ''}`);
+        }
+      }
+    }
+    if (!flags.length) continue;
+
+    // Dedupe: skip if we already alerted on this role inside the cooldown window.
+    const recent = (await db.select().from(notifications).where(and(
+      eq(notifications.type, 'bias_alert'),
+      eq(notifications.referenceId, role.jdId),
+      gte(notifications.createdAt, cutoff),
+    )).limit(1))[0];
+    if (recent) continue;
+
+    const message = `Adverse-impact flag on ${role.jobTitle}: ${flags.join('; ')} — clearing the assessment gate below four-fifths of the top group. Review on the Bias tab.`;
+    await db.insert(notifications).values((team as any[]).map((u) => ({
+      userId: u.id,
+      type: 'bias_alert',
+      message,
+      referenceId: role.jdId,
+      referenceType: 'fairness',
+    })));
+
+    const base = schedAppBaseUrl();
+    const link = base ? `${base}/hiring/fairness` : '';
+    const html = `<p><strong>Adverse-impact flag on ${role.jobTitle}.</strong></p>`
+      + `<p>${flags.join('<br/>')}</p>`
+      + `<p>One or more groups are clearing the assessment gate at less than four-fifths (80%) of the top group's rate. This is aggregate, self-reported data — review it on the Bias tab before drawing conclusions.</p>`
+      + (link ? `<p><a href="${link}">Open the Bias tab</a></p>` : '');
+    try {
+      await sendEmail({ to: HIRING_TEAM_INBOX, subject: `Bias check: adverse-impact flag on ${role.jobTitle}`, html, templateId: 'bias_alert' });
+    } catch (err) { console.error('[bias-alert] email failed for', role.jdId, err); }
+    alerted++;
+  }
+  return { affected: alerted, details: alerted ? `Raised ${alerted} new bias alert(s).` : 'No new bias flags.' };
+}
+
 // Apply each report's stored day/time to its cron job. Called once at
 // boot (after startCronJobs) and again whenever an admin saves a new
 // schedule, so the change takes effect without a server restart.
@@ -788,5 +859,14 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '*/15 * * * *',   // every 15 minutes
     handler:        runWalkthroughDecisionReminder,
+  });
+  registerJob({
+    name:           'bias-alert',
+    label:          'Bias Alert',
+    description:    'Hourly scan of every role with assessment-gate decisions; drops a bell notification + team email when a group clears the gate below four-fifths (adverse impact). Re-alerts a given role at most once per week.',
+    color:          '#dc2626',
+    jobType:        'cron',
+    cronExpression: '0 * * * *',   // top of every hour
+    handler:        runBiasAlert,
   });
 }
