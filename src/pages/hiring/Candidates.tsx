@@ -705,7 +705,12 @@ export default function Candidates() {
 function stageDetail(name: string, c: any, rounds: any[]): React.ReactNode {
   switch (name) {
     case 'Applied':
-      return <div>Applied {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ''}{c.source ? ` · Source: ${c.source}` : ''}.</div>;
+      return (
+        <div className="space-y-3">
+          <div>Applied {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ''}{c.source ? ` · Source: ${c.source}` : ''}.</div>
+          <EeoInviteSection candidateId={c.id} />
+        </div>
+      );
     case 'Assessment':
       return (
         <div className="space-y-2">
