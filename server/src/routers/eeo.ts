@@ -130,6 +130,32 @@ export const eeoRouter = router({
       return { token: row.token, url, status: row.status };
     }),
 
+  // ── PROTECTED: recruiter manually marks the survey as taken ──
+  // For candidates who completed the voluntary self-ID offline / on paper.
+  // Records the completion STATUS only — no demographic answers are entered
+  // here, so the legal wall (self-ID data never influences hiring) is intact.
+  markCompleted: protectedProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({
+        where: eq(candidates.id, input.candidateId),
+      });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const existing = await ctx.db.query.eeoResponses.findFirst({
+        where: eq(eeoResponses.candidateId, candidate.id),
+      });
+      if (existing) {
+        await ctx.db.update(eeoResponses)
+          .set({ status: 'completed', submittedAt: new Date() })
+          .where(eq(eeoResponses.id, existing.id));
+      } else {
+        await ctx.db.insert(eeoResponses).values({
+          candidateId: candidate.id, token: randomUUID(), status: 'completed', submittedAt: new Date(),
+        });
+      }
+      return { ok: true };
+    }),
+
   // ── ADMIN: role picker (roles that have any assessment_gate decisions) ──
   auditRoles: protectedProcedure
     .use(requireAdmin)

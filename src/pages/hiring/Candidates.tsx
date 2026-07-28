@@ -702,7 +702,7 @@ export default function Candidates() {
 // Per-stage detail body. The underlying stage enum is unchanged; this reads
 // real candidate fields + interview rounds and links out where the app already
 // has a destination (assessment, scorecards, Interviews tab).
-function stageDetail(name: string, c: any, rounds: any[]): React.ReactNode {
+function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void): React.ReactNode {
   switch (name) {
     case 'Applied':
       return (
@@ -739,11 +739,11 @@ function stageDetail(name: string, c: any, rounds: any[]): React.ReactNode {
           {c.companyValuesNotes ? (
             <div><div className="font-semibold text-gray-700 mb-0.5">Role-fit notes</div><div className="whitespace-pre-wrap">{c.companyValuesNotes}</div></div>
           ) : null}
-          {c.screenSummary ? (
-            <div><div className="font-semibold text-gray-700 mb-0.5">Resume screen</div><div className="whitespace-pre-wrap">{c.screenSummary}</div></div>
-          ) : (<div className="text-gray-400 italic">No resume-screen summary saved yet.</div>)}
+          <CombinedScreenSection candidateId={c.id} existingSummary={c.screenSummary ?? null} onChanged={onChanged} />
         </div>
       );
+    case 'Phone Screen':
+      return <PhoneScreenSchedulingSection candidate={c} onChanged={onChanged} />;
     case 'Interview Scheduled': {
       if (!rounds.length) return <div className="text-gray-400 italic">No interview rounds for this req yet.</div>;
       return (
@@ -817,13 +817,14 @@ function stageDetail(name: string, c: any, rounds: any[]): React.ReactNode {
   }
 }
 
-function PipelineStages({ candidate, wsApplicable, nextStage, onAdvance, onReject, advancing }: {
+function PipelineStages({ candidate, wsApplicable, nextStage, onAdvance, onReject, advancing, onChanged }: {
   candidate: any;
   wsApplicable: boolean;
   nextStage: string | null;
   onAdvance: (toStage: string) => void;
   onReject: () => void;
   advancing: boolean;
+  onChanged: () => void;
 }) {
   const c = candidate;
   const [open, setOpen] = useState<Record<string, boolean>>({});
@@ -867,7 +868,7 @@ function PipelineStages({ candidate, wsApplicable, nextStage, onAdvance, onRejec
             </div>
             {isOpen && (
               <div className="px-4 pb-4 pl-11 text-xs text-gray-600">
-                {stageDetail(name, c, roundList)}
+                {stageDetail(name, c, roundList, onChanged)}
               </div>
             )}
           </div>
@@ -898,6 +899,7 @@ function CandidateDetail({ candidate, wsApplicable, nextStage, onReject, onChang
         onAdvance={(to: string) => advance.mutate({ id: c.id, toStage: to as Stage })}
         onReject={() => onReject(c.id)}
         advancing={advance.isLoading}
+        onChanged={onChanged}
       />
 
       <div className="mt-5">
@@ -933,29 +935,39 @@ function outcomeClasses(outcome: string): string {
 }
 
 const EEO_STATUS_LABEL: Record<string, string> = {
-  not_sent: 'Not sent', invited: 'Invited (awaiting response)', submitted: 'Completed', declined: 'Declined',
+  not_sent: 'Not taken', invited: 'Invited (awaiting response)', completed: 'Taken', submitted: 'Taken', declined: 'Declined',
 };
 export function EeoInviteSection({ candidateId }: { candidateId: string }) {
   const { data, refetch } = trpc.eeo.status.useQuery({ candidateId });
   const invite = trpc.eeo.invite.useMutation({ onSuccess: () => refetch() });
+  const markCompleted = trpc.eeo.markCompleted.useMutation({ onSuccess: () => refetch() });
   const status = data?.status ?? 'not_sent';
-  const sent = status === 'invited' || status === 'submitted' || status === 'declined';
+  const taken = status === 'completed' || status === 'submitted';
+  const sent = status === 'invited' || taken || status === 'declined';
   return (
     <Section title="Voluntary self-ID survey">
       <div className="text-xs text-gray-500 mb-2">
         Voluntary EEO self-identification, used only in aggregate for the fairness audit. Responses are
-        confidential and never shown here or to anyone making hiring decisions. You only see whether it was sent.
+        confidential and never shown here or to anyone making hiring decisions. You only see whether it was taken.
       </div>
-      <div className="flex items-center gap-3">
-        <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${status === 'submitted' ? 'bg-green-100 text-green-700' : status === 'declined' ? 'bg-gray-100 text-gray-600' : status === 'invited' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${taken ? 'bg-green-100 text-green-700' : status === 'declined' ? 'bg-gray-100 text-gray-600' : status === 'invited' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
           {EEO_STATUS_LABEL[status] ?? status}
         </span>
         <button
           onClick={() => invite.mutate({ candidateId })}
           className="text-xs px-3 py-1.5 rounded-md bg-ls-primary text-white hover:opacity-90 disabled:opacity-40"
-          disabled={invite.isLoading || status === 'submitted'}>
+          disabled={invite.isLoading || taken}>
           {invite.isLoading ? 'Sending...' : sent ? 'Resend survey' : 'Send self-ID survey'}
         </button>
+        {!taken && (
+          <button
+            onClick={() => markCompleted.mutate({ candidateId })}
+            className="text-xs px-3 py-1.5 rounded-md border border-green-600 text-green-700 hover:bg-green-600 hover:text-white disabled:opacity-40"
+            disabled={markCompleted.isLoading}>
+            {markCompleted.isLoading ? 'Marking...' : 'Mark as taken'}
+          </button>
+        )}
       </div>
     </Section>
   );
