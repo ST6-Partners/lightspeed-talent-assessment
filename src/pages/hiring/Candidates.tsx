@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info, Archive, RotateCcw } from 'lucide-react';
+import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info, Archive, RotateCcw, Check } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { CANDIDATE_STAGES, PIPELINE_STAGES, CLOSED_STAGES as CLOSED } from '../../../server/src/domain/stages.js';
 import RoleRankingDropdown from './RoleRankingDropdown';
@@ -23,6 +23,15 @@ const STAGE_COLORS: Record<string, string> = {
 };
 
 type Stage = typeof STAGES[number];
+
+// Display-name overrides for the pipeline accordion. The underlying stage enum
+// (and every candidate's currentStage) is unchanged — this only relabels a few
+// stages to match the agreed pipeline wording. Stages not listed render as-is.
+const STAGE_LABEL: Record<string, string> = {
+  'Values Review': 'Candidate Review',
+  'Interview Scheduled': 'Scheduled Interview',
+};
+const stageLabel = (s: string): string => STAGE_LABEL[s] ?? s;
 
 export default function Candidates() {
   const [showForm, setShowForm] = useState(false);
@@ -220,9 +229,11 @@ export default function Candidates() {
 
   const candidateRow = (c: any) => {
     const nextStage = getNextStage(c);
+    const isSel = selectedId === c.id;
     return (
-      <tr key={c.id} onClick={() => setSelectedId(selectedId === c.id ? null : c.id)}
-        className={`border-b border-gray-50 text-sm cursor-pointer transition-colors ${selectedId === c.id ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
+      <Fragment key={c.id}>
+      <tr onClick={() => setSelectedId(isSel ? null : c.id)}
+        className={`border-b border-gray-50 text-sm cursor-pointer transition-colors ${isSel ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
         <td className="px-2 py-3 w-8" onClick={(e) => e.stopPropagation()}>
           <input
             type="checkbox"
@@ -266,6 +277,23 @@ export default function Candidates() {
           </div>
         </td>
       </tr>
+      {isSel && (
+        <tr>
+          <td colSpan={7} className="p-0 bg-gray-50/40 border-b border-gray-200">
+            <div className="px-5 py-5">
+              <CandidateDetail
+                candidate={c}
+                wsApplicable={requiresWorkSample(c)}
+                nextStage={nextStage}
+                prevStage={getPrevStage(c)}
+                onReject={(id: string) => setRejectingId(id)}
+                onChanged={refetch}
+              />
+            </div>
+          </td>
+        </tr>
+      )}
+      </Fragment>
     );
   };
 
@@ -666,184 +694,297 @@ export default function Candidates() {
 
       </div>
 
-      {/* Detail panel */}
-      {selected && (
-        <div className="w-96 flex-shrink-0 bg-white rounded-lg border border-gray-200 p-5 self-start sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="font-semibold text-gray-900">{selected.firstName} {selected.lastName}</div>
-              <div className="text-xs text-gray-500">{selected.email}</div>
-            </div>
-            <button onClick={() => setSelectedId(null)} className="text-gray-400 hover:text-gray-600">
-              <X size={16} />
-            </button>
+    </div>
+  );
+}
+
+// ── Pipeline stage accordion (inline candidate detail) ─────
+// Per-stage detail body. The underlying stage enum is unchanged; this reads
+// real candidate fields + interview rounds and links out where the app already
+// has a destination (assessment, scorecards, Interviews tab).
+function stageDetail(name: string, c: any, rounds: any[]): React.ReactNode {
+  switch (name) {
+    case 'Applied':
+      return <div>Applied {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : ''}{c.source ? ` · Source: ${c.source}` : ''}.</div>;
+    case 'Assessment':
+      return (
+        <div className="space-y-2">
+          <div className="flex gap-4">
+            <span>CCAT: <b className="text-gray-900">{c.ccatScore ?? '—'}</b></span>
+            <span>EPP Match: <b className="text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</b></span>
           </div>
-
-          <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium mb-4 ${STAGE_COLORS[selected.currentStage] ?? ''}`}>
-            {selected.currentStage}
-          </span>
-
-          {/* Scores summary */}
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            {[
-              { label: 'CCAT Score', value: selected.ccatScore },
-              { label: 'EPP Match', value: selected.eppValuesMatchScore != null ? `${selected.eppValuesMatchScore}%` : null },
-              { label: 'Work Sample', value: selected.workSampleScore },
-              { label: 'Resume Review', value: selected.resumeReviewScore },
-              { label: 'Interview Score', value: (selected as any).interviewScore },
-            ].map(({ label, value, hint }: any) => (
-              <div key={label} className={`bg-gray-50 rounded p-2 ${hint ? 'cursor-help' : ''}`} title={hint}>
-                <div className="text-xs text-gray-500 flex items-center gap-1">{label}{hint && <Info size={13} className="text-ls-primary shrink-0" aria-label={hint} />}</div>
-                <div className="text-sm font-medium text-gray-900">{value ?? '—'}</div>
-              </div>
-            ))}
+          <a href={`/hiring/assessments?id=${c.id}`} className="inline-flex items-center gap-1 text-ls-primary font-semibold border border-dashed border-ls-primary rounded-md px-2.5 py-1">See assessment →</a>
+        </div>
+      );
+    case 'Values Review':
+      return (
+        <div className="space-y-2">
+          <div className="flex gap-4 flex-wrap">
+            <span>EPP Match: <b className="text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</b></span>
+            <span>Resume: <b className="text-gray-900">{c.resumeReviewScore ?? '—'}</b></span>
           </div>
-
-          {/* Role fit (values) — how the candidate does/doesn't fit this role on the JD's EPP values */}
-          {(selected as any).companyValuesNotes && (
-            <Section title="Role Fit (values)">
-              <div className="text-xs text-gray-700 whitespace-pre-wrap">{(selected as any).companyValuesNotes}</div>
-            </Section>
-          )}
-
-          {/* Work Sample */}
-          <Section title="Work Sample">
-            {(selected as any).workSampleSubmittedAt ? (
-              <div className="space-y-2">
-                <div className="text-xs text-green-700">
-                  Submitted {new Date((selected as any).workSampleSubmittedAt).toLocaleString()}
-                </div>
-                <div className="bg-gray-50 rounded p-2 text-xs text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">
-                  {(selected as any).workSampleSubmission || '(no written response)'}
-                </div>
-                {(selected as any).workSampleLink && (
-                  <a href={(selected as any).workSampleLink} target="_blank" rel="noreferrer"
-                     className="text-xs text-ls-primary underline break-all">
-                    {(selected as any).workSampleLink}
-                  </a>
-                )}
-                <div className="pt-1">
-                  <button
-                    onClick={() => rescoreWorkSampleMutation.mutate({ id: selected.id })}
-                    disabled={rescoreWorkSampleMutation.isLoading}
-                    className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50"
-                  >
-                    {rescoreWorkSampleMutation.isLoading
-                      ? 'Scoring…'
-                      : (selected as any).workSampleScore != null ? 'Re-score with AI' : 'Score with AI'}
-                  </button>
-                  <div className="text-[11px] text-gray-400 mt-1">AI draft against the task rubric — advisory, never auto-rejects. Re-run after a work sample changes.</div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-xs text-gray-400 italic">No submission yet.</div>
-            )}
-
-            {(selected as any).workSampleScore != null && (
-              <div className="pt-1">
-                <button
-                  onClick={() => setShowWsScoring(!showWsScoring)}
-                  className="flex items-center gap-1 text-xs font-medium text-ls-primary"
-                >
-                  <ChevronDown size={12} className={`transition-transform ${showWsScoring ? '' : '-rotate-90'}`} />
-                  {showWsScoring ? 'Hide scoring breakdown' : 'View scoring breakdown'}
-                </button>
-                {showWsScoring && (
-                  <div className="mt-2 border border-gray-200 rounded-lg p-3 bg-white">
-                    <div className="flex items-baseline gap-2 mb-2">
-                      <span className="text-lg font-semibold text-gray-900">{(selected as any).workSampleScore}</span>
-                      <span className="text-xs text-gray-500">/ 100 overall</span>
-                    </div>
-                    {(selected as any).workSampleNotes ? (
-                      <div className="text-[11px] text-gray-700 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">{(selected as any).workSampleNotes}</div>
-                    ) : (
-                      <div className="text-xs text-gray-400 italic">Scored, but no breakdown was saved. Re-score with AI to regenerate it.</div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="pt-1">
-              <button
-                onClick={() => sendWorkSampleMutation.mutate({ id: selected.id })}
-                disabled={sendWorkSampleMutation.isLoading}
-                className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
-              >
-                {sendWorkSampleMutation.isLoading
-                  ? 'Sending…'
-                  : (selected as any).workSampleToken ? 'Resend work-sample link' : 'Send work-sample link'}
-              </button>
-              {sendWorkSampleMutation.data?.url && (
-                <div className="mt-2">
-                  <div className="text-xs text-gray-500 mb-0.5">Link emailed — shareable URL:</div>
-                  <div className="flex gap-1">
-                    <input
-                      readOnly
-                      value={sendWorkSampleMutation.data.url}
-                      onFocus={(e) => e.currentTarget.select()}
-                      className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50"
-                    />
-                    <button
-                      onClick={() => navigator.clipboard?.writeText(sendWorkSampleMutation.data!.url!)}
-                      className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50"
-                    >
-                      Copy
-                    </button>
-                  </div>
-                </div>
+          {c.companyValuesNotes ? (
+            <div><div className="font-semibold text-gray-700 mb-0.5">Role-fit notes</div><div className="whitespace-pre-wrap">{c.companyValuesNotes}</div></div>
+          ) : null}
+          {c.screenSummary ? (
+            <div><div className="font-semibold text-gray-700 mb-0.5">Resume screen</div><div className="whitespace-pre-wrap">{c.screenSummary}</div></div>
+          ) : (<div className="text-gray-400 italic">No resume-screen summary saved yet.</div>)}
+        </div>
+      );
+    case 'Interview Scheduled': {
+      if (!rounds.length) return <div className="text-gray-400 italic">No interview rounds for this req yet.</div>;
+      return (
+        <div className="space-y-1.5">
+          {rounds.map((r: any) => (
+            <div key={r.id} className="flex items-center gap-3 border border-gray-200 rounded-md bg-white px-3 py-2">
+              <span className="font-semibold text-gray-900 flex-1 min-w-0">{r.roundName}</span>
+              <span className="text-gray-500 w-32 shrink-0 truncate">{r.interviewerName ?? 'Unassigned'}</span>
+              {r.scheduledAt ? (
+                <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">✓ {new Date(r.scheduledAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+              ) : (
+                <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Awaiting availability</span>
               )}
             </div>
+          ))}
+        </div>
+      );
+    }
+    case 'Interviewed': {
+      if (!rounds.length) return <div className="text-gray-400 italic">Not reached yet.</div>;
+      return (
+        <div className="space-y-2">
+          {rounds.map((r: any, i: number) => {
+            const prev = rounds[i - 1];
+            const priorFu: any[] = Array.isArray(prev?.followUps) ? prev.followUps : [];
+            const fu: any[] = Array.isArray(r.followUps) ? r.followUps : [];
+            return (
+              <details key={r.id} className="border border-gray-200 rounded-md bg-white">
+                <summary className="cursor-pointer px-3 py-2 flex items-center gap-2">
+                  <span className="font-semibold text-gray-900 flex-1">{r.roundName}</span>
+                  <span className="text-[11px] text-gray-500">{r.interviewerName ?? ''}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${r.feedbackHr ? 'bg-ls-primary/10 text-ls-primary' : 'bg-gray-100 text-gray-400'}`}>{r.feedbackHr ? 'Scorecard ✓' : 'No scorecard'}</span>
+                </summary>
+                <div className="px-3 pb-3 space-y-2">
+                  <div><div className="font-semibold text-gray-700 uppercase text-[10px] tracking-wide mb-0.5">Briefing that was sent in</div><div className="text-gray-500">{i === 0 ? 'Resume + assessment context (first round).' : (priorFu.length ? `Compiled from ${prev.roundName}: ${priorFu.map((f: any) => f.text).join('; ')}` : `Compiled from ${prev.roundName}.`)}</div></div>
+                  <div><div className="font-semibold text-gray-700 uppercase text-[10px] tracking-wide mb-0.5">Feedback received</div><div className="whitespace-pre-wrap">{r.feedbackHr ? r.feedbackHr : <span className="text-gray-400 italic">No written feedback yet.</span>}</div></div>
+                  <div><div className="font-semibold text-gray-700 uppercase text-[10px] tracking-wide mb-0.5">Briefing crafted for next round</div>{fu.length ? <ul className="list-disc ml-4">{fu.map((f: any, k: number) => <li key={k}>{f.text}</li>)}</ul> : <div className="text-gray-400 italic">No follow-ups.</div>}</div>
+                  <div><div className="font-semibold text-gray-700 uppercase text-[10px] tracking-wide mb-0.5">Scorecard</div>{r.feedbackHr ? <a href={`/hiring/scorecards?id=${c.id}&round=${r.id}`} className="text-ls-primary font-semibold underline">View scorecard →</a> : <span className="text-gray-400 italic">No scorecard filled yet.</span>}</div>
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      );
+    }
+    case 'Work Sample':
+      return (
+        <div className="space-y-2">
+          <div className="bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5 text-[11px] text-amber-800">AI grade is advisory — it never advances or rejects on its own. A human reviews it and decides.</div>
+          <div className="flex gap-4 flex-wrap">
+            <span>AI grade: <b className="text-gray-900">{c.workSampleScore != null ? `${c.workSampleScore}/100` : '—'}</b></span>
+            <span>Submitted: <b className="text-gray-900">{c.workSampleSubmittedAt ? new Date(c.workSampleSubmittedAt).toLocaleDateString() : 'not yet'}</b></span>
+          </div>
+          {c.workSampleNotes ? <div className="whitespace-pre-wrap max-h-40 overflow-y-auto bg-white border border-gray-200 rounded p-2">{c.workSampleNotes}</div> : null}
+          <div className="text-gray-400">Full submission, re-score, and manual score/notes are in the Work Sample section below.</div>
+        </div>
+      );
+    case 'Reference Check':
+      return (
+        <div className="space-y-2">
+          <div className="text-gray-500">Reference checks are done manually — the app doesn&apos;t automate them. Record the outcome, then advance or reject.</div>
+          <div className="text-gray-400 italic">Candidate-provided references aren&apos;t captured in the system yet, so there&apos;s nothing to list here. (Flagged as a follow-up.)</div>
+        </div>
+      );
+    case 'Offered':
+      return <div className="text-gray-500">Sending an offer letter (Offer section below) advances the candidate to Offered.</div>;
+    case 'Hired':
+      return <div className="text-gray-400 italic">Final stage.</div>;
+    default:
+      return null;
+  }
+}
 
-            <div className="pt-1">
-              <EditableField
-                label="Work Sample Score (0–100)"
-                value={(selected as any).workSampleScore != null ? String((selected as any).workSampleScore) : ''}
-                onSave={(v) => workSampleReviewMutation.mutate({
-                  id: selected.id,
-                  score: v.trim() === '' ? null : Math.max(0, Math.min(100, parseInt(v) || 0)),
-                })}
-              />
-              <EditableTextarea
-                label="Work Sample Review Notes"
-                value={(selected as any).workSampleNotes ?? ''}
-                onSave={(v) => workSampleReviewMutation.mutate({ id: selected.id, notes: v })}
-              />
-            </div>
-          </Section>
+function PipelineStages({ candidate, wsApplicable, nextStage, onAdvance, onReject, advancing }: {
+  candidate: any;
+  wsApplicable: boolean;
+  nextStage: string | null;
+  onAdvance: (toStage: string) => void;
+  onReject: () => void;
+  advancing: boolean;
+}) {
+  const c = candidate;
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const { data: rounds } = trpc.interviews.list.useQuery({ candidateId: c.id });
+  const roundList: any[] = (rounds as any[]) ?? [];
+  const curIdx = STAGES.indexOf(c.currentStage as Stage);
+  const closed = c.currentStage === 'Rejected' || c.currentStage === 'Not Selected';
+  const flow = STAGES.filter((s) => s !== 'Rejected' && s !== 'Not Selected' && !(s === 'Work Sample' && !wsApplicable));
 
-          {/* Interview management moved to the Interviews tab */}
-          <Section title="Interviews">
-            <div className="text-xs text-gray-600">
-              Interviewer, scheduling, rounds, questions, transcript and feedback are managed on the{' '}
-              <a href={`/hiring/interviews?id=${selected.id}`} className="text-ls-primary underline">Interviews tab</a>.
-            </div>
-          </Section>
-
-          {/* Resume screen — checks resume vs REQUIRED qualifications only */}
-          <CombinedScreenSection key={selected.id} candidateId={selected.id} existingSummary={(selected as any).screenSummary ?? null} onChanged={refetch} />
-
-          {/* Offer letter — internal moves get a before/now comparison; external gets the standard letter */}
-          {(selected as any).isInternal
-            ? <InternalOfferSection key={`ioffer-${selected.id}`} candidateId={selected.id} onChanged={refetch} />
-            : <OfferSection key={`offer-${selected.id}`} candidateId={selected.id} onChanged={refetch} />}
-
-          {/* HR notes */}
-          <Section title="General Notes">
-            <EditableTextarea
-              label="Notes"
-              value={selected.notes ?? ''}
-              onSave={(v) => saveNotes(selected.id, 'notes', v)}
-            />
-          </Section>
-
-          {/* Decision history — Phase 2 provenance trail (model + prompt version + reason) */}
-          <DecisionHistorySection key={`dh-${selected.id}`} candidateId={selected.id} />
-          <EeoInviteSection key={`eeo-${selected.id}`} candidateId={selected.id} />
-          {selected.currentStage === 'Phone Screen' && <PhoneScreenSchedulingSection key={`ps-${selected.id}`} candidate={selected} onChanged={refetch} />}
-
+  return (
+    <div>
+      {closed && (
+        <div className="mb-3 text-xs px-3 py-2 rounded-lg bg-red-50 text-red-700 border border-red-100">
+          Candidate is {c.currentStage}. Pipeline advancement is closed.
         </div>
       )}
+      {flow.map((name, i) => {
+        const idx = STAGES.indexOf(name);
+        const done = curIdx >= 0 && idx < curIdx;
+        const current = idx === curIdx;
+        const isOpen = current || !!open[name];
+        return (
+          <div key={name} className={`border rounded-lg mb-2 overflow-hidden ${done ? 'bg-emerald-50/60 border-emerald-100' : current ? 'border-ls-primary ring-1 ring-ls-primary' : 'border-gray-200 bg-white'}`}>
+            <div className="flex items-center gap-3 px-3 py-2.5 cursor-pointer select-none" onClick={() => setOpen((m) => ({ ...m, [name]: !m[name] }))}>
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${done ? 'bg-emerald-500 text-white' : current ? 'bg-ls-primary text-white' : 'bg-gray-100 text-gray-400'}`}>{done ? <Check size={13} /> : i + 1}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-gray-900">{stageLabel(name)}{name === 'Work Sample' && <span className="ml-1 text-[10px] text-gray-400">(if applicable)</span>}</div>
+                <div className="text-[11px] text-gray-500">{done ? 'Completed' : current ? 'Awaiting your decision' : 'Upcoming'}</div>
+              </div>
+              {done ? (
+                <Check size={16} className="text-emerald-600 shrink-0" />
+              ) : !closed ? (
+                <span className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {(!current || nextStage) && (
+                    <button onClick={() => onAdvance(current ? (nextStage as string) : name)} disabled={advancing} className="text-[11px] font-semibold px-2.5 py-1 rounded-md border border-emerald-500 text-emerald-600 hover:bg-emerald-500 hover:text-white disabled:opacity-50">Advance</button>
+                  )}
+                  <button onClick={onReject} className="text-[11px] font-semibold px-2.5 py-1 rounded-md border border-red-400 text-red-500 hover:bg-red-500 hover:text-white">Reject</button>
+                </span>
+              ) : null}
+              <ChevronRight size={14} className={`text-gray-400 shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+            </div>
+            {isOpen && (
+              <div className="px-4 pb-4 pl-11 text-xs text-gray-600">
+                {stageDetail(name, c, roundList)}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function CandidateDetail({ candidate, wsApplicable, nextStage, onReject, onChanged }: {
+  candidate: any;
+  wsApplicable: boolean;
+  nextStage: string | null;
+  prevStage: string | null;
+  onReject: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const c = candidate;
+  const [showWsScoring, setShowWsScoring] = useState(false);
+  const advance = trpc.candidates.advanceStage.useMutation({ onSuccess: onChanged });
+  const rescore = trpc.workSample.rescore.useMutation({ onSuccess: onChanged });
+  const sendWs = trpc.workSample.send.useMutation({
+    onSuccess: (res: any) => {
+      onChanged();
+      if (res?.mode === 'live_walkthrough') alert('This work sample is a live walkthrough. A "Work Sample Walkthrough" round was created — schedule it in the Interviews tab.');
+    },
+  });
+  const wsReview = trpc.workSample.setReview.useMutation({ onSuccess: onChanged });
+  const update = trpc.candidates.update.useMutation({ onSuccess: onChanged });
+
+  return (
+    <div className="max-w-3xl">
+      <PipelineStages
+        candidate={c}
+        wsApplicable={wsApplicable}
+        nextStage={nextStage}
+        onAdvance={(to: string) => advance.mutate({ id: c.id, toStage: to as Stage })}
+        onReject={() => onReject(c.id)}
+        advancing={advance.isLoading}
+      />
+
+      <div className="grid grid-cols-3 gap-2 mb-4 mt-5">
+        {[
+          { label: 'CCAT Score', value: c.ccatScore },
+          { label: 'EPP Match', value: c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : null },
+          { label: 'Work Sample', value: c.workSampleScore },
+          { label: 'Resume Review', value: c.resumeReviewScore },
+          { label: 'Interview Score', value: c.interviewScore },
+        ].map(({ label, value, hint }: any) => (
+          <div key={label} className={`bg-white border border-gray-200 rounded p-2 ${hint ? 'cursor-help' : ''}`} title={hint}>
+            <div className="text-xs text-gray-500 flex items-center gap-1">{label}{hint && <Info size={13} className="text-ls-primary shrink-0" aria-label={hint} />}</div>
+            <div className="text-sm font-medium text-gray-900">{value ?? '—'}</div>
+          </div>
+        ))}
+      </div>
+
+      {c.companyValuesNotes && (
+        <Section title="Role Fit (values)">
+          <div className="text-xs text-gray-700 whitespace-pre-wrap">{c.companyValuesNotes}</div>
+        </Section>
+      )}
+
+      <Section title="Work Sample">
+        {c.workSampleSubmittedAt ? (
+          <div className="space-y-2">
+            <div className="text-xs text-green-700">Submitted {new Date(c.workSampleSubmittedAt).toLocaleString()}</div>
+            <div className="bg-gray-50 rounded p-2 text-xs text-gray-700 whitespace-pre-wrap max-h-48 overflow-y-auto">{c.workSampleSubmission || '(no written response)'}</div>
+            {c.workSampleLink && (<a href={c.workSampleLink} target="_blank" rel="noreferrer" className="text-xs text-ls-primary underline break-all">{c.workSampleLink}</a>)}
+            <div className="pt-1">
+              <button onClick={() => rescore.mutate({ id: c.id })} disabled={rescore.isLoading} className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium disabled:opacity-50">
+                {rescore.isLoading ? 'Scoring…' : c.workSampleScore != null ? 'Re-score with AI' : 'Score with AI'}
+              </button>
+              <div className="text-[11px] text-gray-400 mt-1">AI draft against the task rubric — advisory, never auto-rejects.</div>
+            </div>
+          </div>
+        ) : (<div className="text-xs text-gray-400 italic">No submission yet.</div>)}
+
+        {c.workSampleScore != null && (
+          <div className="pt-1">
+            <button onClick={() => setShowWsScoring(!showWsScoring)} className="flex items-center gap-1 text-xs font-medium text-ls-primary">
+              <ChevronDown size={12} className={`transition-transform ${showWsScoring ? '' : '-rotate-90'}`} />
+              {showWsScoring ? 'Hide scoring breakdown' : 'View scoring breakdown'}
+            </button>
+            {showWsScoring && (
+              <div className="mt-2 border border-gray-200 rounded-lg p-3 bg-white">
+                <div className="flex items-baseline gap-2 mb-2"><span className="text-lg font-semibold text-gray-900">{c.workSampleScore}</span><span className="text-xs text-gray-500">/ 100 overall</span></div>
+                {c.workSampleNotes ? (<div className="text-[11px] text-gray-700 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">{c.workSampleNotes}</div>) : (<div className="text-xs text-gray-400 italic">Scored, but no breakdown was saved.</div>)}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="pt-1">
+          <button onClick={() => sendWs.mutate({ id: c.id })} disabled={sendWs.isLoading} className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50">
+            {sendWs.isLoading ? 'Sending…' : c.workSampleToken ? 'Resend work-sample link' : 'Send work-sample link'}
+          </button>
+          {sendWs.data?.url && (
+            <div className="mt-2">
+              <div className="text-xs text-gray-500 mb-0.5">Link emailed — shareable URL:</div>
+              <div className="flex gap-1">
+                <input readOnly value={sendWs.data.url} onFocus={(e) => e.currentTarget.select()} className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs bg-gray-50" />
+                <button onClick={() => navigator.clipboard?.writeText(sendWs.data!.url!)} className="text-xs px-2 py-1 border border-gray-300 rounded text-gray-600 hover:bg-gray-50">Copy</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="pt-1">
+          <EditableField label="Work Sample Score (0–100)" value={c.workSampleScore != null ? String(c.workSampleScore) : ''} onSave={(v) => wsReview.mutate({ id: c.id, score: v.trim() === '' ? null : Math.max(0, Math.min(100, parseInt(v) || 0)) })} />
+          <EditableTextarea label="Work Sample Review Notes" value={c.workSampleNotes ?? ''} onSave={(v) => wsReview.mutate({ id: c.id, notes: v })} />
+        </div>
+      </Section>
+
+      <Section title="Interviews">
+        <div className="text-xs text-gray-600">Interviewer, scheduling, rounds, questions, transcript and feedback are managed on the <a href={`/hiring/interviews?id=${c.id}`} className="text-ls-primary underline">Interviews tab</a>.</div>
+      </Section>
+
+      <CombinedScreenSection key={c.id} candidateId={c.id} existingSummary={c.screenSummary ?? null} onChanged={onChanged} />
+
+      {c.isInternal
+        ? <InternalOfferSection key={`ioffer-${c.id}`} candidateId={c.id} onChanged={onChanged} />
+        : <OfferSection key={`offer-${c.id}`} candidateId={c.id} onChanged={onChanged} />}
+
+      <Section title="General Notes">
+        <EditableTextarea label="Notes" value={c.notes ?? ''} onSave={(v) => update.mutate({ id: c.id, notes: v })} />
+      </Section>
+
+      <DecisionHistorySection key={`dh-${c.id}`} candidateId={c.id} />
+      <EeoInviteSection key={`eeo-${c.id}`} candidateId={c.id} />
+      {c.currentStage === 'Phone Screen' && <PhoneScreenSchedulingSection key={`ps-${c.id}`} candidate={c} onChanged={onChanged} />}
     </div>
   );
 }
