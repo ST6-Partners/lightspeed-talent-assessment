@@ -253,6 +253,8 @@ export async function approveJdAndOpenRole(db: DrizzleClient, jdId: string): Pro
 //                                    created (it already lives in the JD tab).
 //   - replacement_diff /          -> author a NEW JD from the old JD + the "how it
 //     termination_diff               should differ" note; flag pending_review; email HM.
+//   - modify_role                 -> like replacement_diff: author a NEW JD from the
+//                                    selected JD + change note (original JD untouched).
 //   - new_headcount               -> author a NEW JD from the free-text description
 //                                    alone; flag pending_review; email HM.
 // The JD is generated at creation time so the hiring manager reviews real content.
@@ -363,7 +365,7 @@ const AwarenessInput = z.object({
 
 const IntakeInput = z.object({
   // Section 1 — why
-  reasonType: z.enum(['backfill', 'new_headcount', 'replacement_diff', 'termination_diff']).optional(),
+  reasonType: z.enum(['backfill', 'new_headcount', 'replacement_diff', 'termination_diff', 'modify_role']).optional(),
   roleChangeNote: z.string().optional(),
   baseJdId: z.string().uuid().nullable().optional(),
   workSampleRequired: z.boolean().default(true),
@@ -422,7 +424,7 @@ const APPROVAL_STEPS = [
 
 // Fields the submitter may edit from the tokenized "sent back for edits" link.
 const IntakeEditPatch = z.object({
-  reasonType: z.enum(['backfill', 'new_headcount', 'replacement_diff', 'termination_diff']).optional(),
+  reasonType: z.enum(['backfill', 'new_headcount', 'replacement_diff', 'termination_diff', 'modify_role']).optional(),
   roleChangeNote: z.string().optional(),
   department: z.string().min(1).max(200).optional(),
   hiringManager: z.string().min(1).max(200).optional(),

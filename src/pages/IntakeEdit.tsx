@@ -125,7 +125,7 @@ export default function IntakeEdit() {
       {T({ label: 'Must-haves', k: 'mustHaves' })}
       {T({ label: 'Nice-to-haves', k: 'niceToHaves' })}
       {T({ label: 'Known constraints', k: 'knownConstraints' })}
-      {(f.reasonType === 'replacement_diff' || f.reasonType === 'termination_diff' || f.reasonType === 'new_headcount') && F({ label: f.reasonType === 'new_headcount' ? 'Describe the new role' : 'How the role should differ', k: 'roleChangeNote' })}
+      {(f.reasonType === 'replacement_diff' || f.reasonType === 'termination_diff' || f.reasonType === 'new_headcount' || f.reasonType === 'modify_role') && F({ label: f.reasonType === 'new_headcount' ? 'Describe the new role' : f.reasonType === 'modify_role' ? 'What are you changing about this role' : 'How the role should differ', k: 'roleChangeNote' })}
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 13, color: '#374151' }}>
         <input type="checkbox" checked={!!f.teamAvailabilityConfirmed} onChange={(e) => setF({ ...f, teamAvailabilityConfirmed: e.target.checked })} />
