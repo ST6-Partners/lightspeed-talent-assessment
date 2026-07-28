@@ -18,6 +18,7 @@ import { eq, sql } from 'drizzle-orm';
 import { pool, db } from './server/src/db.js';
 import * as backupService from './server/src/services/backup.js';
 import { runRealJobs } from './server/src/seedRealJobs.js';
+import { seedBiasDemo } from './server/src/seedBiasDemo.js';
 import { backfillTestScores } from './server/src/services/postAssessmentReview.js';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { inspect } from 'node:util';
@@ -82,6 +83,15 @@ async function main() {
     await runRealJobs();
   } catch (e) {
     console.error('[boot] job-description seed failed (non-fatal):', e);
+  }
+
+  // Demo data for the fairness / adverse-impact audit. Idempotent (skips once
+  // seeded) and non-fatal. Remove by deleting demo.bias.* candidates + the
+  // "Demo — Fairness Sandbox" requisition (see seedBiasDemo.ts header).
+  try {
+    await seedBiasDemo();
+  } catch (e) {
+    console.error('[boot] bias demo seed failed (non-fatal):', e);
   }
 
   // Test-data backfill: give hand-advanced candidates simulated upstream scores
