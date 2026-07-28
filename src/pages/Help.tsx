@@ -19,8 +19,8 @@ import {
 // ── Pipeline stages (source of truth: server STAGES enum) ───
 const STAGES: { name: string; blurb: string }[] = [
   { name: 'Applied', blurb: 'Candidate applies to an open role, or is added manually.' },
-  { name: 'Assessment', blurb: 'Automated gate scores personality (EPP), cognitive aptitude (CCAT) and company-values fit.' },
-  { name: 'Values Review', blurb: 'The values screening result is reviewed against the role bar.' },
+  { name: 'Assessment', blurb: 'The candidate completes the CCAT cognitive test and the EPP personality assessment (Criteria Corp).' },
+  { name: 'Candidate Review', blurb: 'The resume is screened against the role requirements, and the EPP profile is compared to the target EPP traits for the role. Values are scored later, on the scorecard.' },
   { name: 'Phone Screen', blurb: 'A short first conversation to confirm fit and interest.' },
   { name: 'Interview Scheduled', blurb: 'Rounds are booked; the candidate can self-schedule via a Calendly link.' },
   { name: 'Interviewed', blurb: 'Rounds happen; interviewers get AI-tailored questions and briefings.' },
@@ -35,10 +35,10 @@ const TALENT: { icon: any; label: string; body: string }[] = [
   { icon: ClipboardPen, label: 'Intake', body: 'The hiring manager describes who they are looking for. Guided intake asks a few quick questions and fills in the rest for you. This is where a new role begins.' },
   { icon: ClipboardList, label: 'Requisitions', body: 'The formal request to open a role (including details like remote eligibility). Requisitions are routed for approval before a role goes live.' },
   { icon: Megaphone, label: 'Open Roles', body: 'Roles that are published and accepting applications. Each posting shows who has applied so far.' },
-  { icon: Users, label: 'Candidates', body: 'The heart of the system. Every candidate record pulls together their resume review, EPP personality profile, CCAT score, company-values result, current stage, and the automated feedback captured from interview transcripts.' },
+  { icon: Users, label: 'Candidates', body: 'The heart of the system. Every candidate record pulls together their resume review, EPP personality profile, CCAT score, current stage, their values scorecard, and the automated feedback captured from interview transcripts.' },
   { icon: ClipboardCheck, label: 'Review', body: 'The triage queue. Candidates are ranked per role with an AI recommendation so you can quickly decide who advances and who is passed.' },
   { icon: UserCheck, label: 'Internal Pipeline', body: 'Internal applicants and internal moves, tracked separately from external candidates.' },
-  { icon: Brain, label: 'Assessments', body: 'The results of the automated assessment gate — personality, cognitive aptitude and values fit — used to concentrate human attention on the strongest applicants.' },
+  { icon: Brain, label: 'Assessments', body: 'The results of the automated assessment gate — the EPP personality profile and the CCAT cognitive score — used to concentrate human attention on the strongest applicants.' },
   { icon: Library, label: 'Work Sample', body: 'A library of role-relevant task assignments organized by department, difficulty and time limit. Work samples attached to a job description show up here.' },
   { icon: CheckSquare, label: 'Scorecards', body: 'The human, in-person scorecard. A named reviewer scores the candidate on each company value (1–5), seeded from their EPP and adjusted with interview judgment. Multiple reviewers can each save their own dated pass.' },
   { icon: Video, label: 'Interviews', body: 'A per-round workspace. Each round has its interviewer, schedule, prep and briefing, and transcript-to-feedback all in one card, plus candidate self-scheduling and auto-generated questions.' },
@@ -53,13 +53,13 @@ const CORE: { label: string; body: string }[] = [
   { label: 'Employees', body: 'The people directory behind internal moves, org data and reviews.' },
   { label: 'Departments', body: 'Company functions used to route roles, tasks and approvals.' },
   { label: 'Titles', body: 'Standard job titles and levels used across requisitions.' },
-  { label: 'Company Values', body: 'The values candidates are scored against during assessment.' },
+  { label: 'Company Values', body: 'The values candidates are scored against on the interview scorecard.' },
   { label: 'Job Descriptions', body: 'The library of role descriptions that feed intake and postings.' },
 ];
 
 const AI_FEATURES: { title: string; body: string }[] = [
   { title: 'AI-authored job descriptions', body: 'Drafts a JD (summary, responsibilities, qualifications, work sample, EPP targets) for the hiring manager to review and sign off.' },
-  { title: 'Automated assessment gate', body: 'Scores each applicant on the EPP (12 Criteria Corp personality traits as percentiles), the CCAT cognitive test, a company-values screen, and a resume review.' },
+  { title: 'Automated assessment gate', body: 'Scores each applicant on the EPP (12 Criteria Corp personality traits as percentiles), the CCAT cognitive test, how the EPP compares to the target traits for the role, and a resume requirements review.' },
   { title: 'Ranked recommendations', body: 'Turns those signals into a ranked shortlist with a recommendation in the Review queue.' },
   { title: 'Tailored interview questions & briefings', body: 'Generates questions and an interviewer briefing tuned to each candidate. The tailored portion is curated and emailed to the interviewer ahead of the round.' },
   { title: 'Transcript feedback', body: 'Turns interview (e.g. Zoom) transcripts into structured feedback on the candidate record.' },
