@@ -107,7 +107,6 @@ export default function ReviewQueue() {
               {([
                 ['CCAT Score', selected.ccatScore],
                 ['EPP Match', pct(selected.eppValuesMatchScore)],
-                ['Company-Values Match', pct((selected as any).companyValuesMatchScore)],
                 ['Resume Review', pct(selected.resumeReviewScore)],
                 ['Work Sample', selected.workSampleScore ?? '—'],
               ] as [string, any][]).map(([label, value]) => (
@@ -218,7 +217,7 @@ function RoleReviewSection({ group, selectedId, onSelect }: {
           <span className="text-[11px] text-gray-400 flex-none">{c.currentStage}</span>
         </div>
         <div className="text-xs text-gray-500 mt-1 ml-8">
-          CCAT {c.ccatScore ?? '—'} · EPP {pct(c.eppValuesMatchScore)} · Values {pct(c.companyValuesMatchScore)} · Resume {pct(c.resumeReviewScore)}
+          CCAT {c.ccatScore ?? '—'} · EPP {pct(c.eppValuesMatchScore)} · Resume {pct(c.resumeReviewScore)}
         </div>
         {(strength || concern) && (
           <div className="text-[11px] text-gray-500 mt-1 ml-8 space-y-0.5">

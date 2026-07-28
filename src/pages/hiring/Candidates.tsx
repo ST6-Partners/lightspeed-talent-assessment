@@ -243,7 +243,6 @@ export default function Candidates() {
         </td>
         <td className="px-4 py-3 text-gray-500">{c.ccatScore ?? '\u2014'}</td>
         <td className="px-4 py-3 text-gray-500">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '\u2014'}</td>
-        <td className="px-4 py-3 text-gray-500">{c.companyValuesMatchScore != null ? `${c.companyValuesMatchScore}%` : '\u2014'}</td>
         <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
           <div className="flex gap-1">
             {getPrevStage(c) && (
@@ -567,12 +566,12 @@ export default function Candidates() {
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-2 py-2.5 w-8"></th>
                             <th className="px-4 py-2.5">Name</th>
                             <th className="px-4 py-2.5">Email</th>
                             <th className="px-4 py-2.5">Stage</th>
                             <th className="px-4 py-2.5">CCAT</th>
                             <th className="px-4 py-2.5">EPP Match</th>
-                            <th className="px-4 py-2.5">Values Match</th>
                             <th className="px-4 py-2.5 w-24">Actions</th>
                           </tr>
                         </thead>
@@ -689,7 +688,6 @@ export default function Candidates() {
             {[
               { label: 'CCAT Score', value: selected.ccatScore },
               { label: 'EPP Match', value: selected.eppValuesMatchScore != null ? `${selected.eppValuesMatchScore}%` : null },
-              { label: 'Values Match', value: (selected as any).companyValuesMatchScore != null ? `${(selected as any).companyValuesMatchScore}%` : null, hint: 'How well the candidate fits this role, scored against the EPP values selected for this job.' },
               { label: 'Work Sample', value: selected.workSampleScore },
               { label: 'Resume Review', value: selected.resumeReviewScore },
               { label: 'Interview Score', value: (selected as any).interviewScore },
