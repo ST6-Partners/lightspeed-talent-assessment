@@ -18,7 +18,7 @@ import { interviewQuestions } from '../db/schema/intake.js';
 import { assessmentTasks } from '../db/schema/assessmentTasks.js';
 import { departments } from '../db/schema/departments.js';
 import { generateRoleJD, generateStandardQuestions, standardQuestionSet, generateWorkSampleTask, sharpenIntakeField, intakeInterviewTurn } from '../services/ai.js';
-import { approverEmail, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
+import { approverEmail, buildApprovalRequestEmail, sendApprovalRequest, buildKickoffEmail, buildInterviewerAvailabilityEmail, HIRING_TEAM_INBOX, sendEmail } from '../services/email.js';
 import { emailApprovalRejected, emailApprovalSentBack } from '../services/email.js';
 import { users } from '../db/schema/core.js';
 import { auditChange } from '../services/audit.js';
@@ -142,8 +142,16 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
     jdTitle: extras?.jdTitle, questions: extras?.questions, externalPostDate: extras?.externalPostDate,
   };
   // Interviewers get an availability link; everyone else (non-interviewing team + the awareness list) does not.
-  const withLink = buildKickoffEmail({ ...commonArgs, schedulingUrl: `${appBaseUrl()}/hiring/interviews` });
   const base = buildKickoffEmail(commonArgs);
+  // The interviewers linked in the intake get their OWN third email — a
+  // distinct availability request — not the hiring kickoff.
+  const availability = buildInterviewerAvailabilityEmail({
+    department: req.department,
+    jobTitle: extras?.jdTitle,
+    hiringManager: req.hiringManager,
+    schedulingUrl: `${appBaseUrl()}/hiring/interviews`,
+    rounds,
+  });
   const subject = base.subject;
   // Interviewer email addresses: the per-round interviewer email (or the interviewer name if it
   // happens to be an email) + team members flagged as interviewers. These get the availability link.
@@ -179,9 +187,9 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
       await db.insert(inboundEmails).values({
         fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
         fromName: 'Lightspeed Hiring',
-        toEmail: HIRING_TEAM_INBOX, subject: `${subject} \u2014 interview team (availability link)`,
-        body: withLink.text, replyTag: 'kickoff_interviewers', source: 'simulated',
-        raw: { kind: 'kickoff_interviewers', reqId: req.id },
+        toEmail: HIRING_TEAM_INBOX, subject: availability.subject,
+        body: availability.text, replyTag: 'interviewer_availability', source: 'simulated',
+        raw: { kind: 'interviewer_availability', reqId: req.id },
       });
     }
   } catch (err) { console.error('[intake] kickoff inbox record failed:', err); }
@@ -189,8 +197,8 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
   // Real send. Interviewers get ONE combined email (all of them on the same message) with the
   // availability CTA; everyone else (non-interviewing team + awareness list) gets the base kickoff.
   if (interviewerEmails.length) {
-    try { await sendEmail({ to: interviewerEmails, subject, html: withLink.html, templateId: 'intake_kickoff' }); }
-    catch (err) { console.error('[intake] kickoff (interviewers) send failed:', err); }
+    try { await sendEmail({ to: interviewerEmails, subject: availability.subject, html: availability.html, templateId: 'interviewer_availability' }); }
+    catch (err) { console.error('[intake] interviewer availability send failed:', err); }
   }
   for (const to of otherEmails) {
     try { await sendEmail({ to, subject, html: base.html, templateId: 'intake_kickoff' }); }

@@ -947,6 +947,39 @@ export function buildKickoffEmail(d: KickoffData): { subject: string; html: stri
   return { subject, html, text };
 }
 
+// ── Interviewer availability request (fires when an intake is approved) ─────
+// A distinct email to each interviewer linked in the intake: asks them to set
+// availability now, and to flag a conflict / exception to their manager upfront
+// so it's resolved before scheduling rather than surfacing mid-process.
+export function buildInterviewerAvailabilityEmail(d: {
+  department: string; jobTitle?: string; hiringManager: string;
+  schedulingUrl: string; rounds: { roundName: string }[];
+}): { subject: string; html: string; text: string } {
+  const role = `${d.department}${d.jobTitle ? ' · ' + d.jobTitle : ''}`;
+  const subject = `Action needed: set your interview availability — ${role}`;
+  const roundsList = d.rounds.length
+    ? '<ul style="margin:6px 0 16px;padding-left:18px;font-size:14px;color:#333;">' +
+      d.rounds.map((r) => `<li>${esc(r.roundName)}</li>`).join('') + '</ul>'
+    : '';
+  const html = wrap(`
+    ${h1('You’re on the interview team')}
+    ${p(`You’ve been set as an interviewer for <strong>${esc(role)}</strong> (hiring manager: ${esc(d.hiringManager)}). Please set your availability now so scheduling can begin inside the target window.`)}
+    ${d.rounds.length ? `<p style="font-size:13px;font-weight:700;color:#33465c;margin:0 0 2px;">Interview plan</p>${roundsList}` : ''}
+    <div style="margin:22px 0 4px;padding:18px 20px;background:#eff5ff;border:1px solid #bcd3f7;border-left:4px solid #2563eb;border-radius:10px;">
+      <p style="font-size:15px;font-weight:700;color:#16284a;margin:0 0 6px;">⏱ Set your interview availability</p>
+      <p style="font-size:14px;color:#33465c;margin:0 0 14px;">Open the app to hold time inside the target interview window for this role.</p>
+      <a href="${d.schedulingUrl}" style="display:inline-block;padding:12px 22px;background:#2563eb;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:14px;">Set my availability &rarr;</a>
+      <p style="font-size:12px;color:#7a8aa0;margin:14px 0 0;">Or paste this link: ${d.schedulingUrl}</p>
+    </div>
+    <div style="margin:16px 0 4px;padding:14px 18px;background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid #ea580c;border-radius:10px;">
+      <p style="font-size:14px;font-weight:700;color:#7c2d12;margin:0 0 4px;">Can’t take this on, or need an exception?</p>
+      <p style="font-size:13px;color:#7c2d12;margin:0;">Tell your manager now so coverage can be arranged before interviews are booked — flagging it at this stage keeps it from surfacing mid-process.</p>
+    </div>
+  `);
+  const text = `You're on the interview team for ${role} (hiring manager: ${d.hiringManager}). Please set your availability now: ${d.schedulingUrl}\n\nCan't take this on or need an exception? Tell your manager now so coverage is arranged before interviews are booked.`;
+  return { subject, html, text };
+}
+
 // ============================================================
 // EXPANDED-SCOPE AUTOMATED EMAILS (2026-07-07)
 //   - approval rejected -> submitter
