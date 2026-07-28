@@ -164,7 +164,7 @@ export default function Intake() {
     if (full && editingId) {
       const f: any = full;
       const nextForm = {
-        openingType: openingOf(f.reasonType ?? ''), reasonType: f.reasonType ?? '', roleChangeNote: f.roleChangeNote ?? '', baseJdId: f.baseJdId ?? '',
+        openingType: openingOf(f.reasonType ?? ''), reasonType: f.reasonType ?? '', roleChangeNote: f.roleChangeNote ?? '', roleTitle: f.roleTitle ?? '', baseJdId: f.baseJdId ?? '',
         workSampleRequired: f.workSampleRequired ?? true,
         department: f.department ?? '', hiringManager: f.hiringManager ?? '',
         numOpenings: f.numOpenings ?? 1, priority: f.priority ?? 'Medium',

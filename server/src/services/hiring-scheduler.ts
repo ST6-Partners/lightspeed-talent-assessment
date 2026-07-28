@@ -9,7 +9,7 @@
 // entry for the Assessment stage transition.
 // ============================================================
 
-import { eq, and, lte, gte, lt, isNull, isNotNull } from 'drizzle-orm';
+import { eq, and, lte, gte, lt, isNull, isNotNull, inArray } from 'drizzle-orm';
 import { db } from '../db.js';
 import { candidates, candidateStageHistory, emailLog, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { approvals } from '../db/schema/intake.js';
@@ -27,6 +27,9 @@ import { emailScorecardReminder } from './email.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
 import { businessHoursBetween } from '../routers/interviews.js';
 import { valueReviews } from '../db/schema/values.js';
+import { users } from '../db/schema/core.js';
+import { notifications } from '../db/schema/notifications.js';
+import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
 
 function schedAppBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -552,6 +555,107 @@ async function runScorecardReminder(): Promise<JobResult> {
   return { affected: sent, details: sent ? `Nudged ${sent} interviewer(s) with an open scorecard.` : 'No open scorecards needing a nudge.' };
 }
 
+// ── Job: phone-screen decision reminder ────────────────────
+// ~30 min after a scheduled phone screen, if the candidate is still sitting in
+// Phone Screen (nobody advanced or rejected them), nudge the hiring team ONCE
+// to make the call, so candidates don't get stranded in the phone-screen pool.
+const DECISION_REMINDER_AFTER_MS = 30 * 60 * 1000;
+
+async function hiringTeamUsers() {
+  return db.query.users.findMany({ where: inArray(users.role, ['admin', 'sysadmin']) });
+}
+
+async function runPhoneScreenDecisionReminder(): Promise<JobResult> {
+  const now = Date.now();
+  const rows = await db.query.candidates.findMany({ where: eq(candidates.currentStage, 'Phone Screen') });
+  let sent = 0;
+  for (const c of rows as any[]) {
+    if (!c.phoneScreenScheduledAt) continue;
+    const when = new Date(c.phoneScreenScheduledAt).getTime();
+    if (now < when + DECISION_REMINDER_AFTER_MS) continue;                 // call time + 30 min not reached
+    if (await alreadySentTemplate(c.id, 'phone_screen_decision_reminder')) continue; // once only
+    const jd = c.jdId ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;
+    const jobTitle = jd?.jobTitle ?? 'the role';
+    const base = schedAppBaseUrl();
+    const link = base ? `${base}/hiring/candidates?candidate=${c.id}` : '';
+    const subject = `Decision needed: phone screen with ${c.firstName} ${c.lastName}`;
+    const html = `<p>The phone screen with <strong>${c.firstName} ${c.lastName}</strong> for <strong>${jobTitle}</strong> was scheduled for ${new Date(when).toLocaleString()}.</p>`
+      + `<p>They're still in the Phone Screen stage. Please <strong>advance</strong> them to the interview or <strong>reject</strong> them so they don't get left in the phone-screen pool.</p>`
+      + (link ? `<p><a href="${link}">Open ${c.firstName}'s record</a></p>` : '');
+    try {
+      const team = await hiringTeamUsers();
+      if (team.length) {
+        await db.insert(notifications).values((team as any[]).map((u) => ({
+          userId: u.id,
+          type: 'phone_screen_decision',
+          message: `Advance or reject ${c.firstName} ${c.lastName} — their phone screen for ${jobTitle} is done.`,
+          referenceId: c.id,
+          referenceType: 'candidate',
+        })));
+      }
+      const inbox = HIRING_TEAM_INBOX;
+      await sendEmail({ to: inbox, subject, html, templateId: 'phone_screen_decision_reminder' });
+      await logEmail(c.id, inbox, 'phone_screen_decision_reminder', subject, 'sent');
+      sent++;
+    } catch (err: any) {
+      console.error('[phone-screen-decision-reminder] failed for', c.id, err);
+      try { await logEmail(c.id, c.email, 'phone_screen_decision_reminder', subject, 'failed', err?.message); } catch { /* non-fatal */ }
+    }
+  }
+  return { affected: sent, details: sent ? `Nudged the hiring team on ${sent} phone screen(s) awaiting a decision.` : 'No phone screens awaiting a decision.' };
+}
+
+// ── Job: work-sample walkthrough decision reminder ─────────
+// ~30 min after a completed work-sample walkthrough round, if the candidate is
+// still in Work Sample, nudge the interviewer who ran it (and the hiring team)
+// ONCE to record their read and advance or reject. Mirrors the scorecard nudge.
+async function runWalkthroughDecisionReminder(): Promise<JobResult> {
+  const now = Date.now();
+  const rounds = await db.select().from(candidateInterviews).where(eq(candidateInterviews.roundName, WALKTHROUGH_ROUND_NAME));
+  let sent = 0;
+  for (const r of rounds as any[]) {
+    if (r.status !== 'completed') continue;
+    const ref = r.updatedAt ? new Date(r.updatedAt).getTime() : (r.scheduledAt ? new Date(r.scheduledAt).getTime() : now);
+    if (now < ref + DECISION_REMINDER_AFTER_MS) continue;
+    const c = await db.query.candidates.findFirst({ where: eq(candidates.id, r.candidateId) });
+    if (!c || c.currentStage !== 'Work Sample') continue;                  // already moved on -> nothing to nudge
+    if (await alreadySentTemplate(c.id, 'walkthrough_decision_reminder')) continue;
+    const jd = c.jdId ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;
+    const jobTitle = jd?.jobTitle ?? 'the role';
+    const base = schedAppBaseUrl();
+    const link = base ? `${base}/hiring/candidates?candidate=${c.id}` : '';
+    const subject = `Decision needed: work sample walkthrough with ${c.firstName} ${c.lastName}`;
+    const html = `<p>You completed the work sample walkthrough with <strong>${c.firstName} ${c.lastName}</strong> for <strong>${jobTitle}</strong>.</p>`
+      + `<p>Please record your read and <strong>advance</strong> or <strong>reject</strong> them so they don't get left in the work-sample stage.</p>`
+      + (link ? `<p><a href="${link}">Open ${c.firstName}'s record</a></p>` : '');
+    try {
+      const notify = new Map<string, any>();
+      if (r.interviewerEmail) {
+        const u = await db.query.users.findFirst({ where: eq(users.email, r.interviewerEmail) });
+        if (u) notify.set(u.id, u);
+      }
+      for (const u of await hiringTeamUsers()) notify.set((u as any).id, u);
+      if (notify.size) {
+        await db.insert(notifications).values([...notify.values()].map((u: any) => ({
+          userId: u.id,
+          type: 'walkthrough_decision',
+          message: `Advance or reject ${c.firstName} ${c.lastName} — their work sample walkthrough for ${jobTitle} is done.`,
+          referenceId: c.id,
+          referenceType: 'candidate',
+        })));
+      }
+      const to = r.interviewerEmail || HIRING_TEAM_INBOX;
+      await sendEmail({ to, subject, html, templateId: 'walkthrough_decision_reminder' });
+      await logEmail(c.id, to, 'walkthrough_decision_reminder', subject, 'sent');
+      sent++;
+    } catch (err: any) {
+      console.error('[walkthrough-decision-reminder] failed for round', r.id, err);
+      try { await logEmail(c.id, r.interviewerEmail ?? c.email, 'walkthrough_decision_reminder', subject, 'failed', err?.message); } catch { /* non-fatal */ }
+    }
+  }
+  return { affected: sent, details: sent ? `Nudged ${sent} walkthrough decision(s).` : 'No walkthrough decisions pending.' };
+}
+
 // Apply each report's stored day/time to its cron job. Called once at
 // boot (after startCronJobs) and again whenever an admin saves a new
 // schedule, so the change takes effect without a server restart.
@@ -666,5 +770,23 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '0 * * * *',   // top of every hour
     handler:        runScorecardReminder,
+  });
+  registerJob({
+    name:           'phone-screen-decision-reminder',
+    label:          'Phone Screen Decision Reminder',
+    description:    'Every 15 min, ~30 min after a scheduled phone screen, nudge the hiring team (once) to advance or reject any candidate still sitting in Phone Screen.',
+    color:          '#0ea5e9',
+    jobType:        'cron',
+    cronExpression: '*/15 * * * *',   // every 15 minutes
+    handler:        runPhoneScreenDecisionReminder,
+  });
+  registerJob({
+    name:           'walkthrough-decision-reminder',
+    label:          'Walkthrough Decision Reminder',
+    description:    'Every 15 min, ~30 min after a completed work-sample walkthrough, nudge the interviewer (once) to record their read and advance or reject if the candidate is still in Work Sample.',
+    color:          '#8b5cf6',
+    jobType:        'cron',
+    cronExpression: '*/15 * * * *',   // every 15 minutes
+    handler:        runWalkthroughDecisionReminder,
   });
 }
