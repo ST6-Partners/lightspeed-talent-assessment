@@ -73,6 +73,7 @@ export const jobRequisitions = pgTable('job_requisitions', {
   // ── Intake form fields (migration 0019) ──
   reasonType: varchar('reason_type', { length: 40 }),
   roleChangeNote: text('role_change_note'),
+  roleTitle: varchar('role_title', { length: 200 }),
   workArrangement: varchar('work_arrangement', { length: 20 }).default('On-site'),
   hybridDays: integer('hybrid_days'),
   compBasis: jsonb('comp_basis').default([]),

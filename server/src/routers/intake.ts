@@ -293,6 +293,7 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
       location: req.location, salaryMin: req.salaryMin, salaryMax: req.salaryMax,
       baseJd: baseJd ? { jobTitle: baseJd.jobTitle, summary: baseJd.summary, responsibilities: baseJd.responsibilities, requiredQualifications: baseJd.requiredQualifications, preferredQualifications: baseJd.preferredQualifications, workSampleInstructions: baseJd.workSampleInstructions, eppValues: (baseJd.eppValues as string[] | null) ?? [] } : null,
       changeNote: changeNote || null,
+      title: (req.roleTitle ?? null),
     });
     jdTitle = jd.jobTitle;
 
@@ -367,6 +368,7 @@ const IntakeInput = z.object({
   // Section 1 — why
   reasonType: z.enum(['backfill', 'new_headcount', 'replacement_diff', 'termination_diff', 'modify_role']).optional(),
   roleChangeNote: z.string().optional(),
+  roleTitle: z.string().max(200).optional(),
   baseJdId: z.string().uuid().nullable().optional(),
   workSampleRequired: z.boolean().default(true),
   approvalPlan: z.array(z.object({ role: z.string().min(1), concurrent: z.boolean().default(false) })).optional(),
@@ -426,6 +428,7 @@ const APPROVAL_STEPS = [
 const IntakeEditPatch = z.object({
   reasonType: z.enum(['backfill', 'new_headcount', 'replacement_diff', 'termination_diff', 'modify_role']).optional(),
   roleChangeNote: z.string().optional(),
+  roleTitle: z.string().max(200).optional(),
   department: z.string().min(1).max(200).optional(),
   hiringManager: z.string().min(1).max(200).optional(),
   numOpenings: z.number().int().min(1).optional(),

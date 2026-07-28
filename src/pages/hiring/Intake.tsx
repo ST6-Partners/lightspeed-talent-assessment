@@ -43,7 +43,7 @@ interface Person { personRef: string; roleInProcess?: string; roundRef?: string;
 interface Aware { personRef: string; source: 'auto' | 'manual'; }
 
 const EMPTY = {
-  openingType: '', reasonType: '', roleChangeNote: '', baseJdId: '', workSampleRequired: true,
+  openingType: '', reasonType: '', roleChangeNote: '', roleTitle: '', baseJdId: '', workSampleRequired: true,
   department: '', hiringManager: '', numOpenings: 1, priority: 'Medium',
   employmentType: 'Full-Time', location: '', workArrangement: 'On-site', hybridDays: '',
   salaryMin: '', salaryMax: '', compBasis: [] as string[], variableComp: '',
@@ -157,6 +157,8 @@ export default function Intake() {
   for (const r of (allReqs ?? []) as any[]) deptByReq[r.id] = r.department;
   const jdOptions = ((allJds ?? []) as any[]).filter((jd) => form.department && deptByReq[jd.reqId] === form.department);
   const [baseline, setBaseline] = useState<string | null>(null);
+  const [showTitleModal, setShowTitleModal] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
 
   useEffect(() => {
     if (full && editingId) {
@@ -237,6 +239,7 @@ export default function Intake() {
     reasonType: form.reasonType ? (form.reasonType as any) : undefined,
     baseJdId: form.baseJdId || null,
     roleChangeNote: form.roleChangeNote || undefined,
+    roleTitle: form.roleTitle || undefined,
     workSampleRequired: form.workSampleRequired,
     department: form.department, hiringManager: form.hiringManager,
     numOpenings: Number(form.numOpenings) || 1, priority: form.priority as any,
@@ -388,7 +391,9 @@ export default function Intake() {
                     // One choice, mapped straight to the stored reasonType. Reset the
                     // dependent fields (base JD + change note) whenever the reason changes.
                     const v = e.target.value;
-                    setForm({ ...form, reasonType: v, openingType: openingOf(v), baseJdId: '', roleChangeNote: '' });
+                    const isNew = v === 'new_headcount';
+                    setForm({ ...form, reasonType: v, openingType: openingOf(v), baseJdId: '', roleChangeNote: '', roleTitle: isNew ? form.roleTitle : '' });
+                    if (isNew) { setTitleDraft(form.roleTitle || ''); setShowTitleModal(true); }
                   }}
                   className={inp}
                 >
@@ -399,14 +404,21 @@ export default function Intake() {
 
 
               {form.reasonType === 'new_headcount' && (
-                <div className="col-span-2">
+                <div className="col-span-2 space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-gray-600">Role title:</span>
+                    {form.roleTitle
+                      ? <span className="font-medium text-ls-ink">{form.roleTitle}</span>
+                      : <span className="text-gray-400 italic">not set</span>}
+                    <button type="button" onClick={() => { setTitleDraft(form.roleTitle || ''); setShowTitleModal(true); }} className="text-ls-primary hover:underline text-xs">{form.roleTitle ? 'Edit' : 'Add title'}</button>
+                  </div>
                   <SharpenField
                     label="Describe the new role"
                     value={form.roleChangeNote}
                     onChange={(v) => setForm({ ...form, roleChangeNote: v })}
                     rows={3}
                     placeholder="Describe the new role: what the person will do, focus areas, key skills. The full JD, work sample, and interview questions are generated from this."
-                    roleContext={form.department || 'unspecified role'}
+                    roleContext={form.roleTitle || form.department || 'unspecified role'}
                   />
                 </div>
               )}
@@ -440,6 +452,28 @@ export default function Intake() {
               )}
             </div>
           </section>
+
+          {showTitleModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowTitleModal(false)}>
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+                <h3 className="text-base font-semibold text-ls-ink mb-1">New role title</h3>
+                <p className="text-xs text-gray-500 mb-3">What is the title or name of this role? This becomes the job title on the generated JD.</p>
+                <input
+                  autoFocus
+                  type="text"
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && titleDraft.trim()) { setForm({ ...form, roleTitle: titleDraft.trim() }); setShowTitleModal(false); } }}
+                  placeholder="e.g. Senior Backend Engineer"
+                  className={inp}
+                />
+                <div className="flex justify-end gap-2 mt-4">
+                  <button type="button" onClick={() => setShowTitleModal(false)} className="px-3 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+                  <button type="button" disabled={!titleDraft.trim()} onClick={() => { setForm({ ...form, roleTitle: titleDraft.trim() }); setShowTitleModal(false); }} className="px-4 py-2 text-sm rounded-md bg-ls-primary text-white disabled:opacity-50">Save</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 2 — Role */}
           <section>

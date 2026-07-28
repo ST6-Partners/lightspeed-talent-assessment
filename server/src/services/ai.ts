@@ -824,8 +824,9 @@ export async function generateRoleJD(input: {
   location?: string | null; salaryMin?: number | null; salaryMax?: number | null;
   baseJd?: { jobTitle: string; summary?: string | null; responsibilities?: string | null; requiredQualifications?: string | null; preferredQualifications?: string | null; workSampleInstructions?: string | null; eppValues?: string[] | null } | null;
   changeNote?: string | null;
+  title?: string | null;
 }): Promise<RoleJD> {
-  const title = input.baseJd?.jobTitle ?? (`${input.department}${input.seniority ? ' ' + input.seniority : ''}`.trim() + (input.seniority ? '' : ' Position'));
+  const title = (input.title && input.title.trim()) || input.baseJd?.jobTitle || (`${input.department}${input.seniority ? ' ' + input.seniority : ''}`.trim() + (input.seniority ? '' : ' Position'));
   if (SANDBOX) {
     console.log(`[AI SANDBOX] generateRoleJD | ${title}${input.baseJd ? ' (from base + change note)' : ''}`);
     if (input.baseJd) {
@@ -853,10 +854,10 @@ Work sample task: ${input.baseJd.workSampleInstructions ?? '(none on file)'}
 The role should DIFFER from that as follows: ${input.changeNote ?? ''}
 
 Produce the UPDATED job description AND an updated work sample task, reflecting those differences — keep what still applies, change what should change.`
-    : `Draft a brand-new job description for a role in ${input.department}. Work arrangement: ${input.workArrangement ?? 'On-site'}${input.location ? ', ' + input.location : ''}.${input.salaryMin && input.salaryMax ? ` Salary band $${input.salaryMin}–$${input.salaryMax}.` : ''}${input.changeNote ? `\n\nRole description provided by the hiring team (build the ENTIRE JD, work sample, and interview focus from this): ${input.changeNote}` : ''}\n\nProduce the full job description AND a fitting work sample task. Keep it realistic and concise.`;
+    : `Draft a brand-new job description for the role "${title}" in ${input.department}. Work arrangement: ${input.workArrangement ?? 'On-site'}${input.location ? ', ' + input.location : ''}.${input.salaryMin && input.salaryMax ? ` Salary band $${input.salaryMin}–$${input.salaryMax}.` : ''}${input.changeNote ? `\n\nRole description provided by the hiring team (build the ENTIRE JD, work sample, and interview focus from this): ${input.changeNote}` : ''}\n\nProduce the full job description AND a fitting work sample task. Keep it realistic and concise.`;
   try {
     const jd = JSON.parse(await callClaude(system, user));
-    return { jobTitle: jd.jobTitle || title, summary: jd.summary || '', responsibilities: jd.responsibilities || '', requiredQualifications: jd.requiredQualifications || '', preferredQualifications: jd.preferredQualifications || '', workSampleInstructions: jd.workSampleInstructions || '', eppValues: normalizeEppValues(jd.eppValues) };
+    return { jobTitle: (input.title && input.title.trim()) || jd.jobTitle || title, summary: jd.summary || '', responsibilities: jd.responsibilities || '', requiredQualifications: jd.requiredQualifications || '', preferredQualifications: jd.preferredQualifications || '', workSampleInstructions: jd.workSampleInstructions || '', eppValues: normalizeEppValues(jd.eppValues) };
   } catch (err) { console.error('[AI] generateRoleJD failed:', err); return input.baseJd ? { jobTitle: input.baseJd.jobTitle, summary: input.baseJd.summary ?? '', responsibilities: input.baseJd.responsibilities ?? '', requiredQualifications: input.baseJd.requiredQualifications ?? '', preferredQualifications: input.baseJd.preferredQualifications ?? '', workSampleInstructions: input.baseJd.workSampleInstructions ?? '', eppValues: normalizeEppValues(input.baseJd.eppValues) } : templateJD(title, input.department, input.changeNote); }
 }
 

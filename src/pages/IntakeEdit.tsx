@@ -25,7 +25,7 @@ export default function IntakeEdit() {
     if (view.data?.requisition) {
       const r: any = view.data.requisition;
       setF({
-        reasonType: r.reasonType ?? '', roleChangeNote: r.roleChangeNote ?? '',
+        reasonType: r.reasonType ?? '', roleChangeNote: r.roleChangeNote ?? '', roleTitle: r.roleTitle ?? '',
         department: r.department ?? '', hiringManager: r.hiringManager ?? '',
         numOpenings: r.numOpenings ?? 1, priority: r.priority ?? 'Medium',
         employmentType: r.employmentType ?? 'Full-Time', location: r.location ?? '',
@@ -40,7 +40,7 @@ export default function IntakeEdit() {
 
   const payload = () => ({
     token,
-    reasonType: f.reasonType || undefined, roleChangeNote: f.roleChangeNote || undefined,
+    reasonType: f.reasonType || undefined, roleChangeNote: f.roleChangeNote || undefined, roleTitle: f.roleTitle || undefined,
     department: f.department || undefined, hiringManager: f.hiringManager || undefined,
     numOpenings: f.numOpenings ? Number(f.numOpenings) : undefined, priority: f.priority || undefined,
     employmentType: f.employmentType || undefined, location: f.location || undefined,
@@ -125,6 +125,7 @@ export default function IntakeEdit() {
       {T({ label: 'Must-haves', k: 'mustHaves' })}
       {T({ label: 'Nice-to-haves', k: 'niceToHaves' })}
       {T({ label: 'Known constraints', k: 'knownConstraints' })}
+      {f.reasonType === 'new_headcount' && F({ label: 'Role title', k: 'roleTitle' })}
       {(f.reasonType === 'replacement_diff' || f.reasonType === 'termination_diff' || f.reasonType === 'new_headcount' || f.reasonType === 'modify_role') && F({ label: f.reasonType === 'new_headcount' ? 'Describe the new role' : f.reasonType === 'modify_role' ? 'What are you changing about this role' : 'How the role should differ', k: 'roleChangeNote' })}
 
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 13, color: '#374151' }}>
