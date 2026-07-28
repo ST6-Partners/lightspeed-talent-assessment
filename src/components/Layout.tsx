@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video, ShieldCheck, ClipboardPen, Brain, CheckSquare, Database, ArrowLeft } from 'lucide-react';
+import { Settings, MessageSquare, LogOut, Bot, Users, FileText, ClipboardList, BarChart2, Award, ClipboardCheck, FileCheck, Building2, Tag, Contact, Library, Megaphone, UserCheck, Video, ShieldCheck, ClipboardPen, Brain, CheckSquare, Database, ArrowLeft, HelpCircle } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 import FeedbackDrawer from './FeedbackDrawer';
 import ChatDrawer from './ChatDrawer';
@@ -188,6 +188,13 @@ export default function Layout() {
           <div className="flex items-center gap-2">
             <WhatsNew />
             <NotificationBell />
+            <Link
+              to="/help"
+              title="Help & User Guide"
+              className="p-2 text-ls-ink-3 hover:text-ls-ink rounded-lg hover:bg-ls-bg-2 transition-colors"
+            >
+              <HelpCircle className="w-5 h-5" />
+            </Link>
             <button
               onClick={() => setShowChat(true)}
               title="AI Assistant"

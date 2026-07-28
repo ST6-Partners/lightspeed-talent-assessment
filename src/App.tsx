@@ -12,6 +12,7 @@ import ApplyInternal from './pages/ApplyInternal';
 import Approve from './pages/Approve';
 import Chat from './pages/Chat';
 import AdminSettings from './pages/AdminSettings';
+import Help from './pages/Help';
 // Hiring Pipeline
 import Requisitions from './pages/hiring/Requisitions';
 import Intake from './pages/hiring/Intake';
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/hiring/candidates" replace />} />
         {/* Utility (reached via header icons) */}
         <Route path="/chat" element={<Chat />} />
+        <Route path="/help" element={<Help />} />
         <Route path="/admin/settings" element={<AdminSettings />} />
         {/* Metrics */}
         <Route path="/hiring" element={<Navigate to="/hiring/candidates" replace />} />
