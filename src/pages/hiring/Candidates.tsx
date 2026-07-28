@@ -714,10 +714,18 @@ function stageDetail(name: string, c: any, rounds: any[]): React.ReactNode {
     case 'Assessment':
       return (
         <div className="space-y-2">
-          <div className="flex gap-4">
+          <div className="flex gap-4 flex-wrap">
             <span>CCAT: <b className="text-gray-900">{c.ccatScore ?? '—'}</b></span>
+            {c.ccatPercentile != null && <span>Percentile: <b className="text-gray-900">{c.ccatPercentile}</b></span>}
             <span>EPP Match: <b className="text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</b></span>
           </div>
+          {(c.ccatVerbal != null || c.ccatMathLogic != null || c.ccatSpatial != null) && (
+            <div className="flex gap-4 flex-wrap text-gray-500">
+              <span>Verbal: <b className="text-gray-700">{c.ccatVerbal ?? '—'}</b></span>
+              <span>Math &amp; Logic: <b className="text-gray-700">{c.ccatMathLogic ?? '—'}</b></span>
+              <span>Spatial: <b className="text-gray-700">{c.ccatSpatial ?? '—'}</b></span>
+            </div>
+          )}
           <a href={`/hiring/assessments?id=${c.id}`} className="inline-flex items-center gap-1 text-ls-primary font-semibold border border-dashed border-ls-primary rounded-md px-2.5 py-1">See assessment →</a>
         </div>
       );
