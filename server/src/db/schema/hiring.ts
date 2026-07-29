@@ -187,6 +187,8 @@ export const candidates = pgTable('candidates', {
   // Work-sample submission (candidate self-submits via emailed link)
   workSampleToken: varchar('work_sample_token', { length: 64 }),
   workSampleSubmission: text('work_sample_submission'),
+  // multi_select work samples: the exact options the candidate ticked (auto-graded).
+  workSampleSelections: jsonb('work_sample_selections').$type<string[]>(),
   workSampleLink: text('work_sample_link'),
   workSampleSubmittedAt: timestamp('work_sample_submitted_at', { withTimezone: true }),
   workSampleNotes: text('work_sample_notes'),

@@ -8,7 +8,7 @@
 // ============================================================
 
 import {
-  pgTable, pgEnum, uuid, varchar, text, integer, boolean, timestamp,
+  pgTable, pgEnum, uuid, varchar, text, integer, boolean, timestamp, jsonb,
 } from 'drizzle-orm/pg-core';
 import { users } from './core.js';
 import { departments } from './departments.js';
@@ -35,6 +35,14 @@ export const assessmentTasks = pgTable('assessment_tasks', {
   //  'take_home'       — emailed link, candidate submits a written answer/file (auto-scored)
   //  'live_walkthrough' — a Zoom interview round where the candidate walks the panel through it (human-scored)
   deliveryMode: varchar('delivery_mode', { length: 20 }).notNull().default('take_home'),
+  // ── Answer format ────────────────────────────────────────
+  //  'free_text'    — candidate writes/pastes an answer (default; existing behavior)
+  //  'multi_select' — candidate ticks a fixed number of options from a list (auto-graded)
+  answerFormat: varchar('answer_format', { length: 20 }).notNull().default('free_text'),
+  // multi_select only: the choices shown, the correct subset, and how many to pick.
+  options: jsonb('options').$type<string[]>(),
+  correctOptions: jsonb('correct_options').$type<string[]>(),
+  selectCount: integer('select_count'),
   version: integer('version').notNull().default(1),
   active: boolean('active').notNull().default(true),
   createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),

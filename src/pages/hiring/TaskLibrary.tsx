@@ -261,7 +261,14 @@ export default function TaskLibrary() {
                     <div className="flex items-start gap-1.5">
                       <span className="text-gray-400 mt-0.5 shrink-0">{open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}</span>
                       <div className="min-w-0">
-                        <div className="font-medium text-gray-900">{t.title}</div>
+                        <div className="font-medium text-gray-900 flex items-center gap-2">
+                          {t.title}
+                          {(t as any).answerFormat === 'multi_select' && (
+                            <span className="text-[10px] font-semibold uppercase tracking-wide text-ls-cyan bg-cyan-50 border border-cyan-200 rounded px-1.5 py-0.5">
+                              Pick {(t as any).selectCount ?? ((t as any).correctOptions?.length ?? '')}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-gray-500 text-xs mt-0.5 line-clamp-1">{t.brief}</div>
                       </div>
                     </div>

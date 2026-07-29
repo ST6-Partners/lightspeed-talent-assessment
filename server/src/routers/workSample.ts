@@ -60,6 +60,11 @@ export const workSampleRouter = router({
         alreadySubmitted: !!candidate.workSampleSubmittedAt,
         submittedAt: candidate.workSampleSubmittedAt,
         deliveryMode: resolved?.deliveryMode ?? 'take_home',
+        // Multi-select work samples: the candidate ticks `selectCount` of these
+        // `options`. correctOptions is deliberately NOT returned to the candidate.
+        answerFormat: resolved?.answerFormat ?? 'free_text',
+        options: resolved?.options ?? null,
+        selectCount: resolved?.selectCount ?? null,
       };
     }),
 
@@ -84,6 +89,9 @@ export const workSampleRouter = router({
     .input(z.object({
       token: z.string().min(1),
       submission: z.string().min(1, 'Please enter your response.').max(50000),
+      // multi_select work samples send the ticked options here (and a readable
+      // join of them as `submission`, so the Review queue shows what they picked).
+      selections: z.array(z.string().max(300)).max(50).optional(),
       link: z.string().url('Enter a valid URL (or leave blank).').max(2000).optional().or(z.literal('')),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -94,6 +102,7 @@ export const workSampleRouter = router({
 
       await ctx.db.update(candidates).set({
         workSampleSubmission: input.submission,
+        workSampleSelections: input.selections && input.selections.length ? input.selections : null,
         workSampleLink: input.link ? input.link : null,
         workSampleSubmittedAt: new Date(),
         updatedAt: new Date(),

@@ -21,6 +21,10 @@ export interface ResolvedWorkSample {
   scoringGuideWork: string | null; // rubric — work quality (may be null until finalized)
   scoringGuideAi: string | null;   // rubric — AI skill (may be null until finalized)
   deliveryMode: 'take_home' | 'live_walkthrough';
+  answerFormat: 'free_text' | 'multi_select';
+  options: string[] | null;        // multi_select: choices shown to the candidate
+  correctOptions: string[] | null; // multi_select: correct subset (server-only, never sent to candidate)
+  selectCount: number | null;      // multi_select: how many to pick
 }
 
 export async function resolveDeptWorkSample(
@@ -73,5 +77,9 @@ function compose(task: any): ResolvedWorkSample {
     scoringGuideWork: task.scoringGuideWork ?? null,
     scoringGuideAi: task.scoringGuideAi ?? null,
     deliveryMode: (task.deliveryMode === 'live_walkthrough' ? 'live_walkthrough' : 'take_home'),
+    answerFormat: (task.answerFormat === 'multi_select' ? 'multi_select' : 'free_text'),
+    options: task.options ?? null,
+    correctOptions: task.correctOptions ?? null,
+    selectCount: task.selectCount ?? null,
   };
 }

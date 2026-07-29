@@ -31,7 +31,7 @@ function formatNotes(
   lines.push(
     `AI work-sample score: ${r.overallScore}/100 (work quality ${r.workQualityScore}, AI skill ${r.aiSkillScore})` +
     `${r.rubricUsed ? '' : ' — no rubric configured; scored from brief'} · ` +
-    `${r.mode === 'placeholder' ? 'sandbox draft' : 'AI draft — verify before relying on it'}`,
+    `${r.mode === 'placeholder' ? 'sandbox draft' : r.mode === 'deterministic' ? 'auto-graded' : 'AI draft — verify before relying on it'}`,
   );
   lines.push(
     `RESULT: ${meta.pass ? 'PASS' : 'FAIL'} (pass mark ${meta.threshold})` +
@@ -50,6 +50,41 @@ function formatNotes(
   return lines.join('\n');
 }
 
+// Deterministic auto-grade for a multi_select (pick-list) work sample. These
+// tasks have definite correct answers, so no model call is needed. Score is
+// (correct picks - wrong picks) / (options to pick), clamped to 0..100.
+function scoreMultiSelect(
+  resolved: { correctOptions: string[] | null; selectCount: number | null },
+  selected: string[],
+): WorkSampleScoreResult {
+  const correct = resolved.correctOptions ?? [];
+  const need = resolved.selectCount ?? correct.length ?? 0;
+  const denom = Math.max(need, correct.length, 1);
+  const correctSet = new Set(correct);
+  const picked = selected.filter((x) => correctSet.has(x));
+  const wrong = selected.filter((x) => !correctSet.has(x));
+  const score = Math.max(0, Math.min(100, Math.round(((picked.length - wrong.length) / denom) * 100)));
+  const allRight = wrong.length === 0 && picked.length === correct.length && selected.length === correct.length;
+  return {
+    overallScore: score,
+    workQualityScore: score,
+    aiSkillScore: score,
+    summary:
+      `Auto-graded pick-list: ${picked.length} of ${correct.length} correct` +
+      `${wrong.length ? `, ${wrong.length} incorrect` : ''}. ` +
+      `Selected: ${selected.join(', ') || '(none)'}. Correct: ${correct.join(', ')}.`,
+    strengths: allRight
+      ? ['All correct options selected.']
+      : (picked.length ? [`Correctly selected: ${picked.join(', ')}.`] : []),
+    concerns: wrong.length
+      ? [`Incorrectly selected: ${wrong.join(', ')}.`]
+      : (picked.length < correct.length ? ['Missed one or more correct options.'] : []),
+    rubricUsed: true,
+    criteria: [],
+    mode: 'deterministic',
+  };
+}
+
 export async function scoreAndStoreWorkSample(db: any, candidateId: string): Promise<WorkSampleScoreResult | null> {
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
   if (!candidate || !candidate.workSampleSubmission) return null;
@@ -59,17 +94,22 @@ export async function scoreAndStoreWorkSample(db: any, candidateId: string): Pro
     : null;
   const resolved = await resolveDeptWorkSample(db, candidate);
 
-  const result = await scoreWorkSample({
-    firstName: candidate.firstName,
-    lastName: candidate.lastName,
-    jobTitle: jd?.jobTitle ?? null,
-    taskTitle: resolved?.title ?? null,
-    brief: resolved?.brief ?? jd?.workSampleInstructions ?? null,
-    scoringGuideWork: resolved?.scoringGuideWork ?? null,
-    scoringGuideAi: resolved?.scoringGuideAi ?? null,
-    submission: candidate.workSampleSubmission,
-    link: candidate.workSampleLink ?? null,
-  });
+  // Pick-list (multi_select) work samples are auto-graded against their known
+  // correct answers — no model call. Everything else goes to the rubric scorer.
+  const result = resolved?.answerFormat === 'multi_select'
+    ? scoreMultiSelect(resolved, (candidate.workSampleSelections as string[] | null)
+        ?? (candidate.workSampleSubmission ? candidate.workSampleSubmission.split(',').map((x: string) => x.trim()).filter(Boolean) : []))
+    : await scoreWorkSample({
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        jobTitle: jd?.jobTitle ?? null,
+        taskTitle: resolved?.title ?? null,
+        brief: resolved?.brief ?? jd?.workSampleInstructions ?? null,
+        scoringGuideWork: resolved?.scoringGuideWork ?? null,
+        scoringGuideAi: resolved?.scoringGuideAi ?? null,
+        submission: candidate.workSampleSubmission,
+        link: candidate.workSampleLink ?? null,
+      });
 
   const cfg = await getWorkSampleScoringConfig(db);
   const pass = result.overallScore >= cfg.passThreshold;

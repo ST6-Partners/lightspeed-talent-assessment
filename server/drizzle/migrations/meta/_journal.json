@@ -589,6 +589,13 @@
       "when": 1960000054000,
       "tag": "0083_delete_roundless_scorecards",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1960000055000,
+      "tag": "0084_work_sample_multi_select",
+      "breakpoints": true
     }
   ]
 }

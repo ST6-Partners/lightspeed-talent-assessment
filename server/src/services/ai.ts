@@ -636,7 +636,7 @@ export interface WorkSampleScoreResult {
   concerns: string[];
   rubricUsed: boolean;       // false when no scoring guide was configured
   criteria: WorkSampleCriterion[]; // per-rubric-point breakdown
-  mode: 'ai' | 'placeholder';
+  mode: 'ai' | 'placeholder' | 'deterministic';
   provenance?: DecisionProvenance; // Phase 2 — set on the AI path
 }
 
