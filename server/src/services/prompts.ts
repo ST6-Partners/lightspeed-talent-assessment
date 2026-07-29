@@ -68,7 +68,7 @@ export const PROMPTS = {
   sharpenIntake: {
     id: 'sharpen-intake',
     version: '1.1.0',
-    model: 'claude-3-5-haiku-20241022',
+    model: 'claude-haiku-4-5-20251001',
     purpose: 'Assess whether a hiring-manager intake answer is specific enough; suggest job-relevant follow-ups and concrete rewrites. Never suggests personality/culture-fit proxies.',
     lastRevised: '2026-07-14',
     changelog: ['1.1.0 — switched to Haiku + capped output for faster live re-evaluation.', '1.0.0 — initial registry entry.'],
@@ -76,7 +76,7 @@ export const PROMPTS = {
   guidedIntake: {
     id: 'guided-intake',
     version: '1.0.0',
-    model: 'claude-3-5-haiku-20241022',
+    model: 'claude-haiku-4-5-20251001',
     purpose: 'Run an adaptive hiring-manager intake interview: ask one job-relevant probing question at a time, probe vague answers, and extract concrete role-profile field values. Never asks about personality/culture-fit or protected-trait proxies.',
     lastRevised: '2026-07-15',
     changelog: ['1.0.0 — initial registry entry.'],
