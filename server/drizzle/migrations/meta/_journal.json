@@ -596,6 +596,13 @@
       "when": 1960000055000,
       "tag": "0084_work_sample_multi_select",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1960000056000,
+      "tag": "0085_interviewer_availability",
+      "breakpoints": true
     }
   ]
 }

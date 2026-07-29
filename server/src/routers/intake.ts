@@ -177,7 +177,7 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
   const inboxAvailability = interviewerEmails.length
     ? buildInterviewerAvailabilityEmail({
         department: req.department, jobTitle: extras?.jdTitle, hiringManager: req.hiringManager,
-        schedulingUrl: `${appBaseUrl()}/hiring/interviews`, rounds,
+        schedulingUrl: `${appBaseUrl()}/interviewer-availability/${encodeInterviewerDeclineToken(req.id, interviewerEmails[0])}`, rounds,
         declineUrl: `${appBaseUrl()}/interviewer-unavailable/${encodeInterviewerDeclineToken(req.id, interviewerEmails[0])}`,
       })
     : availability;
@@ -208,10 +208,12 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
   // Each interviewer gets their own availability email with a personal
   // "can't interview for this role" link that notifies their manager upfront.
   for (const email of interviewerEmails) {
-    const declineUrl = `${appBaseUrl()}/interviewer-unavailable/${encodeInterviewerDeclineToken(req.id, email)}`;
+    const token = encodeInterviewerDeclineToken(req.id, email);
+    const declineUrl = `${appBaseUrl()}/interviewer-unavailable/${token}`;
+    const schedulingUrl = `${appBaseUrl()}/interviewer-availability/${token}`;
     const perEmail = buildInterviewerAvailabilityEmail({
       department: req.department, jobTitle: extras?.jdTitle, hiringManager: req.hiringManager,
-      schedulingUrl: `${appBaseUrl()}/hiring/interviews`, rounds, declineUrl,
+      schedulingUrl, rounds, declineUrl,
     });
     try { await sendEmail({ to: email, subject: perEmail.subject, html: perEmail.html, templateId: 'interviewer_availability' }); }
     catch (err) { console.error('[intake] interviewer availability send failed:', err); }

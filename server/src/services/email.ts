@@ -967,7 +967,7 @@ export function buildInterviewerAvailabilityEmail(d: {
     ${d.rounds.length ? `<p style="font-size:13px;font-weight:700;color:#33465c;margin:0 0 2px;">Interview plan</p>${roundsList}` : ''}
     <div style="margin:22px 0 4px;padding:18px 20px;background:#eff5ff;border:1px solid #bcd3f7;border-left:4px solid #2563eb;border-radius:10px;">
       <p style="font-size:15px;font-weight:700;color:#16284a;margin:0 0 6px;">⏱ Set your interview availability</p>
-      <p style="font-size:14px;color:#33465c;margin:0 0 14px;">Open the app to hold time inside the target interview window for this role.</p>
+      <p style="font-size:14px;color:#33465c;margin:0 0 14px;">No login needed — add the times you’re free inside the target interview window and send them back.</p>
       <a href="${d.schedulingUrl}" style="display:inline-block;padding:12px 22px;background:#2563eb;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:14px;">Set my availability &rarr;</a>
       <p style="font-size:12px;color:#7a8aa0;margin:14px 0 0;">Or paste this link: ${d.schedulingUrl}</p>
     </div>

@@ -75,6 +75,9 @@ export { interviewPlan, hiringTeam, awarenessList, approvals, interviewQuestions
 
 export { candidateInterviews } from './interviews.js';
 
+// Interviewer availability (1 table) — self-serve availability from the intake-approval email
+export { interviewerAvailability } from './interviewerAvailability.js';
+
 // EEO store (1 table) — voluntary self-ID for aggregate adverse-impact
 // monitoring. WALLED OFF from the evaluation path (see eeo.ts header).
 export { eeoResponses } from './eeo.js';

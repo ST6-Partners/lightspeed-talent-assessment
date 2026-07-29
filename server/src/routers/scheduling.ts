@@ -14,12 +14,14 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { candidates, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { employees } from '../db/schema/employees.js';
+import { interviewerAvailability } from '../db/schema/interviewerAvailability.js';
+import { inboundEmails } from '../db/schema/email.js';
 import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, HIRING_TEAM_INBOX } from '../services/email.js';
 
 // Capability tokens for the interviewer "can't interview for this role" link that
@@ -251,5 +253,78 @@ export const schedulingRouter = router({
         reason: input.reason,
       });
       return { ok: true, viaHrFallback: !emp?.managerEmail };
+    }),
+
+  // ── PUBLIC: interviewer opens the self-serve availability link from the
+  // intake-approval email (no login). Context for the availability page.
+  getInterviewerAvailabilityContext: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const dec = decodeInterviewerDeclineToken(input.token);
+      if (!dec) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid.' });
+      const req = (await ctx.db.select().from(jobRequisitions).where(eq(jobRequisitions.id, dec.reqId)).limit(1))[0];
+      if (!req) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is no longer valid.' });
+      const jd = (await ctx.db.select().from(jobDescriptions).where(eq(jobDescriptions.reqId, req.id)).limit(1))[0];
+      const existing = (await ctx.db.select().from(interviewerAvailability)
+        .where(and(eq(interviewerAvailability.reqId, dec.reqId), eq(interviewerAvailability.email, dec.email))).limit(1))[0];
+      return {
+        role: `${req.department}${jd?.jobTitle ? ' · ' + jd.jobTitle : ''}`,
+        interviewerEmail: dec.email,
+        windows: (existing?.windows as any) ?? null,
+        note: existing?.note ?? null,
+        alreadySubmitted: !!existing,
+      };
+    }),
+
+  // ── PUBLIC: interviewer submits (or updates) their availability. Stores it and
+  // drops a summary into the hiring-team inbox so scheduling can begin.
+  submitInterviewerAvailability: publicProcedure
+    .input(z.object({
+      token: z.string().min(1),
+      windows: z.array(z.object({
+        date: z.string().min(1).max(20),
+        start: z.string().min(1).max(10),
+        end: z.string().min(1).max(10),
+      })).min(1, 'Add at least one time you are available.').max(30),
+      note: z.string().max(2000).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const dec = decodeInterviewerDeclineToken(input.token);
+      if (!dec) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid.' });
+      const req = (await ctx.db.select().from(jobRequisitions).where(eq(jobRequisitions.id, dec.reqId)).limit(1))[0];
+      if (!req) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is no longer valid.' });
+      const jd = (await ctx.db.select().from(jobDescriptions).where(eq(jobDescriptions.reqId, req.id)).limit(1))[0];
+      const emp = (await ctx.db.select().from(employees).where(eq(employees.email, dec.email)).limit(1))[0];
+      const name = (emp as any)?.name ?? null;
+
+      const existing = (await ctx.db.select().from(interviewerAvailability)
+        .where(and(eq(interviewerAvailability.reqId, dec.reqId), eq(interviewerAvailability.email, dec.email))).limit(1))[0];
+      if (existing) {
+        await ctx.db.update(interviewerAvailability)
+          .set({ windows: input.windows, note: input.note ?? null, name, updatedAt: new Date() })
+          .where(eq(interviewerAvailability.id, existing.id));
+      } else {
+        await ctx.db.insert(interviewerAvailability)
+          .values({ reqId: dec.reqId, email: dec.email, name, windows: input.windows, note: input.note ?? null });
+      }
+
+      const role = `${req.department}${jd?.jobTitle ? ' · ' + jd.jobTitle : ''}`;
+      const who = name || dec.email;
+      const lines = input.windows.map((w) => `\u2022 ${w.date} ${w.start}\u2013${w.end}`).join('\n');
+      const body = `${who} submitted interview availability for ${role}:\n\n${lines}${input.note ? `\n\nNote: ${input.note}` : ''}`;
+      try {
+        await ctx.db.insert(inboundEmails).values({
+          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+          fromName: 'Lightspeed Hiring',
+          toEmail: HIRING_TEAM_INBOX,
+          subject: `Interviewer availability: ${who} \u2014 ${role}`,
+          body,
+          replyTag: 'interviewer_availability_submitted',
+          source: 'simulated',
+          raw: { kind: 'interviewer_availability_submitted', reqId: dec.reqId, email: dec.email },
+        });
+      } catch (err) { console.error('[scheduling] availability inbox record failed:', err); }
+
+      return { ok: true, role };
     }),
 });
