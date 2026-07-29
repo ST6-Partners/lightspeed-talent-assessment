@@ -358,7 +358,13 @@ export default function JobDescriptions() {
                     {(jd as any).pendingReview && (
                       <span className="ml-2 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-amber-200 text-amber-800 align-middle">NEW JD for review</span>
                     )}
-                    <div className="text-gray-400 text-xs font-normal mt-0.5">Work sample: {(jd as any).workSampleUploadName ? (jd as any).workSampleUploadName : 'None uploaded'}</div>
+                    <div className="text-gray-400 text-xs font-normal mt-0.5">Work sample: {
+                      (jd as any).workSampleTaskId
+                        ? ((tasks ?? []).find((t: any) => t.id === (jd as any).workSampleTaskId)?.title ?? 'Linked task')
+                        : ((jd as any).workSampleUploadName
+                            ? (jd as any).workSampleUploadName
+                            : 'None')
+                    }</div>
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs font-medium">{getReqDept(jd.reqId)}</td>
                   <td className="px-4 py-3 text-gray-500 text-xs">{getReqLabel(jd.reqId)}</td>
