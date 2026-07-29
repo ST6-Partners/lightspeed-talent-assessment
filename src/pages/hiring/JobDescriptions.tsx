@@ -23,6 +23,7 @@ const EMPTY_FORM = {
   requiredQualifications: '',
   preferredQualifications: '',
   eppValues: [] as string[],
+  workSampleTaskId: '',
   workSampleUploadUrl: '',
   workSampleUploadName: '',
   workSampleRequired: false,
@@ -42,6 +43,7 @@ export default function JobDescriptions() {
 
   const { data: requisitions } = trpc.requisitions.list.useQuery();
   const { data: jobDescriptions, refetch } = trpc.jobDescriptions.list.useQuery();
+  const { data: tasks } = trpc.tasks.list.useQuery();
   const { data: jdQuestions } = trpc.intake.questionsForReq.useQuery({ reqId: form.reqId }, { enabled: !!editingId && !!form.reqId });
   const [uploadingWorkSample, setUploadingWorkSample] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -106,6 +108,7 @@ export default function JobDescriptions() {
       requiredQualifications: jd.requiredQualifications ?? '',
       preferredQualifications: jd.preferredQualifications ?? '',
       eppValues: Array.isArray(jd.eppValues) ? (jd.eppValues as string[]) : [],
+      workSampleTaskId: jd.workSampleTaskId ?? '',
       workSampleUploadUrl: jd.workSampleUploadUrl ?? '',
       workSampleUploadName: jd.workSampleUploadName ?? '',
       workSampleRequired: jd.workSampleRequired ?? false,
@@ -115,7 +118,7 @@ export default function JobDescriptions() {
 
   const handleSave = () => {
     if (!form.reqId || !form.jobTitle) return;
-    const payload = { ...form };
+    const payload = { ...form, workSampleTaskId: form.workSampleTaskId || null };
     if (editingId) updateMutation.mutate({ id: editingId, ...payload });
     else createMutation.mutate(payload);
   };
@@ -235,6 +238,19 @@ export default function JobDescriptions() {
             </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-1">Work Sample</label>
+              <select
+                value={form.workSampleTaskId}
+                onChange={(e) => setForm({ ...form, workSampleTaskId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+              >
+                <option value="">No work-sample task linked — use uploaded file / department default</option>
+                {(tasks ?? []).map((t: any) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title}{t.answerFormat === 'multi_select' ? ` — Pick ${t.selectCount ?? ''}` : ''}{t.status !== 'Live' ? ` (${t.status})` : ''}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1 mb-3">Link a work sample from the library. This is what candidates for this role receive.</p>
               {form.workSampleUploadUrl ? (
                 <div className="flex items-center justify-between gap-3 px-3 py-2 border border-gray-300 rounded-md text-sm">
                   <a href={form.workSampleUploadUrl} target="_blank" rel="noreferrer" className="text-ls-primary hover:underline truncate">
@@ -260,7 +276,7 @@ export default function JobDescriptions() {
                 </label>
               )}
               {uploadError && <p className="text-xs text-red-600 mt-1">{uploadError}</p>}
-              <p className="text-xs text-gray-400 mt-1">Optional placeholder — attach a work sample file for this role. (Built-in work sample tasks are paused.)</p>
+              <p className="text-xs text-gray-400 mt-1">Optional — attach a file as an alternative to linking a library task above.</p>
               <label className="flex items-center gap-2 mt-3 text-sm text-gray-700">
                 <input type="checkbox" checked={form.workSampleRequired}
                   onChange={(e) => setForm({ ...form, workSampleRequired: e.target.checked })}

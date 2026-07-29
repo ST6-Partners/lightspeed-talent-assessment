@@ -32,11 +32,12 @@ export default function TaskLibrary() {
 
   const { data: tasks, refetch } = trpc.tasks.list.useQuery();
   const { data: departments } = trpc.departments.list.useQuery();
-  const { data: jds } = trpc.jobDescriptions.list.useQuery();
+  const { data: jds, refetch: refetchJds } = trpc.jobDescriptions.list.useQuery();
   const uploadedJds = (jds ?? []).filter((j: any) => j.workSampleUploadUrl);
   const createMutation = trpc.tasks.create.useMutation({ onSuccess: () => { refetch(); close(); } });
   const updateMutation = trpc.tasks.update.useMutation({ onSuccess: () => { refetch(); close(); } });
   const deleteMutation = trpc.tasks.delete.useMutation({ onSuccess: () => refetch() });
+  const linkJdMutation = trpc.jobDescriptions.setWorkSampleTask.useMutation({ onSuccess: () => refetchJds() });
 
   const close = () => { setShowForm(false); setEditingId(null); setForm(EMPTY); };
 
@@ -311,6 +312,34 @@ export default function TaskLibrary() {
                       <div className="grid grid-cols-2 gap-3 max-w-2xl">
                         <div className="text-xs text-gray-600 bg-white border border-gray-200 rounded-md p-3"><span className="font-semibold text-gray-700">Scoring — work quality:</span> {t.scoringGuideWork || '—'}</div>
                         <div className="text-xs text-gray-600 bg-white border border-gray-200 rounded-md p-3"><span className="font-semibold text-gray-700">Scoring — AI skill:</span> {t.scoringGuideAi || '—'}</div>
+                      </div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mt-5 mb-2">Jobs using this task</div>
+                      <div className="flex flex-wrap items-center gap-2 max-w-2xl">
+                        {(jds ?? []).filter((j: any) => j.workSampleTaskId === t.id).map((j: any) => (
+                          <span key={j.id} className="inline-flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-full pl-3 pr-1.5 py-1 text-gray-700">
+                            {j.jobTitle}
+                            <button
+                              onClick={() => linkJdMutation.mutate({ id: j.id, taskId: null })}
+                              className="text-gray-400 hover:text-red-600 rounded-full p-0.5"
+                              title="Unlink from this job"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        ))}
+                        {(jds ?? []).filter((j: any) => j.workSampleTaskId === t.id).length === 0 && (
+                          <span className="text-xs text-gray-400">Not linked to any job yet.</span>
+                        )}
+                        <select
+                          value=""
+                          onChange={(e) => { if (e.target.value) linkJdMutation.mutate({ id: e.target.value, taskId: t.id }); }}
+                          className="text-xs border border-gray-300 rounded-md px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+                        >
+                          <option value="">+ Link a job…</option>
+                          {(jds ?? []).filter((j: any) => j.workSampleTaskId !== t.id).map((j: any) => (
+                            <option key={j.id} value={j.id}>{j.jobTitle}</option>
+                          ))}
+                        </select>
                       </div>
                     </td>
                   </tr>

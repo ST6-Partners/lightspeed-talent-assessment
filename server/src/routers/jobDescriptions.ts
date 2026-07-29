@@ -101,6 +101,24 @@ export const jobDescriptionsRouter = router({
       return jd;
     }),
 
+  // Link (or unlink) a library work-sample task to a JD without touching any
+  // other field — notably it does NOT clear pendingReview, so linking a task
+  // from the Task Library never accidentally publishes a draft JD.
+  setWorkSampleTask: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), taskId: z.string().uuid().nullable() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.jobDescriptions.findFirst({
+        where: eq(jobDescriptions.id, input.id),
+      });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      const [jd] = await ctx.db.update(jobDescriptions)
+        .set({ workSampleTaskId: input.taskId, updatedAt: new Date() })
+        .where(eq(jobDescriptions.id, input.id))
+        .returning();
+      await auditChange(ctx.db, ctx.user.id, input.id, 'job_descriptions', 'update');
+      return jd;
+    }),
+
   delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
