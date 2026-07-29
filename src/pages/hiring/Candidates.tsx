@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info, Archive, RotateCcw, Check } from 'lucide-react';
+import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info, Archive, RotateCcw, Check, Search } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 import { CANDIDATE_STAGES, PIPELINE_STAGES, CLOSED_STAGES as CLOSED } from '../../../server/src/domain/stages.js';
 import RoleRankingDropdown from './RoleRankingDropdown';
@@ -59,6 +59,7 @@ export default function Candidates() {
   });
   const [deptFilter, setDeptFilter] = useState('');
   const [collapsedRoles, setCollapsedRoles] = useState<Record<string, boolean>>({});
+  const [roleSearch, setRoleSearch] = useState('');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkMoveTarget, setBulkMoveTarget] = useState<Stage | ''>('');
@@ -241,6 +242,12 @@ export default function Candidates() {
       hm: jdId === 'none' ? '' : (reqById[jdById[jdId]?.reqId]?.hiringManager ?? ''),
     };
   }).sort((a, b) => b.cands.length - a.cands.length);
+
+  // Role search: filter the role list by title or department (case-insensitive).
+  const roleQuery = roleSearch.trim().toLowerCase();
+  const visibleRoleGroups = roleQuery
+    ? roleGroups.filter((g) => g.title.toLowerCase().includes(roleQuery) || (g.dept ?? '').toLowerCase().includes(roleQuery))
+    : roleGroups;
 
   const candidateRow = (c: any) => {
     const nextStage = getNextStage(c);
@@ -574,11 +581,34 @@ export default function Candidates() {
           </div>
         </div>
 
-        {roleGroups.length === 0 ? (
-          <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400 text-sm">No candidates found.</div>
+        {/* Role search — find the open role you want to view */}
+        <div className="flex items-center gap-2 mb-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={roleSearch}
+              onChange={(e) => setRoleSearch(e.target.value)}
+              placeholder="Search open roles…"
+              className="w-full pl-9 pr-8 py-1.5 text-sm rounded-md border border-gray-300 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+            />
+            {roleSearch && (
+              <button type="button" onClick={() => setRoleSearch('')} aria-label="Clear role search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {roleQuery && (
+            <span className="text-xs text-gray-500">{visibleRoleGroups.length} of {roleGroups.length} roles</span>
+          )}
+        </div>
+
+        {visibleRoleGroups.length === 0 ? (
+          <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400 text-sm">{roleQuery ? `No roles match “${roleSearch.trim()}”.` : 'No candidates found.'}</div>
         ) : (
           <div className="space-y-3">
-            {roleGroups.map((g) => {
+            {visibleRoleGroups.map((g) => {
               const collapsed = collapsedRoles[g.jdId] ?? true;
               const maxN = Math.max(1, ...FUNNEL_STAGES.map((st) => g.counts[st] ?? 0));
               return (
