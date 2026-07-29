@@ -180,7 +180,8 @@ export default function Candidates() {
   };
 
   const FUNNEL_STAGES: readonly string[] = PIPELINE_STAGES;
-  const toggleRole = (jdId: string) => setCollapsedRoles((m) => ({ ...m, [jdId]: !m[jdId] }));
+  // Roles start collapsed by default; the toggle reads the same `?? true` default so the first click expands.
+  const toggleRole = (jdId: string) => setCollapsedRoles((m) => ({ ...m, [jdId]: !(m[jdId] ?? true) }));
 
   const CLOSED_STAGES: readonly string[] = CLOSED;
   const matchesInternal = (c: any) =>
@@ -578,7 +579,7 @@ export default function Candidates() {
         ) : (
           <div className="space-y-3">
             {roleGroups.map((g) => {
-              const collapsed = collapsedRoles[g.jdId];
+              const collapsed = collapsedRoles[g.jdId] ?? true;
               const maxN = Math.max(1, ...FUNNEL_STAGES.map((st) => g.counts[st] ?? 0));
               return (
                 <div key={g.jdId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
