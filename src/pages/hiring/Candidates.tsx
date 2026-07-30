@@ -222,9 +222,20 @@ export default function Candidates() {
     switch (c.currentStage) {
       case 'Reference Check': return true;
       case 'Work Sample': return !!(c.workSampleSubmittedAt || c.workSampleScore != null);
-      case 'Phone Screen': return !!(c.phoneScreenScheduledAt && new Date(c.phoneScreenScheduledAt).getTime() < Date.now());
+      case 'Phone Screen': {
+        // Recruiter still owes availability (candidate not yet contacted), or the
+        // call already happened and a decision is due.
+        const awaitingRecruiterAvailability = !c.phoneScreenScheduledAt && !c.phoneScreenBookingOpenedAt;
+        const callHappened = !!(c.phoneScreenScheduledAt && new Date(c.phoneScreenScheduledAt).getTime() < Date.now());
+        return awaitingRecruiterAvailability || callHappened;
+      }
       default: return false;
     }
+  };
+  const needsActionReason = (c: any): string => {
+    if (c.currentStage === 'Phone Screen' && !c.phoneScreenScheduledAt && !c.phoneScreenBookingOpenedAt)
+      return 'Set your phone-screen availability so the candidate can confirm a time';
+    return 'Waiting on your decision — advance or reject this candidate';
   };
 
   // Active applicants (drives the top stat cards).
@@ -292,7 +303,7 @@ export default function Candidates() {
         <td className="px-4 py-3 font-medium text-gray-900">
           <div className="flex items-center gap-2.5">
             <span className="w-7 h-7 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center text-[11px] font-semibold shrink-0">{`${(c.firstName?.[0] ?? '')}${(c.lastName?.[0] ?? '')}`}</span>
-            <span>{c.firstName} {c.lastName}{c.isInternal && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-purple-100 text-purple-700 align-middle">Internal</span>}{c.screenRecommendation === 'review' && c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && c.currentStage !== 'Not Selected' && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-red-100 text-red-700 align-middle" title="Below the auto-advance bar — awaiting human review in the Review tab">Review</span>}{needsAction(c) && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-700 align-middle font-medium" title="Waiting on your decision — advance or reject this candidate">Needs action</span>}</span>
+            <span>{c.firstName} {c.lastName}{c.isInternal && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-purple-100 text-purple-700 align-middle">Internal</span>}{c.screenRecommendation === 'review' && c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && c.currentStage !== 'Not Selected' && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-red-100 text-red-700 align-middle" title="Below the auto-advance bar — awaiting human review in the Review tab">Review</span>}{needsAction(c) && <span className="ml-1.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-700 align-middle font-medium" title={needsActionReason(c)}>Needs action</span>}</span>
           </div>
         </td>
         <td className="px-4 py-3 text-gray-500">{c.email}</td>
