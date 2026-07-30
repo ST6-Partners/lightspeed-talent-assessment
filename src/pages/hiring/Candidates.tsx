@@ -223,18 +223,23 @@ export default function Candidates() {
       case 'Reference Check': return true;
       case 'Work Sample': return !!(c.workSampleSubmittedAt || c.workSampleScore != null);
       case 'Phone Screen': {
-        // Recruiter still owes availability (candidate not yet contacted), or the
-        // call already happened and a decision is due.
-        const awaitingRecruiterAvailability = !c.phoneScreenScheduledAt && !c.phoneScreenBookingOpenedAt;
-        const callHappened = !!(c.phoneScreenScheduledAt && new Date(c.phoneScreenScheduledAt).getTime() < Date.now());
-        return awaitingRecruiterAvailability || callHappened;
+        // Needs action until the CANDIDATE confirms a time (phoneScreenScheduledAt).
+        // Covers: recruiter still owes availability, windows sent but not yet booked,
+        // and the candidate replied "no availability" (no time set). Also flags again
+        // once a scheduled call is in the past and a decision is due.
+        const confirmed = !!c.phoneScreenScheduledAt;
+        const callHappened = confirmed && new Date(c.phoneScreenScheduledAt).getTime() < Date.now();
+        return !confirmed || callHappened;
       }
       default: return false;
     }
   };
   const needsActionReason = (c: any): string => {
-    if (c.currentStage === 'Phone Screen' && !c.phoneScreenScheduledAt && !c.phoneScreenBookingOpenedAt)
-      return 'Set your phone-screen availability so the candidate can confirm a time';
+    if (c.currentStage === 'Phone Screen' && !c.phoneScreenScheduledAt) {
+      return c.phoneScreenBookingOpenedAt
+        ? 'Phone screen not confirmed yet — the candidate hasn\u2019t booked a time (or replied that none work); follow up'
+        : 'Set your phone-screen availability so the candidate can confirm a time';
+    }
     return 'Waiting on your decision — advance or reject this candidate';
   };
 
