@@ -160,7 +160,7 @@ export async function getAssessmentByToken(db: any, token: string) {
  * the assessment complete, AI-scores the answer into a real CCAT-shaped score,
  * then runs the normal assessment gate on that real data.
  */
-export async function submitAssessment(db: any, token: string, submission: string, selections?: string[]) {
+export async function submitAssessment(db: any, token: string, submission: string, selections?: string[], eppAnswer?: 'agree' | 'disagree') {
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.assessmentToken, token) });
   if (!candidate) return { ok: false as const, reason: 'not_found' };
   if (candidate.assessmentSubmittedAt) return { ok: true as const }; // idempotent
@@ -205,10 +205,15 @@ export async function submitAssessment(db: any, token: string, submission: strin
   const clampPct = (n: number) => Math.max(1, Math.min(99, Math.round(n)));
   const ccatPercentile = clampPct(overall);
   const ccatScore = Math.max(0, Math.min(50, Math.round((overall / 100) * 50)));
+  // Placeholder EPP/values match from the self-report question ("I have good
+  // time management" — Agree/Disagree). Stands in for the Criteria EPP profile
+  // until the real CCAT/EPP key is configured; drives Role Fit + Values Match.
+  const eppMatch = eppAnswer === 'agree' ? 85 : eppAnswer === 'disagree' ? 40 : null;
 
   const notes = [
     'PLACEHOLDER ASSESSMENT (work-sample based, not a Criteria CCAT).',
     `Derived score: ${overall}/100 → CCAT raw ${ccatScore}/50, percentile ${ccatPercentile}.`,
+    eppAnswer ? `EPP self-report ("I have good time management"): ${eppAnswer} → EPP/values match ${eppMatch}%.` : '',
     gradeSummary,
     `[Submitted ${now.toISOString().slice(0, 10)}]`,
   ].filter(Boolean).join('\n');
@@ -223,6 +228,7 @@ export async function submitAssessment(db: any, token: string, submission: strin
     ccatVerbal: ccatPercentile,
     ccatMathLogic: ccatPercentile,
     ccatSpatial: ccatPercentile,
+    ...(eppMatch != null ? { eppValuesMatchScore: eppMatch, companyValuesMatchScore: eppMatch } : {}),
     updatedAt: now,
   }).where(eq(candidates.id, candidate.id));
 

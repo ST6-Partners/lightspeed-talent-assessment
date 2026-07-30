@@ -2041,9 +2041,9 @@ export const candidatesRouter = router({
 
   // ── PUBLIC: candidate submits their placeholder assessment answer ──
   assessmentSubmit: publicProcedure
-    .input(z.object({ token: z.string().min(1), submission: z.string().min(1, 'Please enter your response.').max(50000), selections: z.array(z.string().max(300)).max(50).optional() }))
+    .input(z.object({ token: z.string().min(1), submission: z.string().min(1, 'Please enter your response.').max(50000), selections: z.array(z.string().max(300)).max(50).optional(), eppAnswer: z.enum(['agree', 'disagree']).optional() }))
     .mutation(async ({ ctx, input }) => {
-      const res = await submitAssessment(ctx.db, input.token, input.submission, input.selections);
+      const res = await submitAssessment(ctx.db, input.token, input.submission, input.selections, input.eppAnswer);
       if (!res.ok) throw new TRPCError({ code: 'NOT_FOUND', message: 'This assessment link is invalid or has expired.' });
       return { ok: true };
     }),

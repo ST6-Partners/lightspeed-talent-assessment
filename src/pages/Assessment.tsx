@@ -4,12 +4,14 @@ import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
 // Placeholder assessment (used while there's no live Criteria/CCAT key). The
-// candidate opens the emailed link, answers one work-sample question, and
-// submits — capturing a real response instead of randomly-simulated scores.
+// candidate opens the emailed link, answers the work-sample question plus a
+// short self-report (the EPP stand-in), and submits — capturing a real response
+// instead of randomly-simulated scores.
 export default function Assessment() {
   const { token = '' } = useParams();
   const [submission, setSubmission] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
+  const [eppAnswer, setEppAnswer] = useState<'agree' | 'disagree' | ''>('');
   const [done, setDone] = useState(false);
 
   const { data, isLoading, error } = trpc.candidates.assessmentGetByToken.useQuery(
@@ -71,99 +73,110 @@ export default function Assessment() {
     );
   }
 
+  const isMulti = (data as any).answerFormat === 'multi_select';
+  const selectCount = (data as any).selectCount as number | null;
+  const mainValid = isMulti ? selected.length === selectCount : submission.trim() !== '';
+  const canSubmit = mainValid && !!eppAnswer && !submitMutation.isLoading;
+
+  const handleSubmit = () =>
+    submitMutation.mutate({
+      token,
+      submission: isMulti ? selected.join(', ') : submission,
+      selections: isMulti ? selected : undefined,
+      eppAnswer: eppAnswer || undefined,
+    });
+
   return (
     <Shell>
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h1 className="text-xl font-bold text-gray-900">Assessment{data.jobTitle ? ` — ${data.jobTitle}` : ''}</h1>
         <p className="text-gray-500 text-sm mt-1">
-          Hi {data.firstName}, please answer the question below and submit. There's no time pressure beyond the deadline in your email.
+          Hi {data.firstName}, please answer the questions below and submit. There's no time pressure beyond the deadline in your email.
         </p>
 
+        {/* Main question (work sample) */}
         <div className="mt-5 bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Question</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Question 1</div>
           {data.taskTitle && <div className="text-sm font-semibold text-gray-900 mb-2">{data.taskTitle}</div>}
           <div className="text-sm text-gray-700 whitespace-pre-line">
             {data.instructions || 'The hiring team will share the assessment details.'}
           </div>
         </div>
 
-        {(data as any).answerFormat === 'multi_select' ? (
-          <>
-            <div className="mt-5">
-              <label className="block text-xs font-medium text-gray-600 mb-2">
-                Choose {(data as any).selectCount}
-                {typeof (data as any).selectCount === 'number' && (
-                  <span className="text-gray-400 font-normal"> ({selected.length}/{(data as any).selectCount} selected)</span>
-                )}
-              </label>
-              <div className="space-y-2">
-                {(((data as any).options as string[] | null) ?? []).map((opt) => {
-                  const checked = selected.includes(opt);
-                  const limit = (data as any).selectCount as number | null;
-                  const atLimit = typeof limit === 'number' && selected.length >= limit;
-                  return (
-                    <label
-                      key={opt}
-                      className={`flex items-center gap-2 px-3 py-2 border rounded-md text-sm cursor-pointer ${checked ? 'border-ls-cyan bg-cyan-50' : 'border-gray-300'} ${!checked && atLimit ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        disabled={!checked && atLimit}
-                        onChange={() =>
-                          setSelected((prev) => (checked ? prev.filter((x) => x !== opt) : [...prev, opt]))
-                        }
-                        className="accent-ls-cyan"
-                      />
-                      <span className="text-gray-800">{opt}</span>
-                    </label>
-                  );
-                })}
-              </div>
+        {isMulti ? (
+          <div className="mt-4">
+            <label className="block text-xs font-medium text-gray-600 mb-2">
+              Choose {selectCount}
+              {typeof selectCount === 'number' && (
+                <span className="text-gray-400 font-normal"> ({selected.length}/{selectCount} selected)</span>
+              )}
+            </label>
+            <div className="space-y-2">
+              {(((data as any).options as string[] | null) ?? []).map((opt) => {
+                const checked = selected.includes(opt);
+                const atLimit = typeof selectCount === 'number' && selected.length >= selectCount;
+                return (
+                  <label
+                    key={opt}
+                    className={`flex items-center gap-2 px-3 py-2 border rounded-md text-sm cursor-pointer ${checked ? 'border-ls-cyan bg-cyan-50' : 'border-gray-300'} ${!checked && atLimit ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={!checked && atLimit}
+                      onChange={() => setSelected((prev) => (checked ? prev.filter((x) => x !== opt) : [...prev, opt]))}
+                      className="accent-ls-cyan"
+                    />
+                    <span className="text-gray-800">{opt}</span>
+                  </label>
+                );
+              })}
             </div>
-
-            {submitMutation.error && (
-              <p className="mt-3 text-sm text-red-600">{submitMutation.error.message}</p>
-            )}
-
-            <div className="mt-5">
-              <button
-                onClick={() => submitMutation.mutate({ token, submission: selected.join(', '), selections: selected })}
-                disabled={selected.length !== (data as any).selectCount || submitMutation.isLoading}
-                className="px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50"
-              >
-                {submitMutation.isLoading ? 'Submitting…' : 'Submit assessment'}
-              </button>
-            </div>
-          </>
+          </div>
         ) : (
-          <>
-            <div className="mt-5">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Your response *</label>
-              <textarea
-                value={submission}
-                onChange={(e) => setSubmission(e.target.value)}
-                rows={10}
-                placeholder="Write your response here…"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
-              />
-            </div>
-
-            {submitMutation.error && (
-              <p className="mt-3 text-sm text-red-600">{submitMutation.error.message}</p>
-            )}
-
-            <div className="mt-5">
-              <button
-                onClick={() => submitMutation.mutate({ token, submission })}
-                disabled={!submission.trim() || submitMutation.isLoading}
-                className="px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50"
-              >
-                {submitMutation.isLoading ? 'Submitting…' : 'Submit assessment'}
-              </button>
-            </div>
-          </>
+          <div className="mt-4">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Your response *</label>
+            <textarea
+              value={submission}
+              onChange={(e) => setSubmission(e.target.value)}
+              rows={10}
+              placeholder="Write your response here…"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+            />
+          </div>
         )}
+
+        {/* EPP self-report question (placeholder EPP/values-match basis) */}
+        <div className="mt-6 bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Question 2</div>
+          <div className="text-sm font-semibold text-gray-900 mb-3">I have good time management.</div>
+          <div className="flex gap-2">
+            {(['agree', 'disagree'] as const).map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setEppAnswer(opt)}
+                className={`px-5 py-2 rounded-md text-sm border ${eppAnswer === opt ? 'border-ls-cyan bg-cyan-50 text-gray-900 font-semibold' : 'border-gray-300 text-gray-700 hover:border-gray-400'}`}
+              >
+                {opt === 'agree' ? 'Agree' : 'Disagree'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {submitMutation.error && (
+          <p className="mt-3 text-sm text-red-600">{submitMutation.error.message}</p>
+        )}
+
+        <div className="mt-5">
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit}
+            className="px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50"
+          >
+            {submitMutation.isLoading ? 'Submitting…' : 'Submit assessment'}
+          </button>
+        </div>
       </div>
     </Shell>
   );
