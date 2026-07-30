@@ -228,7 +228,15 @@ export async function submitAssessment(db: any, token: string, submission: strin
     ccatVerbal: ccatPercentile,
     ccatMathLogic: ccatPercentile,
     ccatSpatial: ccatPercentile,
-    ...(eppMatch != null ? { eppValuesMatchScore: eppMatch, companyValuesMatchScore: eppMatch } : {}),
+    ...(eppMatch != null ? {
+      eppValuesMatchScore: eppMatch,
+      companyValuesMatchScore: eppMatch,
+      companyValuesNotes:
+        `Placeholder EPP/values match: ${eppMatch}% — from the assessment self-report ` +
+        `("I have good time management": ${eppAnswer}). This candidate is in Candidate Review for a ` +
+        `human decision because the automated values gate needs the full Criteria EPP profile to ` +
+        `auto-advance; that full trait breakdown will populate when the Criteria EPP feed is connected.`,
+    } : {}),
     updatedAt: now,
   }).where(eq(candidates.id, candidate.id));
 

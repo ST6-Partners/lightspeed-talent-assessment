@@ -114,7 +114,10 @@ export async function computeAndStoreScreen(
     skillsFitNotes: skills.summary,
     ...(eppMatch != null ? { eppValuesMatchScore: eppMatch } : {}),
     ...(companyValuesMatch != null ? { companyValuesMatchScore: companyValuesMatch } : {}),
-    companyValuesNotes: buildRoleFitNotes(eppScans),
+    // Only overwrite the values note when there is REAL EPP data. In placeholder
+    // mode (no EPP scans) keep whatever the placeholder assessment wrote, so the
+    // review banner shows the accurate placeholder note, not "no EPP results".
+    ...(eppScans.hasEpp ? { companyValuesNotes: buildRoleFitNotes(eppScans) } : {}),
     screenScore: composite,
     screenRecommendation: recommendation,
     ...(recommendation === 'review' ? {
