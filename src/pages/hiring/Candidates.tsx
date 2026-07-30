@@ -944,10 +944,10 @@ function PipelineStages({ candidate, wsApplicable, nextStage, onAdvance, onRejec
               </div>
               {done ? (
                 <Check size={16} className="text-emerald-600 shrink-0" />
-              ) : !closed ? (
+              ) : current && !closed ? (
                 <span className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                  {(!current || nextStage) && (
-                    <button onClick={() => onAdvance(current ? (nextStage as string) : name)} disabled={advancing} className="text-[11px] font-semibold px-2.5 py-1 rounded-md border border-emerald-500 text-emerald-600 hover:bg-emerald-500 hover:text-white disabled:opacity-50">Advance</button>
+                  {nextStage && (
+                    <button onClick={() => onAdvance(nextStage as string)} disabled={advancing} className="text-[11px] font-semibold px-2.5 py-1 rounded-md border border-emerald-500 text-emerald-600 hover:bg-emerald-500 hover:text-white disabled:opacity-50">Advance</button>
                   )}
                   <button onClick={onReject} className="text-[11px] font-semibold px-2.5 py-1 rounded-md border border-red-400 text-red-500 hover:bg-red-500 hover:text-white">Reject</button>
                 </span>
