@@ -110,6 +110,7 @@ export async function computeAndStoreScreen(
   await db.update(candidates).set({
     resumeReviewScore: requirements.totalCount ? Math.round((requirements.metCount / requirements.totalCount) * 100) : null,
     resumeReviewNotes: requirements.summary + (niceToHaves.missing.length ? ` Nice-to-haves missing: ${niceToHaves.missing.join('; ')}.` : ''),
+    resumeRequirementChecks: requirements.requirements ?? null,
     skillsFitScore: skills.score,
     skillsFitNotes: skills.summary,
     ...(eppMatch != null ? { eppValuesMatchScore: eppMatch } : {}),

@@ -195,6 +195,7 @@ export const candidates = pgTable('candidates', {
   resumeReviewScore: integer('resume_review_score'),
   // Work sample + resume notes
   resumeReviewNotes: text('resume_review_notes'),
+  resumeRequirementChecks: jsonb('resume_requirement_checks').$type<{ requirement: string; met: boolean; evidence?: string }[]>(),
   valuesMatchNotes: text('values_match_notes'),
   // Combined screen (resume + values + skills) — one automated screen result
   skillsFitScore: integer('skills_fit_score'),

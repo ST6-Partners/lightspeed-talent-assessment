@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ResumeRequirements from '../../components/ResumeRequirements';
 import { ChevronDown } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
@@ -115,6 +116,10 @@ export default function ReviewQueue() {
                   <div className="text-sm font-medium text-gray-900">{value ?? '—'}</div>
                 </div>
               ))}
+            </div>
+
+            <div className="mb-4">
+              <ResumeRequirements checks={(selected as any).resumeRequirementChecks} />
             </div>
 
             {rankRead.data && (

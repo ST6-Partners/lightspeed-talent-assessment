@@ -1,4 +1,5 @@
 import { useState, useEffect, Fragment } from 'react';
+import ResumeRequirements from '../../components/ResumeRequirements';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, X, ChevronRight, ChevronLeft, Ban, ChevronDown, Trash2, Info, Archive, RotateCcw, Check, Search } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
@@ -822,6 +823,7 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
             <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Role Fit Match</div><div className="text-base font-bold text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</div></div>
             <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Resume Review</div><div className="text-base font-bold text-gray-900">{c.resumeReviewScore ?? '—'}</div></div>
           </div>
+          <ResumeRequirements checks={(c as any).resumeRequirementChecks} />
           {c.companyValuesNotes ? (
             <div><div className="font-semibold text-gray-700 mb-0.5">Role-fit notes</div><div className="whitespace-pre-wrap">{c.companyValuesNotes}</div></div>
           ) : null}

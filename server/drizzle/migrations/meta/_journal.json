@@ -624,6 +624,13 @@
       "when": 1960000059000,
       "tag": "0088_awareness_email",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1960000060000,
+      "tag": "0089_resume_requirement_checks",
+      "breakpoints": true
     }
   ]
 }
