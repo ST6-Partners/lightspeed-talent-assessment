@@ -599,8 +599,18 @@ export const candidatesRouter = router({
       // Keep the role's ranking live: score this new applicant and slot them in (fire-and-forget).
       rankOneCandidateIntoRole(ctx.db, candidate.id, ctx.user.id).catch((err) => console.error('[create] live ranking failed:', err));
 
-      // Normal path — fire emails (non-blocking)
-      emailApplicationReceived({ ...candidateData, jobTitle }).catch((err) => console.warn('[email] emailApplicationReceived failed (non-blocking):', err));
+      // Normal path — fire emails (non-blocking).
+      // In placeholder mode (no CRITERIA_API_KEY) mint the tokenized assessment
+      // link now so the confirmation email carries a working "Start Assessment"
+      // button; the candidate can begin right away. In real-Criteria mode there
+      // is no immediate link (the invite goes out when they reach Assessment),
+      // so the button is simply omitted.
+      let applicationAssessmentLink: string | undefined;
+      if (!isCriteriaConfigured()) {
+        const inv = await ensureAssessmentInvite(ctx.db, candidate).catch((err) => { console.warn('[create] ensure assessment invite failed:', err); return null; });
+        applicationAssessmentLink = inv?.link;
+      }
+      emailApplicationReceived({ ...candidateData, jobTitle, assessmentLink: applicationAssessmentLink }).catch((err) => console.warn('[email] emailApplicationReceived failed (non-blocking):', err));
       emailNewApplicationHR({ ...candidateData, jobTitle }).catch((err) => console.warn('[email] emailNewApplicationHR failed (non-blocking):', err));
 
       // Voluntary EEO self-ID: auto-offer at application time when enabled

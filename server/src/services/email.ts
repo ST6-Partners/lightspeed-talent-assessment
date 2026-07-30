@@ -215,7 +215,10 @@ export async function emailApplicationReceived(data: CandidateEmailData) {
     html: wrap(`
       ${h1('Thanks for applying!')}
       ${p(`Hi ${data.firstName},`)}
-      ${p(`We received your application for <strong>${data.jobTitle ?? 'the position'}</strong> at Lightspeed Systems. Our team will review it and be in touch within a few business days.`)}
+      ${p(`We received your application for <strong>${data.jobTitle ?? 'the position'}</strong> at Lightspeed Systems.`)}
+      ${data.assessmentLink
+        ? p('Your next step is a short cognitive and values assessment (about 30–45 minutes). You can start it right now:') + button('Start Assessment', data.assessmentLink)
+        : p('Our team will review it and be in touch within a few business days.')}
       ${p('In the meantime, feel free to learn more about us at <a href="https://lightspeedsystems.com">lightspeedsystems.com</a>.')}
       ${p('Thanks again for your interest in Lightspeed!')}
     `),
