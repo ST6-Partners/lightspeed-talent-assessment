@@ -23,6 +23,7 @@ import { employees } from '../db/schema/employees.js';
 import { interviewerAvailability } from '../db/schema/interviewerAvailability.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { interviewPlan, hiringTeam } from '../db/schema/intake.js';
+import { INTERVIEW_WINDOW_HOURS } from './interviews.js';
 import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX } from '../services/email.js';
 
 // Capability tokens for the interviewer "can't interview for this role" link that
@@ -64,6 +65,83 @@ function prefillCalendlyUrl(base: string, name: string, email: string, token: st
   const sep = base.includes('?') ? '&' : '?';
   const params = new URLSearchParams({ name, email, utm_content: token });
   return `${base}${sep}${params.toString()}`;
+}
+
+// ── Interviewer availability window (progressive narrowing) ────────────────
+// Before anyone submits, interviews target 3–4 weeks after the role opened.
+// Once the first interviewer submits, the window clamps to ±INTERVIEW_WINDOW_HOURS
+// business hours around their earliest offered slot. Once a second submits AND
+// there are more than 2 rounds, it collapses to a single INTERVIEW_WINDOW_HOURS-
+// business-hour span containing the first two, so every remaining round lands in
+// one tight cluster. Weekends never count. Derived live (no stored state) from the
+// role's postedAt, its interview rounds, and who has submitted so far.
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function addBusinessHours(startMs: number, hours: number): number {
+  const STEP = 15 * 60 * 1000;
+  let remaining = Math.abs(hours) * 3_600_000;
+  const dir = hours >= 0 ? 1 : -1;
+  let t = startMs;
+  let guard = 0;
+  while (remaining > 0 && guard++ < 200000) {
+    if (dir > 0) {
+      const day = new Date(t).getDay();
+      if (day !== 0 && day !== 6) remaining -= STEP;
+      t += STEP;
+    } else {
+      t -= STEP;
+      const day = new Date(t).getDay();
+      if (day !== 0 && day !== 6) remaining -= STEP;
+    }
+  }
+  return t;
+}
+
+function earliestSlotMs(windows: any): number | null {
+  if (!Array.isArray(windows)) return null;
+  let min: number | null = null;
+  for (const w of windows) {
+    if (!w?.date) continue;
+    const ms = Date.parse(`${w.date}T${w.start || '00:00'}`);
+    if (!Number.isNaN(ms)) min = min == null ? ms : Math.min(min, ms);
+  }
+  return min;
+}
+
+interface AvailWindow { start: Date; end: Date; stage: number; }
+
+async function computeAvailabilityWindow(db: any, reqId: string, excludeEmail?: string): Promise<AvailWindow> {
+  const req = (await db.select().from(jobRequisitions).where(eq(jobRequisitions.id, reqId)).limit(1))[0];
+  const base = req?.postedAt ? new Date(req.postedAt).getTime()
+    : req?.createdAt ? new Date(req.createdAt).getTime() : Date.now();
+  const stage0 = (): AvailWindow => ({ start: new Date(base + 21 * DAY_MS), end: new Date(base + 28 * DAY_MS), stage: 0 });
+
+  const rounds = await db.select().from(interviewPlan).where(eq(interviewPlan.reqId, reqId));
+  const roundCount = rounds.length;
+
+  let subs = await db.select().from(interviewerAvailability)
+    .where(eq(interviewerAvailability.reqId, reqId)).orderBy(asc(interviewerAvailability.submittedAt));
+  if (excludeEmail) subs = subs.filter((r: any) => (r.email || '').toLowerCase() !== excludeEmail.toLowerCase());
+  if (subs.length === 0) return stage0();
+
+  const t1 = earliestSlotMs(subs[0].windows);
+  if (t1 == null) return stage0();
+
+  if (subs.length >= 2 && roundCount > 2) {
+    const t2 = earliestSlotMs(subs[1].windows);
+    const b = t2 == null ? t1 : Math.min(t1, t2);
+    return { start: new Date(b), end: new Date(addBusinessHours(b, INTERVIEW_WINDOW_HOURS)), stage: 2 };
+  }
+  return {
+    start: new Date(addBusinessHours(t1, -INTERVIEW_WINDOW_HOURS)),
+    end: new Date(addBusinessHours(t1, INTERVIEW_WINDOW_HOURS)),
+    stage: 1,
+  };
+}
+
+function fmtWindowRange(start: Date, end: Date): string {
+  const opt: Intl.DateTimeFormatOptions = { weekday: 'short', month: 'short', day: 'numeric' };
+  return `${start.toLocaleDateString('en-US', opt)} – ${end.toLocaleDateString('en-US', opt)}`;
 }
 
 export const schedulingRouter = router({
@@ -343,12 +421,16 @@ export const schedulingRouter = router({
       const jd = (await ctx.db.select().from(jobDescriptions).where(eq(jobDescriptions.reqId, req.id)).limit(1))[0];
       const existing = (await ctx.db.select().from(interviewerAvailability)
         .where(and(eq(interviewerAvailability.reqId, dec.reqId), eq(interviewerAvailability.email, dec.email))).limit(1))[0];
+      const win = await computeAvailabilityWindow(ctx.db, dec.reqId, dec.email);
       return {
         role: `${req.department}${jd?.jobTitle ? ' · ' + jd.jobTitle : ''}`,
         interviewerEmail: dec.email,
         windows: (existing?.windows as any) ?? null,
         note: existing?.note ?? null,
         alreadySubmitted: !!existing,
+        windowStart: win.start.toISOString(),
+        windowEnd: win.end.toISOString(),
+        stage: win.stage,
       };
     }),
 
@@ -372,6 +454,24 @@ export const schedulingRouter = router({
       const jd = (await ctx.db.select().from(jobDescriptions).where(eq(jobDescriptions.reqId, req.id)).limit(1))[0];
       const emp = (await ctx.db.select().from(employees).where(eq(employees.email, dec.email)).limit(1))[0];
       const name = (emp as any)?.name ?? null;
+
+      // Enforce the progressive interview window (based on everyone who submitted
+      // before this person; excludes their own prior row so a re-submit isn't self-blocked).
+      const win = await computeAvailabilityWindow(ctx.db, dec.reqId, dec.email);
+      const ws = win.start.getTime();
+      const we = win.end.getTime();
+      const outOfWindow = input.windows.some((w) => {
+        const st = Date.parse(`${w.date}T${w.start || '00:00'}`);
+        const en = Date.parse(`${w.date}T${w.end || w.start || '23:59'}`);
+        if (Number.isNaN(st)) return true;
+        return st < ws || (Number.isNaN(en) ? st > we : en > we);
+      });
+      if (outOfWindow) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Please choose times within this role's interview window (${fmtWindowRange(win.start, win.end)}) so all rounds stay close together. If you can't make that window, use the "I can't interview" option instead.`,
+        });
+      }
 
       const existing = (await ctx.db.select().from(interviewerAvailability)
         .where(and(eq(interviewerAvailability.reqId, dec.reqId), eq(interviewerAvailability.email, dec.email))).limit(1))[0];

@@ -62,15 +62,24 @@ export default function InterviewerAvailability() {
   const filled = rows.filter((r) => r.date && r.start && r.end);
   const canSubmit = filled.length > 0 && !submit.isLoading;
 
+  const winStart = (ctx.data as any)?.windowStart ? (ctx.data as any).windowStart.slice(0, 10) : undefined;
+  const winEnd = (ctx.data as any)?.windowEnd ? (ctx.data as any).windowEnd.slice(0, 10) : undefined;
+  const fmtWin = (iso?: string) => (iso ? new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '');
+
   return (
     <Card>
       <h1 className="text-lg font-bold text-ls-ink mb-1">Set your interview availability</h1>
       <p className="text-sm text-ls-ink-2 mb-4">You’re on the interview team for <strong>{ctx.data!.role}</strong>. Add the dates and times you’re free and submit — no login needed.</p>
+      {(ctx.data as any)!.windowStart && (
+        <div className="mb-4 px-3 py-2 rounded-lg bg-cyan-50 border border-cyan-200 text-xs text-ls-ink-2">
+          To keep this role’s interviews close together, please offer times between <strong>{fmtWin((ctx.data as any).windowStart)}</strong> and <strong>{fmtWin((ctx.data as any).windowEnd)}</strong>.
+        </div>
+      )}
 
       <div className="space-y-2">
         {rows.map((r, i) => (
           <div key={i} className="flex items-center gap-2">
-            <input type="date" value={r.date} onChange={(e) => setRow(i, { date: e.target.value })}
+            <input type="date" value={r.date} min={winStart} max={winEnd} onChange={(e) => setRow(i, { date: e.target.value })}
               className="flex-1 px-2 py-2 border border-ls-line rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
             <input type="time" value={r.start} onChange={(e) => setRow(i, { start: e.target.value })}
               className="px-2 py-2 border border-ls-line rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
