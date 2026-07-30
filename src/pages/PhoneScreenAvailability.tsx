@@ -3,61 +3,62 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, CalendarClock } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
+type Win = { date: string; start: string; end: string };
+const EMPTY_ROW: Win = { date: '', start: '', end: '' };
+
+// Card defined at module scope (not inside the component) so its identity is stable
+// across renders — otherwise the date/time inputs remount on each keystroke and lose focus.
+const Card = ({ children }: { children: React.ReactNode }) => (
+  <div className="min-h-screen bg-ls-bg flex items-center justify-center p-4">
+    <div className="w-full max-w-lg">
+      <div className="flex items-center gap-3 mb-5">
+        <svg width="30" height="30" viewBox="0 0 40 40" fill="none" stroke="#4FA9D6" strokeWidth="3.6" strokeLinecap="round">
+          <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5" />
+          <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5" />
+          <line x1="5" y1="14" x2="11.5" y2="14" />
+          <line x1="28.5" y1="26" x2="35" y2="26" />
+        </svg>
+        <div className="leading-tight">
+          <div className="font-bold text-[15px] text-gray-900">Lightspeed</div>
+          <div className="text-[11px] text-gray-500">Talent Assessment</div>
+        </div>
+      </div>
+      <div className="bg-white rounded-lg border border-gray-200 p-6">{children}</div>
+    </div>
+  </div>
+);
+
 export default function PhoneScreenAvailability() {
   const { token = '' } = useParams();
-  const [availability, setAvailability] = useState('');
+  const [rows, setRows] = useState<Win[]>([{ ...EMPTY_ROW }]);
+  const [note, setNote] = useState('');
   const [done, setDone] = useState(false);
 
   const { data, isLoading, error, refetch } = trpc.scheduling.phoneScreenSchedulingContext.useQuery(
     { token },
     { enabled: !!token, retry: false },
   );
-
   const submit = trpc.scheduling.submitPhoneScreenAvailability.useMutation({
     onSuccess: () => { setDone(true); refetch(); },
   });
 
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className="min-h-screen bg-ls-bg flex items-center justify-center p-4">
-      <div className="w-full max-w-xl">
-        <div className="flex items-center gap-3 mb-5">
-          <svg width="30" height="30" viewBox="0 0 40 40" fill="none" stroke="#4FA9D6" strokeWidth="3.6" strokeLinecap="round">
-            <path d="M11 8 a8.5 8.5 0 0 1 8.5 8.5 v7 a8.5 8.5 0 0 0 8.5 8.5" />
-            <path d="M29 8 a8.5 8.5 0 0 0 -8.5 8.5 v7 a8.5 8.5 0 0 1 -8.5 8.5" />
-            <line x1="5" y1="14" x2="11.5" y2="14" />
-            <line x1="28.5" y1="26" x2="35" y2="26" />
-          </svg>
-          <div className="leading-tight">
-            <div className="font-bold text-[15px] text-gray-900">Lightspeed</div>
-            <div className="text-[11px] text-gray-500">Talent Assessment</div>
-          </div>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-
-  if (isLoading) {
-    return <Shell><div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400 text-sm">Loading…</div></Shell>;
-  }
+  if (isLoading) return <Card><p className="text-sm text-gray-400">Loading…</p></Card>;
   if (error || !data) {
     return (
-      <Shell>
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+      <Card>
+        <div className="text-center">
           <AlertCircle className="mx-auto mb-3 text-red-500" size={28} />
           <h1 className="font-semibold text-gray-900 mb-1">Link not found</h1>
           <p className="text-sm text-gray-500">This availability link is invalid or has expired.</p>
         </div>
-      </Shell>
+      </Card>
     );
   }
 
-  const alreadySubmitted = done || data.submitted;
-
-  if (alreadySubmitted) {
+  if (done || data.submitted) {
     return (
-      <Shell>
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+      <Card>
+        <div className="text-center">
           <CheckCircle2 className="mx-auto mb-3 text-green-600" size={28} />
           <h1 className="font-semibold text-gray-900 mb-1">Availability sent to the candidate</h1>
           <p className="text-sm text-gray-500">
@@ -65,36 +66,58 @@ export default function PhoneScreenAvailability() {
             {data.candidateBooked ? ' They have already confirmed a time.' : ' You’ll be notified when they pick a time, or if none of them work.'}
           </p>
         </div>
-      </Shell>
+      </Card>
     );
   }
 
+  const setRow = (i: number, patch: Partial<Win>) =>
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+  const addRow = () => setRows((prev) => [...prev, { ...EMPTY_ROW }]);
+  const removeRow = (i: number) => setRows((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+
+  const filled = rows.filter((r) => r.date && r.start && r.end);
+  const canSubmit = filled.length > 0 && !submit.isLoading;
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   return (
-    <Shell>
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <CalendarClock className="mb-3 text-ls-primary" size={26} />
-        <h1 className="text-xl font-bold text-gray-900">Set your availability for a phone screen</h1>
-        <p className="text-gray-500 text-sm mt-1 mb-4">
-          <strong>{data.candidateName}</strong>{data.jobTitle ? ` — ${data.jobTitle}` : ''} is ready for a phone screen. List a few windows that work for you.
-          The candidate is emailed these times to confirm — they are not contacted until you submit.
-        </p>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Your availability</label>
-        <textarea
-          value={availability}
-          onChange={(e) => setAvailability(e.target.value)}
-          rows={5}
-          placeholder={'e.g.\nTue Aug 4, 2:00–4:00pm ET\nWed Aug 5, 10:00am–12:00pm ET\nThu Aug 6, after 1:00pm ET'}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
-        />
-        {submit.error && <p className="text-xs text-red-600 mt-2">{submit.error.message}</p>}
-        <button
-          onClick={() => submit.mutate({ token, availability: availability.trim() })}
-          disabled={!availability.trim() || submit.isLoading}
-          className="mt-3 px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50"
-        >
-          {submit.isLoading ? 'Sending…' : 'Send availability to candidate'}
-        </button>
+    <Card>
+      <CalendarClock className="mb-3 text-ls-primary" size={26} />
+      <h1 className="text-xl font-bold text-gray-900">Set your availability for a phone screen</h1>
+      <p className="text-gray-500 text-sm mt-1 mb-4">
+        <strong>{data.candidateName}</strong>{data.jobTitle ? ` — ${data.jobTitle}` : ''} is ready for a phone screen. Add the dates and times you’re free.
+        The candidate is emailed these windows to confirm — they are not contacted until you submit.
+      </p>
+
+      <div className="space-y-2">
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input type="date" value={r.date} min={todayStr} onChange={(e) => setRow(i, { date: e.target.value })}
+              className="flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+            <input type="time" value={r.start} onChange={(e) => setRow(i, { start: e.target.value })}
+              className="px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+            <span className="text-gray-400 text-sm">to</span>
+            <input type="time" value={r.end} onChange={(e) => setRow(i, { end: e.target.value })}
+              className="px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+            <button type="button" onClick={() => removeRow(i)} disabled={rows.length === 1}
+              className="text-gray-400 hover:text-red-600 text-lg leading-none px-1 disabled:opacity-30" title="Remove">×</button>
+          </div>
+        ))}
       </div>
-    </Shell>
+      <button type="button" onClick={addRow} className="mt-2 text-sm font-medium text-ls-primary hover:underline">+ Add another time</button>
+
+      <label className="block text-xs font-medium text-gray-600 mt-4 mb-1">Note (optional)</label>
+      <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2}
+        placeholder="e.g. prefer mornings; I'll call the number on file"
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+
+      {submit.error && <p className="text-sm text-red-600 mb-2">{submit.error.message}</p>}
+      <button
+        onClick={() => submit.mutate({ token, windows: filled, note: note.trim() || undefined })}
+        disabled={!canSubmit}
+        className="w-full py-2.5 rounded-lg bg-ls-primary text-white font-semibold text-sm hover:bg-ls-primary-600 disabled:opacity-50"
+      >
+        {submit.isLoading ? 'Sending…' : 'Send availability to candidate'}
+      </button>
+    </Card>
   );
 }

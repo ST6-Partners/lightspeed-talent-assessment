@@ -53,6 +53,23 @@ function appBaseUrl(): string {
   return '';
 }
 
+// Format a recruiter-entered availability window into a readable line for the
+// candidate email / confirmation page (stored as text in phone_screen_availability).
+function fmtClock(t: string): string {
+  const [h, m] = String(t).split(':').map((x) => parseInt(x, 10));
+  if (Number.isNaN(h)) return String(t);
+  const ap = h < 12 ? 'AM' : 'PM';
+  const h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${String(Number.isNaN(m) ? 0 : m).padStart(2, '0')} ${ap}`;
+}
+function fmtAvailabilityWindow(w: { date: string; start: string; end: string }): string {
+  const d = new Date(`${w.date}T00:00:00`);
+  const day = Number.isNaN(d.getTime())
+    ? w.date
+    : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return `${day} · ${fmtClock(w.start)} – ${fmtClock(w.end)}`;
+}
+
 async function jobTitleFor(db: any, jdId: string | null | undefined): Promise<string | undefined> {
   if (!jdId) return undefined;
   const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, jdId) });
@@ -320,13 +337,23 @@ export const schedulingRouter = router({
 
   // ── PUBLIC: recruiter submits availability → candidate is emailed the window ─
   submitPhoneScreenAvailability: publicProcedure
-    .input(z.object({ token: z.string().min(1), availability: z.string().min(1).max(4000) }))
+    .input(z.object({
+      token: z.string().min(1),
+      windows: z.array(z.object({
+        date: z.string().min(1),
+        start: z.string().min(1),
+        end: z.string().min(1),
+      })).min(1).max(20),
+      note: z.string().max(500).optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenRecruiterToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
+      const availabilityText = input.windows.map(fmtAvailabilityWindow).join('\n')
+        + (input.note && input.note.trim() ? `\n\nNote: ${input.note.trim()}` : '');
       const bookingToken = candidate.phoneScreenBookingToken ?? randomUUID();
       await ctx.db.update(candidates).set({
-        phoneScreenAvailability: input.availability,
+        phoneScreenAvailability: availabilityText,
         phoneScreenBookingToken: bookingToken,
         phoneScreenBookingOpenedAt: new Date(),
         updatedAt: new Date(),
@@ -335,7 +362,7 @@ export const schedulingRouter = router({
       const bookingUrl = `${appBaseUrl()}/book-interview/${bookingToken}`;
       await emailPhoneScreenCandidateWindow({
         email: candidate.email, firstName: candidate.firstName, jobTitle,
-        availability: input.availability, bookingUrl,
+        availability: availabilityText, bookingUrl,
       }).catch((err) => console.error('[scheduling.submitPhoneScreenAvailability] candidate email failed:', err));
       return { ok: true as const };
     }),
