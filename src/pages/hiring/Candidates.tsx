@@ -1416,7 +1416,7 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged, defaul
   return (
     <Section title="Screen - resume" defaultOpen={defaultOpen}>
       <div className="text-xs text-gray-500">
-        One automated screen for the 200 \u2192 20 gate. It checks the resume against the job's <strong>required</strong> qualifications (missing any, or needing sponsorship, auto-rejects), grades <strong>skills fit</strong> and <strong>values match</strong>, and gives one recommendation. Skills and values inform the call but never reject on their own. Scores are provisional \u2014 calibrate before relying on them.
+        One automated screen for the 200 \u2192 20 gate, run automatically when the candidate reaches Candidate Review \u2014 no manual step. It checks the resume against the job's <strong>required</strong> qualifications, grades <strong>skills fit</strong> and <strong>values match</strong>, and gives one recommendation. Skills and values inform the call but never reject on their own. Scores are provisional \u2014 calibrate before relying on them.
       </div>
 
       {resumeUrl ? (
@@ -1424,17 +1424,6 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged, defaul
       ) : (
         <div className="text-xs text-gray-400 italic">{hasStoredResume ? 'Resume on file.' : 'No resume on file yet — it attaches automatically when the candidate applies.'}</div>
       )}
-      <label className="flex items-center gap-1.5 text-xs text-gray-600">
-        <input type="checkbox" checked={needsSponsorship} onChange={(e) => setNeedsSponsorship(e.target.checked)} />
-        Requires international sponsorship (knockout)
-      </label>
-      <button
-        onClick={() => screen.mutate({ id: candidateId, needsSponsorship })}
-        disabled={!hasStoredResume || screen.isLoading}
-        className="text-xs px-3 py-1.5 bg-ls-primary text-white rounded font-medium hover:bg-ls-primary-600 disabled:opacity-50"
-      >
-        {screen.isLoading ? 'Screening\u2026' : 'Run screen'}
-      </button>
 
       {result && (
         <div className="mt-2 space-y-2">

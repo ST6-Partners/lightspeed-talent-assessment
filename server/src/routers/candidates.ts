@@ -827,6 +827,10 @@ export const candidatesRouter = router({
         const inv = await ensureAssessmentInvite(ctx.db, existing).catch((err) => { console.warn('[assessment] ensure invite failed:', err); return null; });
         assessmentLink = inv?.link;
       }
+      // For a move into Phone Screen, address the scheduling email to the role's hiring manager.
+      const hiringManagerName = input.toStage === 'Phone Screen' && (jd as any)?.reqId
+        ? ((await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, (jd as any).reqId) })) as any)?.hiringManager ?? undefined
+        : undefined;
       if (!skipStageEmail) dispatchStageEmail(input.toStage, existing.currentStage, {
         firstName: existing.firstName,
         lastName: existing.lastName,
@@ -837,6 +841,7 @@ export const candidatesRouter = router({
         assessmentLink,
         interviewerName: (existing as any).interviewerName,
         interviewerEmail: (existing as any).interviewerEmail,
+        hiringManagerName,
       }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
 
       // When advancing to Interview Scheduled:

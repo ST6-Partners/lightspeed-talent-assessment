@@ -22,10 +22,10 @@
 
 import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { resolveDeptWorkSample } from './workSampleResolver.js';
 import { dispatchStageEmail } from './email.js';
-import { runPostAssessmentReview } from './postAssessmentReview.js';
+import { runPostAssessmentReview, MATCH_PASS_THRESHOLD } from './postAssessmentReview.js';
 import { logDecision } from './decisionLog.js';
 import { computeAndStoreScreen } from './resumeScreen.js';
 
@@ -49,6 +49,17 @@ function appBaseUrl(): string {
   const railway = process.env.RAILWAY_PUBLIC_DOMAIN;
   if (railway) return `https://${railway}`;
   return '';
+}
+
+// Resolve the hiring manager's name for a candidate's role (job requisition),
+// used to address the phone-screen scheduling email.
+async function resolveHiringManagerName(db: any, jd: any): Promise<string | undefined> {
+  const reqId = (jd as any)?.reqId;
+  if (!reqId) return undefined;
+  try {
+    const req = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, reqId) });
+    return (req as any)?.hiringManager ?? undefined;
+  } catch { return undefined; }
 }
 
 /**
@@ -136,11 +147,61 @@ export async function applyAssessmentDecision(
     });
 
     // Auto-run the combined screen (resume requirements + skills + values) on
-    // entry to Candidate Review — scoring only. Rejecting out of Candidate Review
-    // stays a manual human decision.
-    await computeAndStoreScreen(db, candidate.id).catch((err: unknown) => console.error('[AssessmentDecision] auto screen failed:', err));
+    // entry to Candidate Review — scoring only.
+    const screen = await computeAndStoreScreen(db, candidate.id)
+      .catch((err: unknown) => { console.error('[AssessmentDecision] auto screen failed:', err); return null; });
 
-    // Candidate "you're advancing" + HR "assessment passed" (SendGrid)
+    // Auto-advance gate: a candidate who clears BOTH automated gates — role-fit
+    // (EPP) match >= threshold AND every required resume qualification met — skips
+    // the human hold in Candidate Review and advances straight to Phone Screen.
+    // Company-values fit is deliberately NOT gated here (assessed later, on the
+    // interview scorecard). Anyone who doesn't clear both waits in Candidate Review
+    // for a human decision (existing behavior).
+    const reviewed = await db.query.candidates.findFirst({ where: eq(candidates.id, candidate.id) });
+    const roleFit: number | null = (reviewed as any)?.eppValuesMatchScore ?? null;
+    const roleFitPassed = roleFit != null && roleFit >= MATCH_PASS_THRESHOLD;
+    const req: any = (screen as any)?.requirements;
+    const resumePassed = !!screen
+      && (screen as any).recommendation !== 'rejected'
+      && req?.mode === 'ai'
+      && (req?.totalCount ?? 0) > 0
+      && (req?.missing?.length ?? 1) === 0;
+
+    if (roleFitPassed && resumePassed) {
+      await db.update(candidates)
+        .set({ currentStage: 'Phone Screen', screenRecommendation: 'advance', updatedAt: new Date() })
+        .where(eq(candidates.id, candidate.id));
+      await db.insert(candidateStageHistory).values({
+        candidateId: candidate.id,
+        fromStage: 'Candidate Review',
+        toStage: 'Phone Screen',
+        changedBy: null,
+        reason: `Auto-advanced: role-fit match ${roleFit}% (>= ${MATCH_PASS_THRESHOLD}%) and all required resume qualifications met.`,
+      });
+      await logDecision(db, {
+        candidateId: candidate.id,
+        decisionType: 'post_assessment_review',
+        outcome: 'passed',
+        score: roleFit ?? undefined,
+        decidedByType: 'deterministic',
+        reason: `Both automated gates cleared (role-fit match ${roleFit}% and all required resume qualifications met) — auto-advanced to Phone Screen.`,
+        inputs: { roleFit, threshold: MATCH_PASS_THRESHOLD, resumeMet: true },
+      });
+      // Phone Screen emails: candidate invite + hiring-manager "please schedule".
+      const hiringManagerName = await resolveHiringManagerName(db, jd);
+      await dispatchStageEmail('Phone Screen', 'Candidate Review', {
+        firstName: candidate.firstName,
+        lastName: candidate.lastName,
+        email: candidate.email,
+        jobTitle,
+        hiringManagerName,
+      }).catch((err: unknown) => console.error('[AssessmentDecision] phone-screen email failed:', err));
+      console.log(`[AssessmentDecision] ${candidate.email} auto-advanced to Phone Screen (role-fit ${roleFit}%, resume requirements met)`);
+      return { decision: 'advanced', score };
+    }
+
+    // Held for a human decision in Candidate Review — candidate "you're advancing"
+    // + HR "assessment passed" (SendGrid).
     await dispatchStageEmail('Candidate Review', 'Assessment', {
       firstName: candidate.firstName,
       lastName: candidate.lastName,
@@ -150,7 +211,7 @@ export async function applyAssessmentDecision(
       workSampleUrl,
     }).catch((err: unknown) => console.error('[AssessmentDecision] advance email failed:', err));
 
-    console.log(`[AssessmentDecision] ${candidate.email} scored ${score} -> advanced to Work Sample`);
+    console.log(`[AssessmentDecision] ${candidate.email} scored ${score} -> Candidate Review (awaiting human decision)`);
     return { decision: 'advanced', score };
   }
 

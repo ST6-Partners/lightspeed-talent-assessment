@@ -18,6 +18,8 @@ const SENDGRID_SEND_URL = 'https://api.sendgrid.com/v3/mail/send';
 const FROM_ADDRESS = process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com';
 const FROM_NAME = process.env.EMAIL_FROM_NAME ?? 'Lightspeed Systems';
 const HR_EMAIL = process.env.HR_EMAIL ?? 'jade.friedman@lsscorp.net';
+// Hiring-manager inbox (test default). The phone-screen scheduling ask goes here.
+const HIRING_MANAGER_EMAIL = process.env.HIRING_MANAGER_INBOX ?? 'hiring-manager@lightspeed.test';
 
 // ── Core send function ─────────────────────────────────────
 
@@ -198,6 +200,7 @@ interface CandidateEmailData {
   interviewerName?: string;
   interviewerEmail?: string;
   offerDetails?: string;
+  hiringManagerName?: string | null;
 }
 
 // ============================================================
@@ -762,6 +765,20 @@ export async function emailInvitedToPhoneScreen(data: CandidateEmailData) {
   });
 }
 
+export async function emailPhoneScreenHiringManager(data: CandidateEmailData) {
+  await sendEmail({
+    to: HIRING_MANAGER_EMAIL,
+    templateId: 'phone_screen_hiring_manager',
+    subject: `Please schedule a phone screen: ${data.firstName} ${data.lastName} \u2014 ${data.jobTitle ?? 'position'}`,
+    html: wrap(`
+      ${h1('A candidate is ready for their phone screen')}
+      ${p(`Hi ${data.hiringManagerName ?? 'there'},`)}
+      ${p(`<strong>${data.firstName} ${data.lastName}</strong> cleared the automated screen for <strong>${data.jobTitle ?? 'the role'}</strong> (role-fit match and resume requirements both met) and has advanced to the phone-screen stage.`)}
+      ${p('Please reach out to the candidate to schedule the phone screen. The candidate has been emailed to expect your outreach.')}
+    `),
+  });
+}
+
 export async function emailPhoneScreenHR(data: CandidateEmailData) {
   await sendEmail({
     to: HR_EMAIL,
@@ -788,6 +805,7 @@ export async function dispatchStageEmail(
     interviewerName?: string | null;
     interviewerEmail?: string | null;
     assessmentLink?: string;
+    hiringManagerName?: string | null;
   }
 ): Promise<void> {
   const data: CandidateEmailData = {
@@ -801,6 +819,7 @@ export async function dispatchStageEmail(
     interviewerName: candidate.interviewerName ?? undefined,
     interviewerEmail: candidate.interviewerEmail ?? undefined,
     assessmentLink: candidate.assessmentLink,
+    hiringManagerName: candidate.hiringManagerName ?? undefined,
   };
 
   // Candidate-facing
@@ -817,6 +836,7 @@ export async function dispatchStageEmail(
       break;
     case 'Phone Screen':
       await emailInvitedToPhoneScreen(data);
+      await emailPhoneScreenHiringManager(data);
       await emailPhoneScreenHR(data);
       break;
     case 'Interview Scheduled':
