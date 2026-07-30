@@ -657,6 +657,63 @@ async function runWalkthroughDecisionReminder(): Promise<JobResult> {
   return { affected: sent, details: sent ? `Nudged ${sent} walkthrough decision(s).` : 'No walkthrough decisions pending.' };
 }
 
+// ── Job: interview round decision reminder ─────────────────
+// ~30 min after a completed interview round (Round 1, Round 2, "Interview",
+// etc. — any candidate_interviews row that isn't the work-sample walkthrough,
+// which already has its own reminder above), nudge that round's interviewer
+// via bell notification to record their read and advance or reject, so
+// candidates don't sit forgotten in Interviewed. Same 30-minute cadence as
+// the phone-screen and walkthrough reminders above; deduped against the
+// notifications table itself, keyed by round id (a candidate can have
+// several rounds, so dedupe can't be per-candidate like the other two jobs).
+async function runInterviewRoundDecisionReminder(): Promise<JobResult> {
+  const now = Date.now();
+  const rounds = await db.select().from(candidateInterviews).where(eq(candidateInterviews.status, 'completed'));
+  let sent = 0;
+
+  for (const r of rounds as any[]) {
+    if (r.roundName === WALKTHROUGH_ROUND_NAME) continue; // has its own reminder job
+
+    const ref = r.updatedAt ? new Date(r.updatedAt).getTime() : (r.scheduledAt ? new Date(r.scheduledAt).getTime() : now);
+    if (now < ref + DECISION_REMINDER_AFTER_MS) continue; // not yet 30 min since the round wrapped
+
+    const c = await db.query.candidates.findFirst({ where: eq(candidates.id, r.candidateId) });
+    if (!c || c.currentStage !== 'Interviewed') continue; // already moved on -> nothing to nudge
+
+    // Dedupe per round, not per candidate — a candidate can have multiple rounds.
+    const already = (await db.select().from(notifications).where(and(
+      eq(notifications.type, 'interview_round_decision'),
+      eq(notifications.referenceId, r.id),
+    )).limit(1))[0];
+    if (already) continue;
+
+    const jd = c.jdId ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;
+    const jobTitle = jd?.jobTitle ?? 'the role';
+
+    const notify = new Map<string, any>();
+    if (r.interviewerEmail) {
+      const u = await db.query.users.findFirst({ where: eq(users.email, r.interviewerEmail) });
+      if (u) notify.set(u.id, u);
+    }
+    for (const u of await hiringTeamUsers()) notify.set((u as any).id, u);
+    if (!notify.size) continue;
+
+    try {
+      await db.insert(notifications).values([...notify.values()].map((u: any) => ({
+        userId: u.id,
+        type: 'interview_round_decision',
+        message: `Advance or reject ${c.firstName} ${c.lastName} — their ${r.roundName} for ${jobTitle} is done.`,
+        referenceId: r.id,
+        referenceType: 'interview_round',
+      })));
+      sent++;
+    } catch (err) {
+      console.error('[interview-round-decision-reminder] failed for round', r.id, err);
+    }
+  }
+  return { affected: sent, details: sent ? `Notified on ${sent} interview round(s) awaiting a decision.` : 'No interview rounds awaiting a decision.' };
+}
+
 // ── Job: bias (adverse-impact) alert ───────────────────────
 // Scans every role that has assessment-gate decisions, runs the SAME four-fifths
 // audit the Bias tab shows, and drops a bell notification (+ team email) when a
@@ -859,6 +916,15 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '*/15 * * * *',   // every 15 minutes
     handler:        runWalkthroughDecisionReminder,
+  });
+  registerJob({
+    name:           'interview-round-decision-reminder',
+    label:          'Interview Round Decision Reminder',
+    description:    'Every 15 min, ~30 min after a completed interview round, nudge that round\'s interviewer (once) to record their read and advance or reject if the candidate is still in Interviewed.',
+    color:          '#f59e0b',
+    jobType:        'cron',
+    cronExpression: '*/15 * * * *',   // every 15 minutes
+    handler:        runInterviewRoundDecisionReminder,
   });
   registerJob({
     name:           'bias-alert',
