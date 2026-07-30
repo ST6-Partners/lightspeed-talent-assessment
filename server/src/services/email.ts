@@ -764,6 +764,7 @@ export async function dispatchStageEmail(
     workSampleUrl?: string;
     interviewerName?: string | null;
     interviewerEmail?: string | null;
+    assessmentLink?: string;
   }
 ): Promise<void> {
   const data: CandidateEmailData = {
@@ -776,6 +777,7 @@ export async function dispatchStageEmail(
     workSampleUrl: candidate.workSampleUrl,
     interviewerName: candidate.interviewerName ?? undefined,
     interviewerEmail: candidate.interviewerEmail ?? undefined,
+    assessmentLink: candidate.assessmentLink,
   };
 
   // Candidate-facing

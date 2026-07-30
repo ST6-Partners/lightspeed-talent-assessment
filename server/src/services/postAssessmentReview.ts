@@ -323,7 +323,9 @@ export function simulateUpstreamScores(candidate: any, toStage: string): Record<
   const patch: Record<string, any> = {};
 
   // Assessment stage -> CCAT (pass-leaning >= 30 for a candidate that advanced).
-  if (target >= idx('Assessment') && candidate.ccatScore == null) {
+  // Skipped in placeholder mode (no CRITERIA_API_KEY): the candidate's real
+  // placeholder-assessment submission fills CCAT instead of a random simulation.
+  if (target >= idx('Assessment') && candidate.ccatScore == null && Boolean(process.env.CRITERIA_API_KEY)) {
     const raw = rand(32, 19); // 32-50
     patch.ccatScore = raw;
     const clampPct = (n: number) => Math.max(1, Math.min(99, n));

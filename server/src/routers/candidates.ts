@@ -30,7 +30,8 @@ import {
   dispatchStageEmail,
   emailInterviewerQuestions,
   sendEmail,
-  emailOfferLetter, emailEeoSelfId } from '../services/email.js';
+  emailOfferLetter, emailEeoSelfId, emailInvitedToAssessment } from '../services/email.js';
+import { ensureAssessmentInvite, getAssessmentByToken, submitAssessment, isCriteriaConfigured } from '../services/assessmentPlaceholder.js';
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
 import { scoreSkillsFit } from '../services/ai.js';
@@ -388,9 +389,16 @@ async function advanceFromReview(db: any, userId: string | null, existing: any, 
         }
       }
     }
+    // Placeholder assessment (no CRITERIA_API_KEY): generate the tokenized link so
+    // the "invited to assessment" email's Start Assessment button actually works.
+    let assessmentLink: string | undefined;
+    if (toStage === 'Assessment') {
+      const inv = await ensureAssessmentInvite(db, existing).catch((err) => { console.warn('[assessment] ensure invite failed:', err); return null; });
+      assessmentLink = inv?.link;
+    }
     if (!skipStageEmail) dispatchStageEmail(toStage, existing.currentStage, {
       firstName: existing.firstName, lastName: existing.lastName, email: existing.email, jobTitle,
-      workSampleInstructions, workSampleUrl,
+      workSampleInstructions, workSampleUrl, assessmentLink,
       interviewerName: existing.interviewerName, interviewerEmail: existing.interviewerEmail,
     }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
     if (toStage === 'Interviewed') {
@@ -785,6 +793,13 @@ export const candidatesRouter = router({
         }
       }
 
+      // Placeholder assessment (no CRITERIA_API_KEY): generate the tokenized link so
+      // the "invited to assessment" email's Start Assessment button actually works.
+      let assessmentLink: string | undefined;
+      if (input.toStage === 'Assessment') {
+        const inv = await ensureAssessmentInvite(ctx.db, existing).catch((err) => { console.warn('[assessment] ensure invite failed:', err); return null; });
+        assessmentLink = inv?.link;
+      }
       if (!skipStageEmail) dispatchStageEmail(input.toStage, existing.currentStage, {
         firstName: existing.firstName,
         lastName: existing.lastName,
@@ -792,6 +807,7 @@ export const candidatesRouter = router({
         jobTitle,
         workSampleInstructions,
         workSampleUrl,
+        assessmentLink,
         interviewerName: (existing as any).interviewerName,
         interviewerEmail: (existing as any).interviewerEmail,
       }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
@@ -2017,6 +2033,24 @@ export const candidatesRouter = router({
       });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
 
+      // PLACEHOLDER MODE (no CRITERIA_API_KEY): don't call Criteria. Generate our
+      // own tokenized assessment link and email the invite with a working button.
+      if (!isCriteriaConfigured()) {
+        const jdP = candidate.jdId
+          ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+          : null;
+        const inv = await ensureAssessmentInvite(ctx.db, candidate);
+        await emailInvitedToAssessment({
+          firstName: candidate.firstName,
+          lastName: candidate.lastName,
+          email: candidate.email,
+          jobTitle: jdP?.jobTitle ?? undefined,
+          assessmentLink: inv.link,
+        }).catch((err) => console.warn('[email] emailInvitedToAssessment failed (non-blocking):', err));
+        await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+        return { placeholder: true, invitationUrl: inv.link, candidateId: input.id };
+      }
+
       if (candidate.criteriaCorpId) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
@@ -2047,6 +2081,24 @@ export const candidatesRouter = router({
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       return { ...result, candidateId: input.id };
+    }),
+
+  // ── PUBLIC: candidate opens the placeholder assessment link ──
+  assessmentGetByToken: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const data = await getAssessmentByToken(ctx.db, input.token);
+      if (!data) throw new TRPCError({ code: 'NOT_FOUND', message: 'This assessment link is invalid or has expired.' });
+      return data;
+    }),
+
+  // ── PUBLIC: candidate submits their placeholder assessment answer ──
+  assessmentSubmit: publicProcedure
+    .input(z.object({ token: z.string().min(1), submission: z.string().min(1, 'Please enter your response.').max(50000) }))
+    .mutation(async ({ ctx, input }) => {
+      const res = await submitAssessment(ctx.db, input.token, input.submission);
+      if (!res.ok) throw new TRPCError({ code: 'NOT_FOUND', message: 'This assessment link is invalid or has expired.' });
+      return { ok: true };
     }),
 
   // Pull latest CCAT + EPP scores from Criteria Corp

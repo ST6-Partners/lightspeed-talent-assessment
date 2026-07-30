@@ -210,6 +210,15 @@ export const candidates = pgTable('candidates', {
   // Assessment timing (for reminder + auto-reject scheduler)
   assessmentSentAt: timestamp('assessment_sent_at', { withTimezone: true }),
   assessmentCompletedAt: timestamp('assessment_completed_at', { withTimezone: true }),
+  // ── Placeholder assessment (used when CRITERIA_API_KEY is unset) ──
+  // A candidate-facing tokenized link shows one work-sample question and captures
+  // a REAL typed submission, replacing the randomly-simulated CCAT data. When the
+  // real Criteria key is configured this path is bypassed (criteriaCorpId flow).
+  assessmentToken: varchar('assessment_token', { length: 64 }),
+  assessmentSubmission: text('assessment_submission'),
+  assessmentTaskId: uuid('assessment_task_id'),
+  assessmentSubmittedAt: timestamp('assessment_submitted_at', { withTimezone: true }),
+  assessmentNotes: text('assessment_notes'),
   // Interview
   interviewerName: varchar('interviewer_name', { length: 200 }),
   interviewerEmail: varchar('interviewer_email', { length: 300 }),
