@@ -275,6 +275,60 @@ async function main() {
     }
   });
 
+  // ── Resume upload (Add Candidate) ──────────────────────────
+  // Stores the file (like work samples) AND extracts plain text so the
+  // automated resume screen can run. Supports PDF, Word (.docx) and text.
+  app.post('/api/upload/resume', express.raw({ type: '*/*', limit: '25mb' }), async (req, res) => {
+    try {
+      const user = await resolveSessionUser(req);
+      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+      const role = user.role;
+      if (!role || !['admin', 'sysadmin'].includes(role)) {
+        return res.status(403).json({ error: 'Forbidden — admin only' });
+      }
+      const rawFilename = req.headers['x-filename'] as string;
+      const mimeType = req.headers['content-type'] || 'application/octet-stream';
+      if (!rawFilename) return res.status(400).json({ error: 'Missing x-filename header' });
+      let filename = rawFilename;
+      try { filename = decodeURIComponent(rawFilename); } catch { /* keep raw */ }
+      const safe = filename.replace(/[^a-zA-Z0-9._ -]/g, '_').slice(0, 200);
+      const buf = req.body as Buffer;
+      if (!buf || !buf.length) return res.status(400).json({ error: 'Empty file' });
+
+      const key = crypto.randomUUID();
+      await pool.query(
+        'INSERT INTO uploaded_files (key, filename, mime_type, data) VALUES ($1, $2, $3, $4)',
+        [key, safe, mimeType, buf.toString('base64')],
+      );
+
+      // Best-effort text extraction — never fails the upload.
+      let text = '';
+      const lower = safe.toLowerCase();
+      try {
+        if (mimeType.includes('pdf') || lower.endsWith('.pdf')) {
+          const { PDFParse } = await import('pdf-parse');
+          const parser = new PDFParse({ data: buf });
+          const r = await parser.getText();
+          text = (r.text || '').replace(/--\s*\d+\s*of\s*\d+\s*--?/gi, ' ');
+        } else if (mimeType.includes('word') || mimeType.includes('officedocument') || lower.endsWith('.docx')) {
+          const mammoth = (await import('mammoth')).default;
+          const r = await mammoth.extractRawText({ buffer: buf });
+          text = r.value || '';
+        } else if (mimeType.includes('text') || lower.endsWith('.txt')) {
+          text = buf.toString('utf8');
+        }
+      } catch (e: any) {
+        console.warn('[resume upload] text extraction failed:', e?.message ?? e);
+      }
+      text = text.replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 100000);
+
+      res.json({ success: true, key, url: `/api/uploaded/${key}`, mimeType, filename: safe, text });
+    } catch (err: any) {
+      console.error('Resume upload error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Serve DB-stored uploads (work samples) ─────────────────
   app.get('/api/uploaded/:key', async (req, res) => {
     try {

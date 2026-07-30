@@ -52,7 +52,7 @@ export default function Candidates() {
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     jdId: '', firstName: '', lastName: '', email: '',
-    phone: '', linkedinUrl: '', resumeUrl: '', source: '', notes: '',
+    phone: '', linkedinUrl: '', resumeUrl: '', resumeText: '', source: '', notes: '',
     needsSponsorship: false,
     isInternal: false,
     internalEmployee: '',
@@ -82,6 +82,30 @@ export default function Candidates() {
     ? ((jobDescriptions ?? []) as any[]).filter((j) => deptByReq[j.reqId] === deptFilter)
     : ((jobDescriptions ?? []) as any[]);
 
+  const [resumeFileName, setResumeFileName] = useState('');
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [resumeUploadError, setResumeUploadError] = useState<string | null>(null);
+  const handleResumeUpload = async (file: File) => {
+    setResumeUploadError(null);
+    setUploadingResume(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const resp = await fetch('/api/upload/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-filename': encodeURIComponent(file.name) },
+        body: buffer,
+      });
+      const result = await resp.json();
+      if (!resp.ok || !result.success) { setResumeUploadError(result.error || 'Upload failed'); return; }
+      setForm((f: any) => ({ ...f, resumeUrl: result.url, resumeText: result.text || '' }));
+      setResumeFileName(file.name);
+      if (!result.text) setResumeUploadError('Saved the file, but couldn\u2019t read text from it — the resume screen may not run. A PDF, Word (.docx) or text file works best.');
+    } catch (err: any) {
+      setResumeUploadError(err?.message || 'Upload failed');
+    } finally {
+      setUploadingResume(false);
+    }
+  };
   const createMutation = trpc.candidates.create.useMutation({
     onSuccess: () => { refetch(); setShowForm(false); resetForm(); },
   });
@@ -138,7 +162,7 @@ export default function Candidates() {
 
   const resetForm = () => setForm({
     jdId: '', firstName: '', lastName: '', email: '',
-    phone: '', linkedinUrl: '', resumeUrl: '', source: '', notes: '',
+    phone: '', linkedinUrl: '', resumeUrl: '', resumeText: '', source: '', notes: '',
     needsSponsorship: false,
     isInternal: false,
     internalEmployee: '',
@@ -491,7 +515,21 @@ export default function Candidates() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Resume URL</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Resume</label>
+                {form.resumeUrl && resumeFileName ? (
+                  <div className="flex items-center justify-between gap-3 px-3 py-2 border border-gray-300 rounded-md text-sm mb-2">
+                    <a href={form.resumeUrl} target="_blank" rel="noreferrer" className="text-ls-primary hover:underline truncate">{resumeFileName}</a>
+                    <button type="button" onClick={() => { setForm({ ...form, resumeUrl: '', resumeText: '' }); setResumeFileName(''); setResumeUploadError(null); }} className="text-xs text-gray-400 hover:text-red-600 shrink-0">Remove</button>
+                  </div>
+                ) : (
+                  <label className={`flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-md text-sm cursor-pointer hover:border-gray-500 mb-2 ${uploadingResume ? 'opacity-60 pointer-events-none' : ''}`}>
+                    <span className="text-gray-600">{uploadingResume ? 'Uploading\u2026' : 'Upload resume (PDF, Word, or text)'}</span>
+                    <input type="file" accept=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleResumeUpload(f); e.target.value = ''; }} />
+                  </label>
+                )}
+                {resumeUploadError && <p className="text-xs text-amber-600 mb-2">{resumeUploadError}</p>}
+                <label className="block text-xs font-medium text-gray-600 mb-1">Resume URL <span className="text-gray-400 font-normal">(or paste a link)</span></label>
                 <input type="url" value={form.resumeUrl}
                   onChange={(e) => setForm({ ...form, resumeUrl: e.target.value })}
                   placeholder="https://..."

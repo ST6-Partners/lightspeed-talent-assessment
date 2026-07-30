@@ -62,6 +62,7 @@ const CandidateInput = z.object({
   phone: z.string().max(50).optional(),
   linkedinUrl: z.string().url().optional().or(z.literal('')),
   resumeUrl: z.string().url().optional().or(z.literal('')),
+  resumeText: z.string().max(100000).optional(),
   source: z.string().max(100).optional(),
   notes: z.string().optional(),
   isInternal: z.boolean().optional(),
