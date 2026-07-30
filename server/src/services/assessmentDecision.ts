@@ -27,6 +27,7 @@ import { resolveDeptWorkSample } from './workSampleResolver.js';
 import { dispatchStageEmail } from './email.js';
 import { runPostAssessmentReview } from './postAssessmentReview.js';
 import { logDecision } from './decisionLog.js';
+import { computeAndStoreScreen } from './resumeScreen.js';
 
 // Candidates need a CCAT score of at least this to advance.
 // Below it, they are automatically rejected. (Flowchart: "Score 30+".)
@@ -133,6 +134,11 @@ export async function applyAssessmentDecision(
       changedBy: null, // automated — no user
       reason: `Auto-advanced: assessment score ${score} met threshold of ${ASSESSMENT_PASS_THRESHOLD}`,
     });
+
+    // Auto-run the combined screen (resume requirements + skills + values) on
+    // entry to Candidate Review — scoring only. Rejecting out of Candidate Review
+    // stays a manual human decision.
+    await computeAndStoreScreen(db, candidate.id).catch((err: unknown) => console.error('[AssessmentDecision] auto screen failed:', err));
 
     // Candidate "you're advancing" + HR "assessment passed" (SendGrid)
     await dispatchStageEmail('Candidate Review', 'Assessment', {
