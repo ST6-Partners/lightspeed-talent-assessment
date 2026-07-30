@@ -818,9 +818,8 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
     case 'Candidate Review':
       return (
         <div className="space-y-3">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Role Fit Match</div><div className="text-base font-bold text-gray-900">{c.eppValuesMatchScore != null ? `${c.eppValuesMatchScore}%` : '—'}</div></div>
-            <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Values Match</div><div className="text-base font-bold text-gray-900">{c.companyValuesMatchScore != null ? `${c.companyValuesMatchScore}%` : '—'}</div></div>
             <div className="bg-white border border-gray-200 rounded-lg p-2.5"><div className="text-[10px] uppercase tracking-wide text-gray-500">Resume Review</div><div className="text-base font-bold text-gray-900">{c.resumeReviewScore ?? '—'}</div></div>
           </div>
           {c.companyValuesNotes ? (

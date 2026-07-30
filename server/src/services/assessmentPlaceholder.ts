@@ -213,7 +213,7 @@ export async function submitAssessment(db: any, token: string, submission: strin
   const notes = [
     'PLACEHOLDER ASSESSMENT (work-sample based, not a Criteria CCAT).',
     `Derived score: ${overall}/100 → CCAT raw ${ccatScore}/50, percentile ${ccatPercentile}.`,
-    eppAnswer ? `EPP self-report ("I have good time management"): ${eppAnswer} → EPP/values match ${eppMatch}%.` : '',
+    eppAnswer ? `EPP self-report ("I have good time management"): ${eppAnswer} → EPP/role-fit match ${eppMatch}%.` : '',
     gradeSummary,
     `[Submitted ${now.toISOString().slice(0, 10)}]`,
   ].filter(Boolean).join('\n');
@@ -229,13 +229,15 @@ export async function submitAssessment(db: any, token: string, submission: strin
     ccatMathLogic: ccatPercentile,
     ccatSpatial: ccatPercentile,
     ...(eppMatch != null ? {
+      // Role-fit (EPP) match only. Company-values fit is deliberately NOT scored
+      // here — it's assessed later on the interview scorecard.
       eppValuesMatchScore: eppMatch,
-      companyValuesMatchScore: eppMatch,
       companyValuesNotes:
-        `Placeholder EPP/values match: ${eppMatch}% — from the assessment self-report ` +
+        `Placeholder EPP / role-fit match: ${eppMatch}% — from the assessment self-report ` +
         `("I have good time management": ${eppAnswer}). This candidate is in Candidate Review for a ` +
-        `human decision because the automated values gate needs the full Criteria EPP profile to ` +
-        `auto-advance; that full trait breakdown will populate when the Criteria EPP feed is connected.`,
+        `human decision because the automated role-fit gate needs the full Criteria EPP profile to ` +
+        `auto-advance; that full trait breakdown will populate when the Criteria EPP feed is connected. ` +
+        `Company-values fit is assessed later, on the interview scorecard.`,
     } : {}),
     updatedAt: now,
   }).where(eq(candidates.id, candidate.id));
