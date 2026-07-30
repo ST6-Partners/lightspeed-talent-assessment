@@ -9,6 +9,16 @@ import { trpc } from '../lib/trpc';
 type Win = { date: string; start: string; end: string };
 const EMPTY_ROW: Win = { date: '', start: '', end: '' };
 
+// Card lives at module scope (NOT inside the component) so its identity is stable
+// across renders. Defining it inline made it a new component type every render, so
+// React remounted the whole subtree on each keystroke and inputs lost focus after
+// one character.
+const Card = ({ children }: { children: React.ReactNode }) => (
+  <div className="min-h-screen bg-ls-bg flex items-center justify-center p-6">
+    <div className="w-full max-w-lg bg-white rounded-2xl border border-ls-line shadow-sm p-7">{children}</div>
+  </div>
+);
+
 export default function InterviewerAvailability() {
   const { token = '' } = useParams();
   const [rows, setRows] = useState<Win[]>([{ ...EMPTY_ROW }]);
@@ -23,12 +33,6 @@ export default function InterviewerAvailability() {
     if (w && w.length) setRows(w.map((x) => ({ date: x.date ?? '', start: x.start ?? '', end: x.end ?? '' })));
     if (ctx.data?.note) setNote(ctx.data.note);
   }, [ctx.data]);
-
-  const Card = ({ children }: { children: React.ReactNode }) => (
-    <div className="min-h-screen bg-ls-bg flex items-center justify-center p-6">
-      <div className="w-full max-w-lg bg-white rounded-2xl border border-ls-line shadow-sm p-7">{children}</div>
-    </div>
-  );
 
   if (!token || ctx.error || (!ctx.isLoading && !ctx.data)) {
     return (

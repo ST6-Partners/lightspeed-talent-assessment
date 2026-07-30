@@ -5,17 +5,21 @@ import { trpc } from '../lib/trpc';
 // Public landing page for the "I can't interview for this role" link that ships
 // in the intake-approval availability email. Confirming notifies the interviewer's
 // manager so coverage is arranged before candidates reach the interview stage.
+// Card lives at module scope (NOT inside the component) so its identity is stable
+// across renders. Defining it inline made it a new component type every render, so
+// React remounted the whole subtree on each keystroke and inputs lost focus after
+// one character.
+const Card = ({ children }: { children: React.ReactNode }) => (
+  <div className="min-h-screen bg-ls-bg flex items-center justify-center p-6">
+    <div className="w-full max-w-md bg-white rounded-2xl border border-ls-line shadow-sm p-7">{children}</div>
+  </div>
+);
+
 export default function InterviewerUnavailable() {
   const { token = '' } = useParams();
   const [reason, setReason] = useState('');
   const ctx = trpc.scheduling.getInterviewerDeclineContext.useQuery({ token }, { enabled: !!token, retry: false });
   const decline = trpc.scheduling.declineInterview.useMutation();
-
-  const Card = ({ children }: { children: React.ReactNode }) => (
-    <div className="min-h-screen bg-ls-bg flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-white rounded-2xl border border-ls-line shadow-sm p-7">{children}</div>
-    </div>
-  );
 
   if (!token || ctx.error || (!ctx.isLoading && !ctx.data)) {
     return (
