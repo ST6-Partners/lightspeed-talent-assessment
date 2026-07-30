@@ -170,7 +170,7 @@ export default function Layout() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col bg-ls-bg">
-        <header className="h-14 bg-white/70 backdrop-blur border-b border-ls-line flex items-center justify-between px-6">
+        <header className="relative z-30 h-14 bg-white/70 backdrop-blur border-b border-ls-line flex items-center justify-between px-6">
           <div className="text-[13px] text-ls-ink-3 flex items-center gap-1.5">
             {isCoreSubpage && (
               <>
