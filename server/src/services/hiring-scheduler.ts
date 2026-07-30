@@ -572,15 +572,25 @@ async function runPhoneScreenDecisionReminder(): Promise<JobResult> {
   let sent = 0;
   for (const c of rows as any[]) {
     if (!c.phoneScreenScheduledAt) continue;
-    const when = new Date(c.phoneScreenScheduledAt).getTime();
-    if (now < when + DECISION_REMINDER_AFTER_MS) continue;                 // call time + 30 min not reached
+    // Fire right when the call is scheduled to END (a 3-4pm slot reminds at 4pm) —
+    // phoneScreenEndAt is the real end time parsed from the confirmed slot. Candidates
+    // confirmed before phoneScreenEndAt existed won't have it; fall back to the old
+    // start-time + 30 min behavior so they still eventually get nudged.
+    const dueAt = c.phoneScreenEndAt
+      ? new Date(c.phoneScreenEndAt).getTime()
+      : new Date(c.phoneScreenScheduledAt).getTime() + DECISION_REMINDER_AFTER_MS;
+    if (now < dueAt) continue;
     if (await alreadySentTemplate(c.id, 'phone_screen_decision_reminder')) continue; // once only
     const jd = c.jdId ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;
     const jobTitle = jd?.jobTitle ?? 'the role';
     const base = schedAppBaseUrl();
     const link = base ? `${base}/hiring/candidates?candidate=${c.id}` : '';
     const subject = `Decision needed: phone screen with ${c.firstName} ${c.lastName}`;
-    const html = `<p>The phone screen with <strong>${c.firstName} ${c.lastName}</strong> for <strong>${jobTitle}</strong> was scheduled for ${new Date(when).toLocaleString()}.</p>`
+    const when = new Date(c.phoneScreenScheduledAt);
+    const whenText = c.phoneScreenEndAt
+      ? `${when.toLocaleString()} – ${new Date(c.phoneScreenEndAt).toLocaleTimeString()}`
+      : when.toLocaleString();
+    const html = `<p>The phone screen with <strong>${c.firstName} ${c.lastName}</strong> for <strong>${jobTitle}</strong> was scheduled for ${whenText}.</p>`
       + `<p>They're still in the Phone Screen stage. Please <strong>advance</strong> them to the interview or <strong>reject</strong> them so they don't get left in the phone-screen pool.</p>`
       + (link ? `<p><a href="${link}">Open ${c.firstName}'s record</a></p>` : '');
     try {
@@ -902,7 +912,7 @@ export function registerHiringJobs(): void {
   registerJob({
     name:           'phone-screen-decision-reminder',
     label:          'Phone Screen Decision Reminder',
-    description:    'Every 15 min, ~30 min after a scheduled phone screen, nudge the hiring team (once) to advance or reject any candidate still sitting in Phone Screen.',
+    description:    'Every 15 min, right after a scheduled phone screen call ends (falls back to 30 min after the booked start for older records), nudge the hiring team (once) to advance or reject any candidate still sitting in Phone Screen.',
     color:          '#0ea5e9',
     jobType:        'cron',
     cronExpression: '*/15 * * * *',   // every 15 minutes

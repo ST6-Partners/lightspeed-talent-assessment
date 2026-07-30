@@ -319,7 +319,7 @@ export const schedulingRouter = router({
         availability: mode === 'phone_screen' ? ((candidate as any).phoneScreenAvailability ?? null) : null,
         slots: mode === 'phone_screen'
           ? (Array.isArray((candidate as any).phoneScreenSlots)
-              ? ((candidate as any).phoneScreenSlots as string[])
+              ? ((candidate as any).phoneScreenSlots as any[]).map((s) => (typeof s === 'string' ? s : s.label))
               : ((candidate as any).phoneScreenAvailability
                   ? String((candidate as any).phoneScreenAvailability).split('\n').filter((l: string) => l.trim() && !l.startsWith('Note:'))
                   : []))
@@ -360,17 +360,21 @@ export const schedulingRouter = router({
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenRecruiterToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
-      const slotLines = input.windows.map(fmtAvailabilityWindow);
-      const availabilityText = slotLines.join('\n')
+      // Keep the raw date/start/end alongside the formatted label so confirmPhoneScreen
+      // can parse the real call start/end once the candidate picks a slot — not just
+      // display text.
+      const slots = input.windows.map((w) => ({ date: w.date, start: w.start, end: w.end, label: fmtAvailabilityWindow(w) }));
+      const availabilityText = slots.map((s) => s.label).join('\n')
         + (input.note && input.note.trim() ? `\n\nNote: ${input.note.trim()}` : '');
       const bookingToken = candidate.phoneScreenBookingToken ?? randomUUID();
       await ctx.db.update(candidates).set({
         phoneScreenAvailability: availabilityText,
-        phoneScreenSlots: slotLines,
+        phoneScreenSlots: slots,
         phoneScreenSelectedSlot: null,
         phoneScreenBookingToken: bookingToken,
         phoneScreenBookingOpenedAt: new Date(),
         phoneScreenScheduledAt: null,
+        phoneScreenEndAt: null,
         updatedAt: new Date(),
       }).where(eq(candidates.id, candidate.id));
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
@@ -388,14 +392,33 @@ export const schedulingRouter = router({
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenBookingToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
-      // Only accept a slot the recruiter actually offered.
-      const offered: string[] = Array.isArray((candidate as any).phoneScreenSlots) ? (candidate as any).phoneScreenSlots as string[] : [];
-      if (offered.length && !offered.includes(input.slot)) {
+      // Only accept a slot the recruiter actually offered. Slots are objects
+      // ({date,start,end,label}) going forward; older rows may still hold a plain
+      // string[] of labels — normalize both to the same shape before matching.
+      const offeredRaw: any[] = Array.isArray((candidate as any).phoneScreenSlots) ? (candidate as any).phoneScreenSlots as any[] : [];
+      const offered = offeredRaw.map((s) => (typeof s === 'string' ? { label: s } : s));
+      const matched = offered.find((s) => s.label === input.slot);
+      if (offered.length && !matched) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'That time is no longer offered. Please pick one of the listed times.' });
+      }
+      // Parse the real call start/end from the matched slot's raw date/start/end (the
+      // recruiter-entered wall-clock values) so the post-call decision reminder fires
+      // at the actual end of the call — e.g. a 3-4pm slot reminds at 4pm — instead of
+      // 30 min after whatever moment the candidate happens to click confirm.
+      let startAt: Date | null = null;
+      let endAt: Date | null = null;
+      if (matched?.date && matched?.start && matched?.end) {
+        const s = new Date(`${matched.date}T${matched.start}:00`);
+        const e = new Date(`${matched.date}T${matched.end}:00`);
+        if (!Number.isNaN(s.getTime())) startAt = s;
+        if (!Number.isNaN(e.getTime())) endAt = e;
       }
       await ctx.db.update(candidates).set({
         phoneScreenSelectedSlot: input.slot,
-        phoneScreenScheduledAt: new Date(),
+        // Fall back to "now" only if we couldn't parse a real time (e.g. a legacy
+        // string-only slot with no raw date/start/end) — better than leaving it null.
+        phoneScreenScheduledAt: startAt ?? new Date(),
+        phoneScreenEndAt: endAt,
         updatedAt: new Date(),
       }).where(eq(candidates.id, candidate.id));
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);

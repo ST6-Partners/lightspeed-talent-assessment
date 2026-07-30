@@ -226,9 +226,12 @@ export default function Candidates() {
         // Needs action until the CANDIDATE confirms a time (phoneScreenScheduledAt).
         // Covers: recruiter still owes availability, windows sent but not yet booked,
         // and the candidate replied "no availability" (no time set). Also flags again
-        // once a scheduled call is in the past and a decision is due.
+        // once the scheduled call has actually ENDED (phoneScreenEndAt — falls back to
+        // the start time for older records confirmed before that field existed) and a
+        // decision is due — not merely once it's started.
         const confirmed = !!c.phoneScreenScheduledAt;
-        const callHappened = confirmed && new Date(c.phoneScreenScheduledAt).getTime() < Date.now();
+        const callEndRef = c.phoneScreenEndAt ?? c.phoneScreenScheduledAt;
+        const callHappened = confirmed && new Date(callEndRef).getTime() < Date.now();
         return !confirmed || callHappened;
       }
       default: return false;

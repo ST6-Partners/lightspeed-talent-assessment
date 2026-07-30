@@ -652,6 +652,13 @@
       "when": 1960000063000,
       "tag": "0092_phone_screen_candidate_slots",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1960000064000,
+      "tag": "0093_phone_screen_end_at",
+      "breakpoints": true
     }
   ]
 }

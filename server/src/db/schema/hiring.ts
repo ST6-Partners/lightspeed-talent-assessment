@@ -235,13 +235,22 @@ export const candidates = pgTable('candidates', {
   // Phone-screen scheduling (a phone-call Calendly event — no video link; recruiter calls the candidate)
   phoneScreenBookingToken: varchar('phone_screen_booking_token', { length: 64 }),
   phoneScreenBookingOpenedAt: timestamp('phone_screen_booking_opened_at', { withTimezone: true }),
+  // The REAL call start time, parsed from the slot the candidate confirmed (not the
+  // moment they clicked confirm). phoneScreenEndAt is that same slot's end time — the
+  // post-call decision reminder fires right at phoneScreenEndAt (e.g. a 3–4pm slot
+  // reminds the recruiter at 4pm), falling back to 30 min after phoneScreenScheduledAt
+  // for older rows confirmed before phoneScreenEndAt existed.
   phoneScreenScheduledAt: timestamp('phone_screen_scheduled_at', { withTimezone: true }),
+  phoneScreenEndAt: timestamp('phone_screen_end_at', { withTimezone: true }),
   // Recruiter-first phone-screen scheduling: the recruiter submits availability
   // via a tokenized link, then the candidate is emailed that window to confirm.
   phoneScreenRecruiterToken: varchar('phone_screen_recruiter_token', { length: 64 }),
   phoneScreenAvailability: text('phone_screen_availability'),
-  // Individual proposed slots (formatted strings) the candidate chooses from,
-  // and the specific slot they picked.
+  // Individual proposed slots the candidate chooses from — objects of shape
+  // { date, start, end, label } (label is the formatted display string; date/start/end
+  // are the raw recruiter-entered values used to compute phoneScreenScheduledAt /
+  // phoneScreenEndAt once picked). Rows written before this shape existed may still
+  // hold a plain string[] of labels — readers must handle both.
   phoneScreenSlots: jsonb('phone_screen_slots'),
   phoneScreenSelectedSlot: text('phone_screen_selected_slot'),
   // Candidate's counter-proposal slots when none of the recruiter's windows work;
