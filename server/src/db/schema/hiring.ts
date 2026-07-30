@@ -249,7 +249,7 @@ export const candidates = pgTable('candidates', {
   interviewScore: integer('interview_score'),
   interviewFeedbackInterviewer: text('interview_feedback_interviewer'),
   notes: text('notes'),
-  // Interview scheduling window exception (48-business-hour rule bypass when an
+  // Interview scheduling window exception (72-business-hour rule bypass when an
   // interviewer or the candidate isn't available inside the window).
   interviewWindowException: boolean('interview_window_exception').notNull().default(false),
   interviewWindowExceptionNote: text('interview_window_exception_note'),

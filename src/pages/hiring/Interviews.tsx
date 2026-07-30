@@ -23,7 +23,7 @@ const FOLLOW_LABEL: Record<string, string> = { avoided: 'Avoided', half_answered
 const INTERVIEW_STAGES = ['Interview Scheduled', 'Interviewed', 'Offered', 'Hired'];
 // Managers want all of a candidate's rounds held inside a tight window so the
 // panel compares people while they're fresh (manager-meeting decision).
-const INTERVIEW_WINDOW_HOURS = 48;
+const INTERVIEW_WINDOW_HOURS = 72;
 const fmtSpan = (h: number) => (h < 48 ? `${h}h` : `${(h / 24).toFixed(1)} days`);
 const FOLLOW_TYPES: { value: 'avoided' | 'half_answered' | 'suggested'; label: string }[] = [
   { value: 'avoided', label: 'Avoided' },
@@ -31,7 +31,7 @@ const FOLLOW_TYPES: { value: 'avoided' | 'half_answered' | 'suggested'; label: s
   { value: 'suggested', label: 'Suggested' },
 ];
 // Elapsed hours between two instants, counting weekdays only (weekends excluded),
-// matching the server's 48-business-hour interview window rule.
+// matching the server's 72-business-hour interview window rule.
 function businessHoursBetween(startMs: number, endMs: number): number {
   if (endMs <= startMs) return 0;
   const STEP = 15 * 60 * 1000;
@@ -495,7 +495,7 @@ export default function Interviews() {
               <div className="mt-2 space-y-1 text-[11px]">
                 {windowExempt ? (
                   <div className="rounded bg-blue-50 border border-blue-200 text-blue-800 px-2 py-1 flex items-center justify-between gap-2">
-                    <span>⏸ Scheduling exception on — the 48-business-hour window isn't enforced for this candidate{(selected as any)?.interviewWindowExceptionNote ? ` (${(selected as any).interviewWindowExceptionNote})` : ''}.</span>
+                    <span>⏸ Scheduling exception on — the 72-business-hour window isn't enforced for this candidate{(selected as any)?.interviewWindowExceptionNote ? ` (${(selected as any).interviewWindowExceptionNote})` : ''}.</span>
                     <button onClick={() => setException.mutate({ candidateId: selected.id, enabled: false })}
                       className="underline shrink-0 hover:text-blue-900">Turn off</button>
                   </div>
@@ -503,19 +503,19 @@ export default function Interviews() {
                   <>
                     {windowHrs != null && !withinWindow && (
                       <div className="rounded bg-amber-50 border border-amber-200 text-amber-800 px-2 py-1 flex items-center justify-between gap-2">
-                        <span>⚠ Rounds span {fmtSpan(windowHrs)} of business time — rounds must be within 48 business hours (weekends excluded); a time outside that window is blocked.</span>
+                        <span>⚠ Rounds span {fmtSpan(windowHrs)} of business time — rounds must be within 72 business hours (weekends excluded); a time outside that window is blocked.</span>
                         <button onClick={() => { const note = window.prompt('Reason for the scheduling exception (e.g. interviewer on vacation):', '') ?? ''; setException.mutate({ candidateId: selected.id, enabled: true, note: note.trim() || null }); }}
                           className="underline shrink-0 hover:text-amber-900">Allow exception</button>
                       </div>
                     )}
                     {windowHrs != null && withinWindow && (
                       <div className="rounded bg-green-50 border border-green-200 text-green-700 px-2 py-1">
-                        ✓ Scheduled rounds fall within {fmtSpan(windowHrs)} of business time (rule: ≤ 48 business hours, weekends excluded).
+                        ✓ Scheduled rounds fall within {fmtSpan(windowHrs)} of business time (rule: ≤ 72 business hours, weekends excluded).
                       </div>
                     )}
                     {!allScheduled && (
                       <div className="text-gray-500 flex items-center justify-between gap-2">
-                        <span>{scheduledTimes.length} of {list.length} rounds have a time set{scheduledTimes.length === list.length ? '' : ' — set times to check the 48-business-hour window'}.</span>
+                        <span>{scheduledTimes.length} of {list.length} rounds have a time set{scheduledTimes.length === list.length ? '' : ' — set times to check the 72-business-hour window'}.</span>
                         <button onClick={() => { const note = window.prompt('Reason for the scheduling exception (e.g. interviewer on vacation):', '') ?? ''; setException.mutate({ candidateId: selected.id, enabled: true, note: note.trim() || null }); }}
                           className="underline shrink-0 text-gray-400 hover:text-gray-600">Allow exception</button>
                       </div>

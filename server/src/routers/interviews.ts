@@ -37,7 +37,7 @@ async function loadRound(id: string) {
 
 // All of a candidate's rounds should sit within this many BUSINESS hours of each
 // other (Wes's request) so the panel compares people while they're fresh.
-export const INTERVIEW_WINDOW_HOURS = 48;
+export const INTERVIEW_WINDOW_HOURS = 72;
 
 // Elapsed time between two instants counting only Mon–Fri (weekends excluded),
 // returned in hours. Walks the span in 15-minute steps — spans here are a few
@@ -135,7 +135,7 @@ export const interviewsRouter = router({
       status: roundStatus.optional(),
     }))
     .mutation(async ({ input }) => {
-      // Enforce the 48-business-hour window: setting a round time can't spread
+      // Enforce the 72-business-hour window: setting a round time can't spread
       // this candidate's scheduled rounds more than 48 hours apart, counting
       // weekdays only (weekends don't burn the window). A per-candidate
       // exception (interviewer/candidate unavailable) skips the check.
@@ -224,7 +224,7 @@ export const interviewsRouter = router({
       return row;
     }),
 
-  // Turn the 48-business-hour scheduling window on/off for one candidate.
+  // Turn the 72-business-hour scheduling window on/off for one candidate.
   // Used when an interviewer or the candidate isn't available inside the window.
   setWindowException: protectedProcedure
     .input(z.object({
