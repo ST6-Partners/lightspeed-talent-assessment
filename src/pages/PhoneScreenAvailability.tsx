@@ -82,12 +82,13 @@ export default function PhoneScreenAvailability() {
           The scheduling options didn't line up. Contact {reachedOut.firstName} directly to find a time — we've emailed them to expect your message.
         </p>
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm">
-          <div className="mb-1"><span className="text-gray-500">Email:</span> <a href={`mailto:${reachedOut.email}`} className="text-ls-primary hover:underline">{reachedOut.email}</a></div>
+          <div className="mb-1"><span className="text-gray-500">Email:</span> <a href={`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(reachedOut.email)}`} target="_blank" rel="noreferrer" className="text-ls-primary hover:underline">{reachedOut.email}</a></div>
           {reachedOut.phone && <div><span className="text-gray-500">Phone:</span> {reachedOut.phone}</div>}
         </div>
-        <a href={`mailto:${reachedOut.email}?subject=${encodeURIComponent('Scheduling your phone screen')}`}
+        <a href={`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(reachedOut.email)}&subject=${encodeURIComponent('Scheduling your phone screen')}`}
+          target="_blank" rel="noreferrer"
           className="mt-4 inline-block w-full text-center py-2.5 rounded-lg bg-ls-primary text-white font-semibold text-sm hover:bg-ls-primary-600">
-          Email {reachedOut.firstName}
+          Email {reachedOut.firstName} in Outlook
         </a>
       </Card>
     );
