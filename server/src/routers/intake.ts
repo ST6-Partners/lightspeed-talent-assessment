@@ -189,7 +189,7 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
     await db.insert(inboundEmails).values({
       fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
       fromName: 'Lightspeed Hiring',
-      toEmail: HIRING_TEAM_INBOX, subject, body: base.text, replyTag: 'kickoff', source: 'simulated',
+      toEmail: HIRING_TEAM_INBOX, subject, body: base.html, replyTag: 'kickoff', source: 'simulated',
       raw: { kind: 'kickoff', reqId: req.id },
     });
     if (hasInterviewers) {
@@ -197,7 +197,7 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
         fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
         fromName: 'Lightspeed Hiring',
         toEmail: HIRING_TEAM_INBOX, subject: inboxAvailability.subject,
-        body: inboxAvailability.text, replyTag: 'interviewer_availability', source: 'simulated',
+        body: inboxAvailability.html, replyTag: 'interviewer_availability', source: 'simulated',
         raw: { kind: 'interviewer_availability', reqId: req.id },
       });
     }
