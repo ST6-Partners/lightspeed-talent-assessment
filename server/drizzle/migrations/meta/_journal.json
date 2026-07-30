@@ -610,6 +610,13 @@
       "when": 1960000057000,
       "tag": "0086_assessment_placeholder",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1960000058000,
+      "tag": "0087_activate_sample_assessment_questions",
+      "breakpoints": true
     }
   ]
 }

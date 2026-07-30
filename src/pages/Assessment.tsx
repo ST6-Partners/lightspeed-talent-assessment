@@ -9,6 +9,7 @@ import { trpc } from '../lib/trpc';
 export default function Assessment() {
   const { token = '' } = useParams();
   const [submission, setSubmission] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
   const [done, setDone] = useState(false);
 
   const { data, isLoading, error } = trpc.candidates.assessmentGetByToken.useQuery(
@@ -86,30 +87,83 @@ export default function Assessment() {
           </div>
         </div>
 
-        <div className="mt-5">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Your response *</label>
-          <textarea
-            value={submission}
-            onChange={(e) => setSubmission(e.target.value)}
-            rows={10}
-            placeholder="Write your response here…"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
-          />
-        </div>
+        {(data as any).answerFormat === 'multi_select' ? (
+          <>
+            <div className="mt-5">
+              <label className="block text-xs font-medium text-gray-600 mb-2">
+                Choose {(data as any).selectCount}
+                {typeof (data as any).selectCount === 'number' && (
+                  <span className="text-gray-400 font-normal"> ({selected.length}/{(data as any).selectCount} selected)</span>
+                )}
+              </label>
+              <div className="space-y-2">
+                {(((data as any).options as string[] | null) ?? []).map((opt) => {
+                  const checked = selected.includes(opt);
+                  const limit = (data as any).selectCount as number | null;
+                  const atLimit = typeof limit === 'number' && selected.length >= limit;
+                  return (
+                    <label
+                      key={opt}
+                      className={`flex items-center gap-2 px-3 py-2 border rounded-md text-sm cursor-pointer ${checked ? 'border-ls-cyan bg-cyan-50' : 'border-gray-300'} ${!checked && atLimit ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={!checked && atLimit}
+                        onChange={() =>
+                          setSelected((prev) => (checked ? prev.filter((x) => x !== opt) : [...prev, opt]))
+                        }
+                        className="accent-ls-cyan"
+                      />
+                      <span className="text-gray-800">{opt}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
 
-        {submitMutation.error && (
-          <p className="mt-3 text-sm text-red-600">{submitMutation.error.message}</p>
+            {submitMutation.error && (
+              <p className="mt-3 text-sm text-red-600">{submitMutation.error.message}</p>
+            )}
+
+            <div className="mt-5">
+              <button
+                onClick={() => submitMutation.mutate({ token, submission: selected.join(', '), selections: selected })}
+                disabled={selected.length !== (data as any).selectCount || submitMutation.isLoading}
+                className="px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50"
+              >
+                {submitMutation.isLoading ? 'Submitting…' : 'Submit assessment'}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="mt-5">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Your response *</label>
+              <textarea
+                value={submission}
+                onChange={(e) => setSubmission(e.target.value)}
+                rows={10}
+                placeholder="Write your response here…"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+              />
+            </div>
+
+            {submitMutation.error && (
+              <p className="mt-3 text-sm text-red-600">{submitMutation.error.message}</p>
+            )}
+
+            <div className="mt-5">
+              <button
+                onClick={() => submitMutation.mutate({ token, submission })}
+                disabled={!submission.trim() || submitMutation.isLoading}
+                className="px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50"
+              >
+                {submitMutation.isLoading ? 'Submitting…' : 'Submit assessment'}
+              </button>
+            </div>
+          </>
         )}
-
-        <div className="mt-5">
-          <button
-            onClick={() => submitMutation.mutate({ token, submission })}
-            disabled={!submission.trim() || submitMutation.isLoading}
-            className="px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50"
-          >
-            {submitMutation.isLoading ? 'Submitting…' : 'Submit assessment'}
-          </button>
-        </div>
       </div>
     </Shell>
   );

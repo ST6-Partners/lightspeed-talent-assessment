@@ -40,6 +40,10 @@ export interface ResolvedAssessmentTask {
   instructions: string;         // brief + optional show-your-work
   scoringGuideWork: string | null;
   scoringGuideAi: string | null;
+  answerFormat: 'free_text' | 'multi_select';
+  options: string[] | null;        // multi_select: choices shown to the candidate
+  correctOptions: string[] | null; // multi_select: correct subset (server-only)
+  selectCount: number | null;      // multi_select: how many to pick
 }
 
 function compose(task: any): ResolvedAssessmentTask {
@@ -53,6 +57,10 @@ function compose(task: any): ResolvedAssessmentTask {
     instructions,
     scoringGuideWork: task.scoringGuideWork ?? null,
     scoringGuideAi: task.scoringGuideAi ?? null,
+    answerFormat: task.answerFormat === 'multi_select' ? 'multi_select' : 'free_text',
+    options: task.options ?? null,
+    correctOptions: task.correctOptions ?? null,
+    selectCount: task.selectCount ?? null,
   };
 }
 
@@ -141,6 +149,9 @@ export async function getAssessmentByToken(db: any, token: string) {
     instructions: task?.instructions ?? 'A member of the hiring team will share the assessment details.',
     alreadySubmitted: !!candidate.assessmentSubmittedAt,
     submittedAt: candidate.assessmentSubmittedAt ?? null,
+    answerFormat: task?.answerFormat ?? 'free_text',
+    options: task?.options ?? null,
+    selectCount: task?.selectCount ?? null,
   };
 }
 
@@ -149,7 +160,7 @@ export async function getAssessmentByToken(db: any, token: string) {
  * the assessment complete, AI-scores the answer into a real CCAT-shaped score,
  * then runs the normal assessment gate on that real data.
  */
-export async function submitAssessment(db: any, token: string, submission: string) {
+export async function submitAssessment(db: any, token: string, submission: string, selections?: string[]) {
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.assessmentToken, token) });
   if (!candidate) return { ok: false as const, reason: 'not_found' };
   if (candidate.assessmentSubmittedAt) return { ok: true as const }; // idempotent
@@ -160,22 +171,37 @@ export async function submitAssessment(db: any, token: string, submission: strin
     : null;
   const task = await resolveAssessmentTask(db, candidate).catch(() => null);
 
-  // Score the real answer (reuses the work-sample rubric scorer; falls back to a
-  // labelled placeholder score if no ANTHROPIC_API_KEY).
-  const scored = await scoreWorkSample({
-    firstName: candidate.firstName,
-    lastName: candidate.lastName,
-    jobTitle: jd?.jobTitle ?? null,
-    taskTitle: task?.title ?? null,
-    brief: task?.brief ?? null,
-    scoringGuideWork: task?.scoringGuideWork ?? null,
-    scoringGuideAi: task?.scoringGuideAi ?? null,
-    submission,
-    link: null,
-  }).catch(() => null);
-
-  // Map the 0–100 answer score onto the CCAT shape the assessment gate reads.
-  const overall = scored?.overallScore ?? 50;
+  // Pick-list (multi_select) questions are auto-graded against their correct
+  // answers (no model call). Everything else goes to the rubric scorer.
+  let overall: number;
+  let gradeSummary = '';
+  if (task?.answerFormat === 'multi_select') {
+    const correct = task.correctOptions ?? [];
+    const need = task.selectCount ?? correct.length ?? 0;
+    const denom = Math.max(need, correct.length, 1);
+    const sel = Array.isArray(selections) ? selections
+      : (submission ? submission.split(',').map((x) => x.trim()).filter(Boolean) : []);
+    const cs = new Set(correct);
+    const picked = sel.filter((x) => cs.has(x));
+    const wrong = sel.filter((x) => !cs.has(x));
+    overall = Math.max(0, Math.min(100, Math.round(((picked.length - wrong.length) / denom) * 100)));
+    gradeSummary = `Auto-graded pick-list: ${picked.length} of ${correct.length} correct` +
+      `${wrong.length ? `, ${wrong.length} incorrect` : ''}. Selected: ${sel.join(', ') || '(none)'}.`;
+  } else {
+    const scored = await scoreWorkSample({
+      firstName: candidate.firstName,
+      lastName: candidate.lastName,
+      jobTitle: jd?.jobTitle ?? null,
+      taskTitle: task?.title ?? null,
+      brief: task?.brief ?? null,
+      scoringGuideWork: task?.scoringGuideWork ?? null,
+      scoringGuideAi: task?.scoringGuideAi ?? null,
+      submission,
+      link: null,
+    }).catch(() => null);
+    overall = scored?.overallScore ?? 50;
+    gradeSummary = scored?.summary ?? '';
+  }
   const clampPct = (n: number) => Math.max(1, Math.min(99, Math.round(n)));
   const ccatPercentile = clampPct(overall);
   const ccatScore = Math.max(0, Math.min(50, Math.round((overall / 100) * 50)));
@@ -183,8 +209,7 @@ export async function submitAssessment(db: any, token: string, submission: strin
   const notes = [
     'PLACEHOLDER ASSESSMENT (work-sample based, not a Criteria CCAT).',
     `Derived score: ${overall}/100 → CCAT raw ${ccatScore}/50, percentile ${ccatPercentile}.`,
-    scored?.summary ? '' : '',
-    scored?.summary ?? '',
+    gradeSummary,
     `[Submitted ${now.toISOString().slice(0, 10)}]`,
   ].filter(Boolean).join('\n');
 
