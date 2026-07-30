@@ -989,20 +989,26 @@ export function buildInterviewerAvailabilityEmail(d: {
 export async function emailInterviewerDeclinedRoleManager(d: {
   to: string; interviewerName?: string | null; interviewerEmail: string;
   department: string; jobTitle?: string; hiringManager: string; reason?: string;
-}): Promise<void> {
+  /** When set, the email carries an "Assign to someone else" button to this page. */
+  reassignUrl?: string;
+}): Promise<{ subject: string; html: string }> {
   const who = d.interviewerName || d.interviewerEmail;
   const role = `${d.department}${d.jobTitle ? ' · ' + d.jobTitle : ''}`;
-  await sendEmail({
-    to: d.to,
-    templateId: 'interviewer_declined_role',
-    subject: `Interview coverage needed: ${who} can’t interview for ${role}`,
-    html: wrap(`
+  const subject = `Interview coverage needed: ${who} can’t interview for ${role}`;
+  const html = wrap(`
       ${h1('An interviewer needs coverage')}
       ${p(`<strong>${esc(who)}</strong> was set as an interviewer for <strong>${esc(role)}</strong> (hiring manager: ${esc(d.hiringManager)}) and has flagged that they can’t take it on.`)}
       ${d.reason ? p(`Reason given: &ldquo;${esc(d.reason)}&rdquo;`) : ''}
       ${p('Please help arrange alternative coverage so this role’s interview plan is set before candidates reach the interview stage.')}
-    `),
-  });
+      ${d.reassignUrl ? `<div style="margin:22px 0 4px;padding:18px 20px;background:#eff5ff;border:1px solid #bcd3f7;border-left:4px solid #2563eb;border-radius:10px;">
+      <p style="font-size:15px;font-weight:700;color:#16284a;margin:0 0 6px;">Assign this interview to someone else</p>
+      <p style="font-size:14px;color:#33465c;margin:0 0 14px;">Pick a replacement interviewer — they’ll get the same availability request ${esc(who)} received.</p>
+      <a href="${d.reassignUrl}" style="display:inline-block;padding:12px 22px;background:#2563eb;color:#fff;border-radius:7px;text-decoration:none;font-weight:700;font-size:14px;">Assign to someone else &rarr;</a>
+      <p style="font-size:12px;color:#7a8aa0;margin:14px 0 0;">Or paste this link: ${d.reassignUrl}</p>
+    </div>` : ''}
+    `);
+  await sendEmail({ to: d.to, templateId: 'interviewer_declined_role', subject, html });
+  return { subject, html };
 }
 
 // ============================================================

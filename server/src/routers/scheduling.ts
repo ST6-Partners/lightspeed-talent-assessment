@@ -14,7 +14,7 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, asc } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
@@ -22,7 +22,8 @@ import { candidates, jobDescriptions, jobRequisitions } from '../db/schema/hirin
 import { employees } from '../db/schema/employees.js';
 import { interviewerAvailability } from '../db/schema/interviewerAvailability.js';
 import { inboundEmails } from '../db/schema/email.js';
-import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, HIRING_TEAM_INBOX } from '../services/email.js';
+import { interviewPlan, hiringTeam } from '../db/schema/intake.js';
+import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX } from '../services/email.js';
 
 // Capability tokens for the interviewer "can't interview for this role" link that
 // ships in the intake-approval availability email. reqId is a random UUID, so the
@@ -243,7 +244,10 @@ export const schedulingRouter = router({
       const jd = (await ctx.db.select().from(jobDescriptions).where(eq(jobDescriptions.reqId, req.id)).limit(1))[0];
       const emp = (await ctx.db.select().from(employees).where(eq(employees.email, dec.email)).limit(1))[0];
       const to = emp?.managerEmail || process.env.HR_EMAIL || HIRING_TEAM_INBOX;
-      await emailInterviewerDeclinedRoleManager({
+      // Same token identifies (reqId, declining email); the reassign page uses it
+      // to know who is being replaced.
+      const reassignUrl = `${appBaseUrl()}/interviewer-reassign/${input.token}`;
+      const mgr = await emailInterviewerDeclinedRoleManager({
         to,
         interviewerName: (emp as any)?.name ?? null,
         interviewerEmail: dec.email,
@@ -251,8 +255,80 @@ export const schedulingRouter = router({
         jobTitle: jd?.jobTitle ?? undefined,
         hiringManager: req.hiringManager,
         reason: input.reason,
+        reassignUrl,
       });
+      // Mirror into the test inbox (HTML) so the manager copy — and its "Assign to
+      // someone else" button — is reviewable without a live email provider.
+      try {
+        await ctx.db.insert(inboundEmails).values({
+          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+          fromName: 'Lightspeed Hiring',
+          toEmail: to, subject: mgr.subject, body: mgr.html,
+          replyTag: 'interviewer_declined_role', source: 'simulated',
+          raw: { kind: 'interviewer_declined_role', reqId: req.id, reassignUrl },
+        });
+      } catch (err) { console.error('[scheduling] decline inbox record failed:', err); }
       return { ok: true, viaHrFallback: !emp?.managerEmail };
+    }),
+
+  // ── PUBLIC: manager opens the "Assign to someone else" link from the decline
+  // notification and names a replacement interviewer. Replaces the declining
+  // interviewer on this requisition's rounds + hiring team, then fires the SAME
+  // availability request to the new person (with their own fresh links, so they
+  // can set availability or decline in turn).
+  reassignInterviewer: publicProcedure
+    .input(z.object({
+      token: z.string().min(1),
+      name: z.string().min(1, 'Enter the replacement interviewer\'s name.').max(200),
+      email: z.string().email('Enter a valid email address.'),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const dec = decodeInterviewerDeclineToken(input.token);
+      if (!dec) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid.' });
+      const req = (await ctx.db.select().from(jobRequisitions).where(eq(jobRequisitions.id, dec.reqId)).limit(1))[0];
+      if (!req) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is no longer valid.' });
+      const jd = (await ctx.db.select().from(jobDescriptions).where(eq(jobDescriptions.reqId, req.id)).limit(1))[0];
+      const newEmail = input.email.trim().toLowerCase();
+      const newName = input.name.trim();
+      if (newEmail === dec.email.toLowerCase()) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That is the same interviewer who declined — choose a different person.' });
+      }
+
+      // Replace the declining interviewer wherever they were set for this role.
+      await ctx.db.update(interviewPlan)
+        .set({ interviewer: newName, interviewerEmail: newEmail })
+        .where(and(eq(interviewPlan.reqId, dec.reqId), eq(interviewPlan.interviewerEmail, dec.email)));
+      await ctx.db.update(hiringTeam)
+        .set({ personRef: newEmail })
+        .where(and(eq(hiringTeam.reqId, dec.reqId), eq(hiringTeam.personRef, dec.email)));
+
+      // Fire the identical availability email to the new interviewer, fresh tokens.
+      const token = encodeInterviewerDeclineToken(dec.reqId, newEmail);
+      const rounds = await ctx.db.select().from(interviewPlan)
+        .where(eq(interviewPlan.reqId, dec.reqId)).orderBy(asc(interviewPlan.sortOrder));
+      const avail = buildInterviewerAvailabilityEmail({
+        department: req.department,
+        jobTitle: jd?.jobTitle ?? undefined,
+        hiringManager: req.hiringManager,
+        schedulingUrl: `${appBaseUrl()}/interviewer-availability/${token}`,
+        declineUrl: `${appBaseUrl()}/interviewer-unavailable/${token}`,
+        rounds,
+      });
+      try { await sendEmail({ to: newEmail, subject: avail.subject, html: avail.html, templateId: 'interviewer_availability' }); }
+      catch (err) { console.error('[scheduling] reassign availability send failed:', err); }
+      // Mirror into the test inbox (HTML) so it's reviewable without a live provider.
+      try {
+        await ctx.db.insert(inboundEmails).values({
+          fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+          fromName: 'Lightspeed Hiring',
+          toEmail: newEmail, subject: avail.subject, body: avail.html,
+          replyTag: 'interviewer_availability', source: 'simulated',
+          raw: { kind: 'interviewer_availability', reqId: dec.reqId, reassignedFrom: dec.email },
+        });
+      } catch (err) { console.error('[scheduling] reassign inbox record failed:', err); }
+
+      const role = `${req.department}${jd?.jobTitle ? ' \u00b7 ' + jd.jobTitle : ''}`;
+      return { ok: true, role, newName, newEmail };
     }),
 
   // ── PUBLIC: interviewer opens the self-serve availability link from the
