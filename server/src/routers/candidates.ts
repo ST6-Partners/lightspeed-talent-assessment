@@ -61,7 +61,10 @@ const CandidateInput = z.object({
   email: z.string().email().max(300),
   phone: z.string().max(50).optional(),
   linkedinUrl: z.string().url().optional().or(z.literal('')),
-  resumeUrl: z.string().url().optional().or(z.literal('')),
+  // Accepts a pasted full URL, an app-relative upload path (/api/uploaded/...),
+  // or empty. The resume-upload flow stores the relative path, which is not a
+  // valid absolute URL — the old z.string().url() rejected it and blocked create.
+  resumeUrl: z.union([z.literal(''), z.string().url(), z.string().startsWith('/')]).optional(),
   resumeText: z.string().max(100000).optional(),
   source: z.string().max(100).optional(),
   notes: z.string().optional(),
