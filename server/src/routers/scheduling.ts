@@ -24,7 +24,7 @@ import { interviewerAvailability } from '../db/schema/interviewerAvailability.js
 import { inboundEmails } from '../db/schema/email.js';
 import { interviewPlan, hiringTeam } from '../db/schema/intake.js';
 import { INTERVIEW_WINDOW_HOURS } from './interviews.js';
-import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter } from '../services/email.js';
+import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate } from '../services/email.js';
 
 // Capability tokens for the interviewer "can't interview for this role" link that
 // ships in the intake-approval availability email. reqId is a random UUID, so the
@@ -341,6 +341,8 @@ export const schedulingRouter = router({
         availability: (candidate as any).phoneScreenAvailability ?? null,
         submitted: !!candidate.phoneScreenBookingOpenedAt,
         candidateBooked: !!candidate.phoneScreenScheduledAt,
+        candidateSlots: Array.isArray((candidate as any).phoneScreenCandidateSlots) ? ((candidate as any).phoneScreenCandidateSlots as string[]) : [],
+        selectedSlot: (candidate as any).phoneScreenSelectedSlot ?? null,
       };
     }),
 
@@ -405,15 +407,47 @@ export const schedulingRouter = router({
 
   // ── PUBLIC: candidate says none of the windows work — notify the recruiter ──
   phoneScreenNoAvailability: publicProcedure
-    .input(z.object({ token: z.string().min(1), availability: z.string().max(2000).optional() }))
+    .input(z.object({
+      token: z.string().min(1),
+      windows: z.array(z.object({ date: z.string().min(1), start: z.string().min(1), end: z.string().min(1) })).min(1).max(20),
+    }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenBookingToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
+      const slotLines = input.windows.map(fmtAvailabilityWindow);
+      await ctx.db.update(candidates).set({
+        phoneScreenCandidateSlots: slotLines,
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, candidate.id));
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      const recruiterToken = (candidate as any).phoneScreenRecruiterToken as string | null;
+      const recruiterUrl = recruiterToken ? `${appBaseUrl()}/phone-screen-availability/${recruiterToken}` : undefined;
       await emailPhoneScreenNoAvailabilityRecruiter({
         candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle,
-        candidateAvailability: input.availability,
+        candidateSlots: slotLines, recruiterUrl,
       }).catch((err) => console.error('[scheduling.phoneScreenNoAvailability] recruiter email failed:', err));
+      return { ok: true as const };
+    }),
+
+  // ── PUBLIC: recruiter picks one of the candidate's counter-proposed slots ──
+  confirmCandidateSlot: publicProcedure
+    .input(z.object({ token: z.string().min(1), slot: z.string().min(1).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenRecruiterToken, input.token) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
+      const proposed: string[] = Array.isArray((candidate as any).phoneScreenCandidateSlots) ? ((candidate as any).phoneScreenCandidateSlots as string[]) : [];
+      if (!proposed.includes(input.slot)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That time is no longer offered. Please pick one of the listed times.' });
+      }
+      await ctx.db.update(candidates).set({
+        phoneScreenSelectedSlot: input.slot,
+        phoneScreenScheduledAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, candidate.id));
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      await emailPhoneScreenConfirmedCandidate({
+        email: candidate.email, firstName: candidate.firstName, jobTitle, slot: input.slot,
+      }).catch((err) => console.error('[scheduling.confirmCandidateSlot] candidate email failed:', err));
       return { ok: true as const };
     }),
 

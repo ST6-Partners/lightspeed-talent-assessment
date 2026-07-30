@@ -843,17 +843,35 @@ export async function emailPhoneScreenConfirmedRecruiter(data: { candidateName: 
   });
 }
 
-export async function emailPhoneScreenNoAvailabilityRecruiter(data: { candidateName: string; jobTitle?: string; candidateAvailability?: string }) {
-  const avail = (data.candidateAvailability ?? '').trim();
+export async function emailPhoneScreenNoAvailabilityRecruiter(data: { candidateName: string; jobTitle?: string; candidateSlots?: string[]; recruiterUrl?: string }) {
+  const slots = (data.candidateSlots ?? []).filter(Boolean);
+  const slotList = slots.length
+    ? '<ul style="margin:6px 0 16px;padding-left:18px;font-size:14px;color:#333;line-height:1.8;">' + slots.map((sl) => `<li>${esc(sl)}</li>`).join('') + '</ul>'
+    : '';
   await sendEmail({
     to: HR_EMAIL,
     templateId: 'phone_screen_no_availability_recruiter',
-    subject: `Phone screen — no availability match: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+    subject: `Phone screen — candidate proposed new times: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
     html: wrap(`
-      ${h1('The candidate could not make your proposed times')}
-      ${p(`<strong>${esc(data.candidateName)}</strong> reviewed your availability${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''} and none of the windows worked for them.`)}
-      ${avail ? `${p('They shared the times that <strong>do</strong> work for them:')}<div style="margin:8px 0 16px;padding:12px 14px;background:#f6f9fb;border:1px solid #e3eef5;border-radius:8px;font-size:14px;line-height:1.7;white-space:pre-line;">${esc(avail)}</div>` : ''}
-      ${p('Please reach out to the candidate to confirm a time, or send a new set of windows.')}
+      ${h1('The candidate proposed their own times')}
+      ${p(`<strong>${esc(data.candidateName)}</strong> couldn't make any of your proposed windows${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}, and sent back the times that work for them:`)}
+      ${slotList}
+      ${data.recruiterUrl ? p('Open the scheduler to pick one of their times and lock in the phone screen.') : p('Open the phone-screen scheduler to pick one of their times.')}
+      ${data.recruiterUrl ? button('Pick one of their times', data.recruiterUrl) : ''}
+    `),
+  });
+}
+
+export async function emailPhoneScreenConfirmedCandidate(data: { email: string; firstName: string; jobTitle?: string; slot: string }) {
+  await sendEmail({
+    to: data.email,
+    templateId: 'phone_screen_confirmed_candidate',
+    subject: `Your phone screen is confirmed${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+    html: wrap(`
+      ${h1('Your phone screen is confirmed')}
+      ${p(`Hi ${esc(data.firstName)}, thanks for the options. We've locked in your phone screen${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''} at:`)}
+      <div style="margin:8px 0 16px;padding:12px 14px;background:#eefaf0;border:1px solid #bfe6c8;border-radius:8px;font-size:15px;font-weight:700;color:#1c7a3a;">${esc(data.slot)}</div>
+      ${p('Our recruiter will call the number you provided. If anything changes, just reply to this email.')}
     `),
   });
 }

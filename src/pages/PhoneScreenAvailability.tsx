@@ -41,6 +41,8 @@ export default function PhoneScreenAvailability() {
   const submit = trpc.scheduling.submitPhoneScreenAvailability.useMutation({
     onSuccess: () => { setDone(true); refetch(); },
   });
+  const [pickSelected, setPickSelected] = useState<string | null>(null);
+  const pick = trpc.scheduling.confirmCandidateSlot.useMutation({ onSuccess: () => refetch() });
 
   if (isLoading) return <Card><p className="text-sm text-gray-400">Loading…</p></Card>;
   if (error || !data) {
@@ -51,6 +53,53 @@ export default function PhoneScreenAvailability() {
           <h1 className="font-semibold text-gray-900 mb-1">Link not found</h1>
           <p className="text-sm text-gray-500">This availability link is invalid or has expired.</p>
         </div>
+      </Card>
+    );
+  }
+
+  if ((data as any).candidateBooked) {
+    return (
+      <Card>
+        <div className="text-center">
+          <CheckCircle2 className="mx-auto mb-3 text-green-600" size={28} />
+          <h1 className="font-semibold text-gray-900 mb-1">Phone screen confirmed</h1>
+          <p className="text-sm text-gray-500">
+            {data.candidateName}{data.jobTitle ? ` (${data.jobTitle})` : ''} is booked{(data as any).selectedSlot ? ` for ${(data as any).selectedSlot}` : ''}.
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  const candidateSlots: string[] = Array.isArray((data as any).candidateSlots) ? (data as any).candidateSlots : [];
+  if (candidateSlots.length > 0) {
+    return (
+      <Card>
+        <CalendarClock className="mb-3 text-ls-primary" size={26} />
+        <h1 className="text-xl font-bold text-gray-900">The candidate proposed new times</h1>
+        <p className="text-gray-500 text-sm mt-1 mb-4">
+          <strong>{data.candidateName}</strong>{data.jobTitle ? ` — ${data.jobTitle}` : ''} couldn't make your windows and sent the times below. Pick one to confirm the phone screen — they'll be emailed the final time.
+        </p>
+        <div className="space-y-2 mb-4">
+          {candidateSlots.map((slot, i) => {
+            const active = pickSelected === slot;
+            return (
+              <button key={i} type="button" onClick={() => setPickSelected(slot)}
+                className={`w-full flex items-center gap-3 text-left px-4 py-3 rounded-md border text-sm transition-colors ${active ? 'border-ls-primary bg-ls-primary/5 ring-1 ring-ls-primary' : 'border-gray-200 hover:border-gray-400'}`}>
+                <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full border ${active ? 'border-ls-primary' : 'border-gray-300'}`}>
+                  {active && <span className="w-2 h-2 rounded-full bg-ls-primary" />}
+                </span>
+                <span className={active ? 'font-medium text-gray-900' : 'text-gray-700'}>{slot}</span>
+              </button>
+            );
+          })}
+        </div>
+        {pick.error && <p className="text-sm text-red-600 mb-2">{pick.error.message}</p>}
+        <button onClick={() => pickSelected && pick.mutate({ token, slot: pickSelected })}
+          disabled={!pickSelected || pick.isLoading}
+          className="w-full py-2.5 rounded-lg bg-ls-primary text-white font-semibold text-sm hover:bg-ls-primary-600 disabled:opacity-50">
+          {pick.isLoading ? 'Confirming…' : pickSelected ? 'Confirm this time' : 'Select a time above'}
+        </button>
       </Card>
     );
   }

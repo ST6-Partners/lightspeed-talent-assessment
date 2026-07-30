@@ -244,6 +244,9 @@ export const candidates = pgTable('candidates', {
   // and the specific slot they picked.
   phoneScreenSlots: jsonb('phone_screen_slots'),
   phoneScreenSelectedSlot: text('phone_screen_selected_slot'),
+  // Candidate's counter-proposal slots when none of the recruiter's windows work;
+  // the recruiter then picks one of these (mirror of the original flow).
+  phoneScreenCandidateSlots: jsonb('phone_screen_candidate_slots'),
   // Work-sample live-walkthrough scheduling (its own booking link so a walkthrough
   // booking is never mistaken for an interview booking by the Calendly webhook).
   workSampleBookingToken: varchar('work_sample_booking_token', { length: 64 }),
