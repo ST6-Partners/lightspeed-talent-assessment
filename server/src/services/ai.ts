@@ -99,6 +99,161 @@ async function callClaude(systemPrompt: string, userPrompt: string, model: strin
   return (await callClaudeMeta(systemPrompt, userPrompt, model)).text;
 }
 
+// ── Vision / document caller ───────────────────────────────
+// Sends a single uploaded file (image, PDF, or text) plus a text
+// instruction to Claude. Images and PDFs go as native content blocks;
+// text files are inlined as text. Returns the model's text response.
+const VISION_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+export function isSupportedUploadType(mimeType: string): boolean {
+  const m = (mimeType || '').toLowerCase();
+  return (
+    VISION_IMAGE_TYPES.includes(m) ||
+    m === 'application/pdf' ||
+    m.startsWith('text/') ||
+    m === 'application/json'
+  );
+}
+
+async function callClaudeVision(
+  systemPrompt: string,
+  instruction: string,
+  media: { mimeType: string; base64: string },
+  model: string = MODEL,
+  maxTokens: number = 2048,
+): Promise<string> {
+  const m = (media.mimeType || '').toLowerCase();
+  const content: any[] = [];
+
+  if (VISION_IMAGE_TYPES.includes(m)) {
+    content.push({ type: 'image', source: { type: 'base64', media_type: m, data: media.base64 } });
+  } else if (m === 'application/pdf') {
+    content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: media.base64 } });
+  } else if (m.startsWith('text/') || m === 'application/json') {
+    const decoded = Buffer.from(media.base64, 'base64').toString('utf8').slice(0, 100_000);
+    content.push({ type: 'text', text: `Uploaded file contents:\n\n${decoded}` });
+  } else {
+    throw new Error(`Unsupported file type: ${media.mimeType}. Upload an image, PDF, or text file.`);
+  }
+  content.push({ type: 'text', text: instruction });
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [{ role: 'user', content }],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Anthropic API error ${response.status}: ${err}`);
+  }
+  const data = await response.json() as any;
+  const block = (data.content ?? []).find((b: any) => b.type === 'text');
+  return (block?.text as string) ?? '';
+}
+
+// Strip ```json fences / stray prose and parse the first JSON object.
+function parseJsonLoose<T>(raw: string): T {
+  let t = (raw || '').trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  const start = t.indexOf('{');
+  const end = t.lastIndexOf('}');
+  if (start !== -1 && end !== -1 && end > start) t = t.slice(start, end + 1);
+  return JSON.parse(t) as T;
+}
+
+// ── Draft a work-sample task from an uploaded file ─────────
+export interface DraftedTask {
+  title: string;
+  brief: string;
+  showYourWorkInstructions: string;
+  scoringGuideWork: string;
+  scoringGuideAi: string;
+  difficulty: 'Entry' | 'Mid' | 'Senior';
+  timeLimitMin: number | null;
+  answerFormat: 'free_text' | 'multi_select';
+  options: string[] | null;
+  correctOptions: string[] | null;
+  selectCount: number | null;
+  sandbox: boolean;
+  notes?: string;
+}
+
+export async function draftTaskFromUpload(input: {
+  mimeType: string;
+  base64: string;
+  filename: string;
+}): Promise<DraftedTask> {
+  // Sandbox: no key -> return a clearly-labelled placeholder draft so the
+  // recruiter can still see the flow (and edit it into a real task).
+  if (SANDBOX) {
+    return {
+      title: `Draft from ${input.filename}`,
+      brief: '[Sandbox] Set ANTHROPIC_API_KEY to auto-draft a work sample from an upload. Meanwhile, edit this brief by hand.',
+      showYourWorkInstructions: 'Ask the candidate to paste their prompts, iterations, and what they rejected.',
+      scoringGuideWork: '',
+      scoringGuideAi: '',
+      difficulty: 'Mid',
+      timeLimitMin: 45,
+      answerFormat: 'free_text',
+      options: null,
+      correctOptions: null,
+      selectCount: null,
+      sandbox: true,
+    };
+  }
+
+  const system =
+    'You convert an uploaded work-sample document (a screenshot, PDF, or text file) into a structured hiring work-sample task for the Lightspeed Talent Assessment app. ' +
+    'A work-sample task measures BOTH work quality and AI skill. Read the uploaded file and produce ONE task. ' +
+    'If the file is clearly a multiple-choice / pick-a-set-from-a-list question, set answerFormat to "multi_select", list every option in `options`, put the correct ones in `correctOptions`, and set `selectCount` to how many the candidate should pick. Otherwise set answerFormat to "free_text" and leave options/correctOptions/selectCount null. ' +
+    'Return STRICT JSON only (no prose, no markdown fences) with exactly these keys: ' +
+    'title (string), brief (string — the task exactly as the candidate should read it), showYourWorkInstructions (string), scoringGuideWork (string — what good looks like for the output), scoringGuideAi (string — what good looks like for how they used AI), difficulty ("Entry"|"Mid"|"Senior"), timeLimitMin (integer minutes or null), answerFormat ("free_text"|"multi_select"), options (array of strings or null), correctOptions (array of strings or null), selectCount (integer or null).';
+
+  const instruction =
+    'Convert the uploaded work sample above into the structured task JSON described in the system prompt. ' +
+    `The uploaded file is named "${input.filename}". Return JSON only.`;
+
+  const raw = await callClaudeVision(system, instruction, { mimeType: input.mimeType, base64: input.base64 }, MODEL, 2048);
+  const d = parseJsonLoose<any>(raw);
+
+  const asStr = (v: any) => (typeof v === 'string' ? v : '');
+  const diff = ['Entry', 'Mid', 'Senior'].includes(d.difficulty) ? d.difficulty : 'Mid';
+  const fmt = d.answerFormat === 'multi_select' ? 'multi_select' : 'free_text';
+  const options = fmt === 'multi_select' && Array.isArray(d.options)
+    ? d.options.map((o: any) => String(o)).filter(Boolean) : null;
+  const correctOptions = fmt === 'multi_select' && Array.isArray(d.correctOptions)
+    ? d.correctOptions.map((o: any) => String(o)).filter(Boolean) : null;
+  const selectCount = fmt === 'multi_select'
+    ? (Number.isInteger(d.selectCount) && d.selectCount > 0 ? d.selectCount : (correctOptions?.length ?? null))
+    : null;
+
+  return {
+    title: asStr(d.title) || `Draft from ${input.filename}`,
+    brief: asStr(d.brief),
+    showYourWorkInstructions: asStr(d.showYourWorkInstructions),
+    scoringGuideWork: asStr(d.scoringGuideWork),
+    scoringGuideAi: asStr(d.scoringGuideAi),
+    difficulty: diff,
+    timeLimitMin: Number.isInteger(d.timeLimitMin) ? d.timeLimitMin : null,
+    answerFormat: fmt,
+    options,
+    correctOptions,
+    selectCount,
+    sandbox: false,
+  };
+}
+
 // Provenance attached to an AI-produced result so the caller (which has
 // the candidate id + db) can log it to the decision_log. Phase 2.
 export interface DecisionProvenance {
