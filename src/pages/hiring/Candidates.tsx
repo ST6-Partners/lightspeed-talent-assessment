@@ -1418,7 +1418,7 @@ function CombinedScreenSection({ candidateId, existingSummary, onChanged, defaul
   const rec = result?.recommendation;
 
   return (
-    <Section title="Screen - resume, values, skills" defaultOpen={defaultOpen}>
+    <Section title="Screen - resume" defaultOpen={defaultOpen}>
       <div className="text-xs text-gray-500">
         One automated screen for the 200 \u2192 20 gate. It checks the resume against the job's <strong>required</strong> qualifications (missing any, or needing sponsorship, auto-rejects), grades <strong>skills fit</strong> and <strong>values match</strong>, and gives one recommendation. Skills and values inform the call but never reject on their own. Scores are provisional \u2014 calibrate before relying on them.
       </div>
