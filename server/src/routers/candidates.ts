@@ -435,8 +435,18 @@ async function rejectCandidateCore(db: any, userId: string, id: string, reason: 
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Candidate is already rejected' });
   }
 
+  // Same review-flag cleanup as the advance path above (and as resolveReview's own
+  // reject branch already does) — a rejected candidate shouldn't keep surfacing in
+  // the Review tab / Candidates "Review" pill if they're later unrejected back into
+  // a non-terminal stage.
+  const clearReviewFlag = existing.screenRecommendation === 'review';
   const [candidate] = await db.update(candidates)
-    .set({ currentStage: 'Rejected', rejectionReason: reason, updatedAt: new Date() })
+    .set({
+      currentStage: 'Rejected',
+      rejectionReason: reason,
+      ...(clearReviewFlag ? { screenRecommendation: 'rejected' } : {}),
+      updatedAt: new Date(),
+    })
     .where(eq(candidates.id, id))
     .returning();
 
@@ -770,8 +780,20 @@ export const candidatesRouter = router({
       // candidate has passed (test data) so a hand-advanced candidate still shows a
       // work-sample / resume-review score. Only fills nulls.
       const backfill = fwd ? simulateUpstreamScores(existing, input.toStage) : {};
+      // Clear a pending "needs review" flag on a forward move — otherwise a candidate
+      // advanced here (rather than via the Review queue's own Advance button, which
+      // already clears it — see advanceFromReview) keeps showing up in the Review tab
+      // and the Candidates tab's "Review" pill even though a human already acted on
+      // them. Only touches the flag when it was actually 'review'; leaves any other
+      // value (e.g. already 'advance', or null) alone.
+      const clearReviewFlag = fwd && existing.screenRecommendation === 'review';
       const [candidate] = await ctx.db.update(candidates)
-        .set({ currentStage: input.toStage, ...backfill, updatedAt: new Date() })
+        .set({
+          currentStage: input.toStage,
+          ...backfill,
+          ...(clearReviewFlag ? { screenRecommendation: 'advance' } : {}),
+          updatedAt: new Date(),
+        })
         .where(eq(candidates.id, input.id))
         .returning();
 
