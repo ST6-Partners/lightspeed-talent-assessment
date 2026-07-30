@@ -30,7 +30,7 @@ const Card = ({ children }: { children: React.ReactNode }) => (
 
 export default function PhoneScreenAvailability() {
   const { token = '' } = useParams();
-  const [rows, setRows] = useState<Win[]>([{ ...EMPTY_ROW }]);
+  const [rows, setRows] = useState<Win[]>([{ ...EMPTY_ROW }, { ...EMPTY_ROW }, { ...EMPTY_ROW }]);
   const [note, setNote] = useState('');
   const [done, setDone] = useState(false);
 
@@ -84,8 +84,8 @@ export default function PhoneScreenAvailability() {
       <CalendarClock className="mb-3 text-ls-primary" size={26} />
       <h1 className="text-xl font-bold text-gray-900">Set your availability for a phone screen</h1>
       <p className="text-gray-500 text-sm mt-1 mb-4">
-        <strong>{data.candidateName}</strong>{data.jobTitle ? ` — ${data.jobTitle}` : ''} is ready for a phone screen. Add the dates and times you’re free.
-        The candidate is emailed these windows to confirm — they are not contacted until you submit.
+        <strong>{data.candidateName}</strong>{data.jobTitle ? ` — ${data.jobTitle}` : ''} is ready for a phone screen. Please add <strong>at least 3 open times</strong> so the candidate has options.
+        They’re emailed these windows to pick one — and are not contacted until you submit.
       </p>
 
       <div className="space-y-2">
@@ -110,6 +110,7 @@ export default function PhoneScreenAvailability() {
         placeholder="e.g. prefer mornings; I'll call the number on file"
         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
 
+      {filled.length > 0 && filled.length < 3 && <p className="text-xs text-amber-600 mb-2">Please add at least 3 open times so the candidate has options ({filled.length} added).</p>}
       {submit.error && <p className="text-sm text-red-600 mb-2">{submit.error.message}</p>}
       <button
         onClick={() => submit.mutate({ token, windows: filled, note: note.trim() || undefined })}

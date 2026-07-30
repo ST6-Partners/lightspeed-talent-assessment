@@ -242,6 +242,7 @@ export const schedulingRouter = router({
         phoneUrlSet: !!phoneScreenSchedulingUrl(),
         recruiterUrl: (candidate as any).phoneScreenRecruiterToken ? `${appBaseUrl()}/phone-screen-availability/${(candidate as any).phoneScreenRecruiterToken}` : null,
         availability: (candidate as any).phoneScreenAvailability ?? null,
+        selectedSlot: (candidate as any).phoneScreenSelectedSlot ?? null,
       };
     }),
 
@@ -316,6 +317,14 @@ export const schedulingRouter = router({
         schedulingUrl: mode === 'phone_screen' ? (phoneScreenSchedulingUrl() || null) : null,
         // Recruiter-submitted availability windows for the phone screen (recruiter-first flow).
         availability: mode === 'phone_screen' ? ((candidate as any).phoneScreenAvailability ?? null) : null,
+        slots: mode === 'phone_screen'
+          ? (Array.isArray((candidate as any).phoneScreenSlots)
+              ? ((candidate as any).phoneScreenSlots as string[])
+              : ((candidate as any).phoneScreenAvailability
+                  ? String((candidate as any).phoneScreenAvailability).split('\n').filter((l: string) => l.trim() && !l.startsWith('Note:'))
+                  : []))
+          : null,
+        selectedSlot: mode === 'phone_screen' ? ((candidate as any).phoneScreenSelectedSlot ?? null) : null,
       };
     }),
 
@@ -349,13 +358,17 @@ export const schedulingRouter = router({
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenRecruiterToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
-      const availabilityText = input.windows.map(fmtAvailabilityWindow).join('\n')
+      const slotLines = input.windows.map(fmtAvailabilityWindow);
+      const availabilityText = slotLines.join('\n')
         + (input.note && input.note.trim() ? `\n\nNote: ${input.note.trim()}` : '');
       const bookingToken = candidate.phoneScreenBookingToken ?? randomUUID();
       await ctx.db.update(candidates).set({
         phoneScreenAvailability: availabilityText,
+        phoneScreenSlots: slotLines,
+        phoneScreenSelectedSlot: null,
         phoneScreenBookingToken: bookingToken,
         phoneScreenBookingOpenedAt: new Date(),
+        phoneScreenScheduledAt: null,
         updatedAt: new Date(),
       }).where(eq(candidates.id, candidate.id));
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
@@ -369,16 +382,23 @@ export const schedulingRouter = router({
 
   // ── PUBLIC: candidate confirms one of the recruiter's windows ──────────────
   confirmPhoneScreen: publicProcedure
-    .input(z.object({ token: z.string().min(1) }))
+    .input(z.object({ token: z.string().min(1), slot: z.string().min(1).max(200) }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenBookingToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
-      if (!candidate.phoneScreenScheduledAt) {
-        await ctx.db.update(candidates).set({ phoneScreenScheduledAt: new Date(), updatedAt: new Date() }).where(eq(candidates.id, candidate.id));
+      // Only accept a slot the recruiter actually offered.
+      const offered: string[] = Array.isArray((candidate as any).phoneScreenSlots) ? (candidate as any).phoneScreenSlots as string[] : [];
+      if (offered.length && !offered.includes(input.slot)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That time is no longer offered. Please pick one of the listed times.' });
       }
+      await ctx.db.update(candidates).set({
+        phoneScreenSelectedSlot: input.slot,
+        phoneScreenScheduledAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, candidate.id));
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
       await emailPhoneScreenConfirmedRecruiter({
-        candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle, availability: (candidate as any).phoneScreenAvailability,
+        candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle, slot: input.slot,
       }).catch((err) => console.error('[scheduling.confirmPhoneScreen] recruiter email failed:', err));
       return { ok: true as const };
     }),

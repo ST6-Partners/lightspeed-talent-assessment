@@ -1888,7 +1888,7 @@ export function PhoneScreenSchedulingSection({ candidate, onChanged: _onChanged,
   return (
     <Section title="Screening call" defaultOpen={defaultOpen}>
       {scheduled ? (
-        <div className="text-sm text-green-700 font-medium">Call confirmed for {scheduled.toLocaleString()}</div>
+        <div className="text-sm text-green-700 font-medium">Call confirmed{s?.selectedSlot ? ` — ${s.selectedSlot}` : `: ${scheduled.toLocaleString()}`}</div>
       ) : s?.opened ? (
         <div className="text-sm text-gray-600 space-y-1">
           <div>Your availability was sent to the candidate. Waiting on them to confirm a time (or tell us none work).</div>

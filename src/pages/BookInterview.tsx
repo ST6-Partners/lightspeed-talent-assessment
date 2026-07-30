@@ -87,10 +87,10 @@ export default function BookInterview() {
     // Recruiter-first flow: show the recruiter's proposed windows with a confirm /
     // "no availability" choice. Fall back to the external scheduler link if no
     // windows were submitted (legacy Calendly/Zoom-scheduler path).
-    if (data.availability) {
+    if (data.slots && data.slots.length > 0) {
       return (
         <Shell>
-          <PhoneScreenConfirm token={token} firstName={data.firstName} jobTitle={data.jobTitle} availability={data.availability} />
+          <PhoneScreenConfirm token={token} firstName={data.firstName} jobTitle={data.jobTitle} slots={data.slots} />
         </Shell>
       );
     }

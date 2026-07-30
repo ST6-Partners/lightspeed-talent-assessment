@@ -240,6 +240,10 @@ export const candidates = pgTable('candidates', {
   // via a tokenized link, then the candidate is emailed that window to confirm.
   phoneScreenRecruiterToken: varchar('phone_screen_recruiter_token', { length: 64 }),
   phoneScreenAvailability: text('phone_screen_availability'),
+  // Individual proposed slots (formatted strings) the candidate chooses from,
+  // and the specific slot they picked.
+  phoneScreenSlots: jsonb('phone_screen_slots'),
+  phoneScreenSelectedSlot: text('phone_screen_selected_slot'),
   // Work-sample live-walkthrough scheduling (its own booking link so a walkthrough
   // booking is never mistaken for an interview booking by the Calendly webhook).
   workSampleBookingToken: varchar('work_sample_booking_token', { length: 64 }),

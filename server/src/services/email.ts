@@ -804,7 +804,7 @@ export async function emailPhoneScreenRecruiterAvailability(data: { candidateNam
     html: wrap(`
       ${h1('Set your availability for a phone screen')}
       ${p(`<strong>${esc(data.candidateName)}</strong> cleared the automated screen${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''} and is ready for a phone screen.`)}
-      ${p('Add a few time windows that work for you. Once you submit, the candidate is emailed those windows to confirm a time — they are not contacted until you do this.')}
+      ${p('Add <strong>at least 3 time windows</strong> that work for you. Once you submit, the candidate is emailed those windows to pick one — they are not contacted until you do this.')}
       ${button('Set your availability', data.availabilityUrl)}
       ${p(`<span style="font-size:12px;color:#888;">If the button doesn't work, paste this link: ${data.availabilityUrl}</span>`)}
     `),
@@ -829,16 +829,16 @@ export async function emailPhoneScreenCandidateWindow(data: { email: string; fir
   });
 }
 
-export async function emailPhoneScreenConfirmedRecruiter(data: { candidateName: string; jobTitle?: string; availability?: string | null }) {
+export async function emailPhoneScreenConfirmedRecruiter(data: { candidateName: string; jobTitle?: string; slot?: string | null }) {
   await sendEmail({
     to: HR_EMAIL,
     templateId: 'phone_screen_confirmed_recruiter',
     subject: `Phone screen confirmed: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
     html: wrap(`
       ${h1('The candidate confirmed a phone-screen time')}
-      ${p(`<strong>${esc(data.candidateName)}</strong> confirmed a time from your availability${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}.`)}
-      ${data.availability ? `<div style="margin:8px 0 16px;padding:12px 14px;background:#f6f9fb;border:1px solid #e3eef5;border-radius:8px;font-size:14px;line-height:1.7;">${esc(data.availability).replace(/\n/g, '<br/>')}</div>` : ''}
-      ${p('Please follow up with the calendar invite and the number to call.')}
+      ${p(`<strong>${esc(data.candidateName)}</strong> picked one of your offered times${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}:`)}
+      ${data.slot ? `<div style="margin:8px 0 16px;padding:12px 14px;background:#eef7f0;border:1px solid #cfe8d6;border-radius:8px;font-size:15px;font-weight:600;color:#1f7a3d;">${esc(data.slot)}</div>` : ''}
+      ${p('Please send the calendar invite for that time and call the number on file.')}
     `),
   });
 }
