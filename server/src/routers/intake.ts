@@ -224,6 +224,70 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
   }
 }
 
+// Notify-on-add: when a live (Open) req gains a NEW interviewer/team/awareness
+// recipient after the kickoff already went out at approval, email only the
+// newcomers — interviewers get their availability request (with a personal
+// decline link), everyone else gets the base hiring kickoff. Recipients who
+// were already on the req are never re-notified.
+async function notifyAddedRecipients(
+  db: DrizzleClient,
+  req: any,
+  rounds: any[],
+  team: any[],
+  awareness: any[],
+  beforeEmails: Set<string>,
+  extras?: { jdTitle?: string },
+): Promise<{ interviewers: string[]; others: string[] }> {
+  const isEmail = (x: any): x is string => typeof x === 'string' && /.+@.+\..+/.test(x);
+  const interviewerRefs = new Set<string>(
+    [
+      ...rounds.map((r: any) => r.interviewerEmail),
+      ...rounds.map((r: any) => r.interviewer),
+      ...team.filter((t: any) => t.roundRef || /interview/i.test(t.roleInProcess ?? '')).map((t: any) => t.personRef),
+    ].filter(isEmail),
+  );
+  const teamAwarenessEmails = [...team.map((t: any) => t.personRef), ...awareness.map((a: any) => a.personRef)].filter(isEmail);
+  const allEmails = new Set<string>([...interviewerRefs, ...teamAwarenessEmails]);
+  const newlyAdded = [...allEmails].filter((e) => !beforeEmails.has(e));
+  const newInterviewers = newlyAdded.filter((e) => interviewerRefs.has(e));
+  const newOthers = newlyAdded.filter((e) => !interviewerRefs.has(e));
+  if (!newInterviewers.length && !newOthers.length) return { interviewers: [], others: [] };
+
+  const base = buildKickoffEmail({
+    department: req.department, hiringManager: req.hiringManager,
+    summaryRows: intakeSummaryRows(req), team, awareness, rounds, jdTitle: extras?.jdTitle,
+  });
+  const fromEmail = process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com';
+
+  for (const email of newInterviewers) {
+    const token = encodeInterviewerDeclineToken(req.id, email);
+    const perEmail = buildInterviewerAvailabilityEmail({
+      department: req.department, jobTitle: extras?.jdTitle, hiringManager: req.hiringManager,
+      schedulingUrl: `${appBaseUrl()}/interviewer-availability/${token}`, rounds,
+      declineUrl: `${appBaseUrl()}/interviewer-unavailable/${token}`,
+    });
+    try {
+      await sendEmail({ to: email, subject: perEmail.subject, html: perEmail.html, templateId: 'interviewer_availability' });
+      await db.insert(inboundEmails).values({
+        fromEmail, fromName: 'Lightspeed Hiring', toEmail: HIRING_TEAM_INBOX,
+        subject: perEmail.subject, body: perEmail.html, replyTag: 'interviewer_availability',
+        source: 'simulated', raw: { kind: 'interviewer_availability_added', reqId: req.id, to: email },
+      });
+    } catch (err) { console.error('[intake] notify-add availability send failed:', err); }
+  }
+  for (const to of newOthers) {
+    try {
+      await sendEmail({ to, subject: base.subject, html: base.html, templateId: 'intake_kickoff' });
+      await db.insert(inboundEmails).values({
+        fromEmail, fromName: 'Lightspeed Hiring', toEmail: HIRING_TEAM_INBOX,
+        subject: base.subject, body: base.html, replyTag: 'kickoff',
+        source: 'simulated', raw: { kind: 'kickoff_added', reqId: req.id, to },
+      });
+    } catch (err) { console.error('[intake] notify-add kickoff send failed:', err); }
+  }
+  return { interviewers: newInterviewers, others: newOthers };
+}
+
 // Email + test-inbox record: tell the hiring manager a NEW JD is waiting for their
 // review in the JD tab (fires for every different-JD / new-headcount approval).
 // Shared: open the role (status -> Open) and send the hiring kickoff. Fires
@@ -656,6 +720,10 @@ export const intakeRouter = router({
     .mutation(async ({ ctx, input }) => {
      try {
       const { id, rounds, team, awareness, ...reqFields } = input;
+      // Notify-on-add snapshot: emails already on the req before this save, and
+      // the req's current status (only a live/Open req notifies new recipients).
+      let beforeEmails = new Set<string>();
+      let reqStatusForNotify: string | undefined;
 
       const reqValues = {
         ...reqFields,
@@ -673,6 +741,17 @@ export const intakeRouter = router({
           .where(eq(jobRequisitions.id, id));
         reqId = id;
         await auditChange(ctx.db, ctx.user.id, reqId, 'job_requisitions', 'update');
+        reqStatusForNotify = existing.status;
+        const [beforeRounds, beforeTeam, beforeAware] = await Promise.all([
+          ctx.db.select().from(interviewPlan).where(eq(interviewPlan.reqId, reqId)),
+          ctx.db.select().from(hiringTeam).where(eq(hiringTeam.reqId, reqId)),
+          ctx.db.select().from(awarenessList).where(eq(awarenessList.reqId, reqId)),
+        ]);
+        const isEmailRef = (x: any): x is string => typeof x === 'string' && /.+@.+\..+/.test(x);
+        beforeEmails = new Set<string>([
+          ...beforeRounds.map((r: any) => r.interviewerEmail), ...beforeRounds.map((r: any) => r.interviewer),
+          ...beforeTeam.map((t: any) => t.personRef), ...beforeAware.map((a: any) => a.personRef),
+        ].filter(isEmailRef));
       } else {
         const [created] = await ctx.db.insert(jobRequisitions)
           .values({ ...reqValues, createdBy: ctx.user.id })
@@ -699,6 +778,16 @@ export const intakeRouter = router({
         await ctx.db.insert(awarenessList).values(
           awareness.map((a) => ({ reqId, personRef: a.personRef, source: a.source })),
         );
+      }
+
+      // Notify-on-add: only when editing an already-live (Open) req.
+      if (id && reqStatusForNotify === 'Open') {
+        const reqRow = await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, reqId) });
+        const jd = await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.reqId, reqId) }).catch(() => null);
+        if (reqRow) {
+          await notifyAddedRecipients(ctx.db, reqRow, rounds, team, awareness, beforeEmails, { jdTitle: jd?.jobTitle })
+            .catch((err) => console.error('[intake] notify-add failed (non-blocking):', err));
+        }
       }
 
       trackActivity(ctx.db, ctx.user.id, 'save_intake', 'job_requisitions', { reqId }).catch((err) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
