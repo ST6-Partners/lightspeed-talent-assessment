@@ -530,11 +530,7 @@ export default function Candidates() {
                   </label>
                 )}
                 {resumeUploadError && <p className="text-xs text-amber-600 mb-2">{resumeUploadError}</p>}
-                <label className="block text-xs font-medium text-gray-600 mb-1">Resume URL <span className="text-gray-400 font-normal">(or paste a link)</span></label>
-                <input type="url" value={form.resumeUrl}
-                  onChange={(e) => setForm({ ...form, resumeUrl: e.target.value })}
-                  placeholder="https://..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+                <p className="text-[11px] text-gray-400">PDF, Word (.docx) or text. The resume screen reads the uploaded file's text, so a real upload (not a link) is required.</p>
               </div>
               <div className="col-span-2">
                 <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
