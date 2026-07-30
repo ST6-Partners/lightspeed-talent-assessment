@@ -15,7 +15,7 @@
 
 import { eq, and, asc, isNull } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import { candidates, jobDescriptions } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { assessmentTasks } from '../db/schema/assessmentTasks.js';
 import { resolveDeptWorkSample } from './workSampleResolver.js';
 import { scoreWorkSample } from './ai.js';
@@ -225,6 +225,23 @@ export async function submitAssessment(db: any, token: string, submission: strin
     ccatSpatial: ccatPercentile,
     updatedAt: now,
   }).where(eq(candidates.id, candidate.id));
+
+  // A candidate who self-started the assessment from the application email is
+  // still in 'Applied'. Move them into 'Assessment' first so the gate below can
+  // evaluate and advance them — otherwise applyAssessmentDecision no-ops (it only
+  // acts on candidates already in the Assessment stage) and they'd stay in Applied.
+  if (candidate.currentStage === 'Applied') {
+    await db.update(candidates)
+      .set({ currentStage: 'Assessment', updatedAt: now })
+      .where(eq(candidates.id, candidate.id));
+    await db.insert(candidateStageHistory).values({
+      candidateId: candidate.id,
+      fromStage: 'Applied',
+      toStage: 'Assessment',
+      changedBy: null,
+      reason: 'Assessment started from the application email link',
+    });
+  }
 
   // Run the normal assessment gate on the real data (self-guards to Assessment stage).
   await applyAssessmentDecision(db, candidate.id).catch((e) => console.error('[assessment-placeholder] decision failed:', e));
