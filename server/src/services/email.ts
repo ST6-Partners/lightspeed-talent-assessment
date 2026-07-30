@@ -400,15 +400,15 @@ export async function emailNewApplicationHR(data: CandidateEmailData) {
   });
 }
 
-// 13. Work sample submitted → HR
-export async function emailWorkSampleSubmittedHR(data: CandidateEmailData) {
+// 13. Assessment submitted → HR (candidate cleared the assessment, now in Candidate Review)
+export async function emailAssessmentSubmittedHR(data: CandidateEmailData) {
   await sendEmail({
     to: HR_EMAIL,
-    templateId: 'work_sample_submitted_hr',
-    subject: `Work sample ready for review: ${data.firstName} ${data.lastName}`,
+    templateId: 'work_sample_submitted_hr', // id kept stable so existing alert prefs still match
+    subject: `Assessment ready for review: ${data.firstName} ${data.lastName}`,
     html: wrap(`
-      ${h1('Work sample submitted')}
-      ${p(`<strong>${data.firstName} ${data.lastName}</strong> has submitted their work sample for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
+      ${h1('Assessment submitted')}
+      ${p(`<strong>${data.firstName} ${data.lastName}</strong> has submitted their assessment for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
       ${p('Log in to the hiring pipeline to review their submission and advance or reject them.')}
     `),
   });
@@ -813,7 +813,7 @@ export async function dispatchStageEmail(
       break;
     case 'Candidate Review':
       await emailAdvancingToCandidateReview(data);
-      await emailWorkSampleSubmittedHR(data);
+      await emailAssessmentSubmittedHR(data);
       break;
     case 'Phone Screen':
       await emailInvitedToPhoneScreen(data);
