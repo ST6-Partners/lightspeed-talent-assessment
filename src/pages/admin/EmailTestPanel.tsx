@@ -232,7 +232,7 @@ export default function EmailTestPanel() {
           )}
           {rows.length > 0 && (
             <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-              <colgroup><col style={{ width: 110 }} /><col style={{ width: 200 }} /><col style={{ width: 170 }} /><col /><col style={{ width: 90 }} /><col style={{ width: 70 }} /></colgroup>
+              <colgroup><col style={{ width: 110 }} /><col style={{ width: 170 }} /><col style={{ width: 200 }} /><col /><col style={{ width: 90 }} /><col style={{ width: 70 }} /></colgroup>
               <thead>
                 <tr>
                   <th style={c.th}>When</th>
@@ -252,7 +252,7 @@ export default function EmailTestPanel() {
                     <tr onClick={() => setOpenOut(isOpen ? null : m.id)} style={{ cursor: 'pointer', background: isOpen ? '#f3f4f6' : undefined }}>
                       <td style={c.td}>{fmt(m.createdAt)}</td>
                       <td style={c.tdEllipsis} title={m.recipient}>{m.recipient}</td>
-                      <td style={c.td}><span style={c.code}>{m.template}</span></td>
+                      <td style={{ ...c.td, overflow: 'hidden' }} title={m.template}><span style={{ ...c.code, display: 'inline-block', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom', boxSizing: 'border-box' }}>{m.template}</span></td>
                       <td style={{ ...c.tdEllipsis, color: '#1d4ed8', fontWeight: 600 }} title={m.subject || ''}>{m.subject}</td>
                       <td style={c.td}><span style={{ ...c.code, color: m.status === 'sent' ? '#065f46' : m.status === 'failed' ? '#b91c1c' : '#92400e' }}>{m.status}</span></td>
                       <td style={c.td} onClick={(e) => e.stopPropagation()}>
