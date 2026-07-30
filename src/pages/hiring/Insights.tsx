@@ -8,7 +8,8 @@
 // and Quarterly also expose the automated report-email schedule.
 // ============================================================
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { Search, X } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 // ── Colour helpers ─────────────────────────────────────────
@@ -388,6 +389,19 @@ export default function Insights() {
   const delta = (v?: number, p?: number) => (typeof v === 'number' && typeof p === 'number' ? v - p : null);
   const roleTitle = jdId ? ((roles ?? []).find((r) => r.jdId === jdId)?.title ?? 'Role') : null;
 
+  // Role search combobox — filter the role list by title (case-insensitive).
+  const [roleSearch, setRoleSearch] = useState('');
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const roleBoxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!roleMenuOpen) return;
+    const onDoc = (e: MouseEvent) => { if (roleBoxRef.current && !roleBoxRef.current.contains(e.target as Node)) setRoleMenuOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [roleMenuOpen]);
+  const roleQuery = roleSearch.trim().toLowerCase();
+  const filteredRoles = roleQuery ? (roles ?? []).filter((r) => r.title.toLowerCase().includes(roleQuery)) : (roles ?? []);
+
   return (
     <div className="space-y-5">
       {/* ── Navy hero: title, filter, tabs, KPI tiles ── */}
@@ -398,11 +412,44 @@ export default function Insights() {
             <h1 className="text-2xl font-extrabold">Metrics</h1>
             <p className="text-sm text-white/60 mt-1">{roleTitle ? `${roleTitle} — pipeline analytics` : 'All roles — hiring pipeline analytics'}</p>
           </div>
-          <select value={jdId ?? ''} onChange={(e) => setJdId(e.target.value || null)}
-            className="w-60 px-3 py-2 rounded-lg text-sm bg-white text-gray-800 border border-white/20 focus:outline-none focus:ring-2 focus:ring-ls-cyan">
-            <option value="">All roles (overall)</option>
-            {(roles ?? []).map((r) => (<option key={r.jdId} value={r.jdId}>{r.title} ({r.count})</option>))}
-          </select>
+          {/* Role search — find the role you want to view */}
+          <div className="relative w-64" ref={roleBoxRef}>
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              type="text"
+              value={roleMenuOpen ? roleSearch : (roleTitle ?? '')}
+              onChange={(e) => { setRoleSearch(e.target.value); setRoleMenuOpen(true); }}
+              onFocus={() => { setRoleSearch(''); setRoleMenuOpen(true); }}
+              placeholder="Search roles…"
+              className="w-full pl-9 pr-8 py-2 rounded-lg text-sm bg-white text-gray-800 border border-white/20 focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+            />
+            {(jdId || (roleMenuOpen && roleSearch)) && (
+              <button type="button" aria-label="Clear role filter"
+                onClick={() => { setJdId(null); setRoleSearch(''); setRoleMenuOpen(false); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700">
+                <X size={14} />
+              </button>
+            )}
+            {roleMenuOpen && (
+              <div className="absolute z-20 mt-1 w-full max-h-72 overflow-auto bg-white border border-gray-200 rounded-lg shadow-lg text-gray-800">
+                <button type="button"
+                  onClick={() => { setJdId(null); setRoleSearch(''); setRoleMenuOpen(false); }}
+                  className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${!jdId ? 'font-semibold text-ls-primary' : ''}`}>
+                  All roles (overall)
+                </button>
+                {filteredRoles.map((r) => (
+                  <button key={r.jdId} type="button"
+                    onClick={() => { setJdId(r.jdId); setRoleSearch(''); setRoleMenuOpen(false); }}
+                    className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${jdId === r.jdId ? 'font-semibold text-ls-primary' : ''}`}>
+                    {r.title} <span className="text-gray-400">({r.count})</span>
+                  </button>
+                ))}
+                {filteredRoles.length === 0 && (
+                  <div className="px-3 py-2 text-sm text-gray-400">No roles match “{roleSearch.trim()}”.</div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="inline-flex gap-1 p-1 rounded-xl bg-white/[.07] mb-5">
