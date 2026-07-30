@@ -70,6 +70,19 @@ function fmtAvailabilityWindow(w: { date: string; start: string; end: string }):
   return `${day} · ${fmtClock(w.start)} – ${fmtClock(w.end)}`;
 }
 
+// Build the stored fields for a phone screen a recruiter arranged directly
+// (outside the pick flows). Start is required; end optional.
+function buildDirectSlot(w: { date: string; start: string; end?: string }): { startAt: Date | null; endAt: Date | null; label: string } {
+  const s2 = new Date(`${w.date}T${w.start}:00`);
+  const startAt = Number.isNaN(s2.getTime()) ? null : s2;
+  const e = w.end ? new Date(`${w.date}T${w.end}:00`) : null;
+  const endAt = e && !Number.isNaN(e.getTime()) ? e : null;
+  const d = new Date(`${w.date}T00:00:00`);
+  const day = Number.isNaN(d.getTime()) ? w.date : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const label = w.end ? `${day} · ${fmtClock(w.start)} – ${fmtClock(w.end)}` : `${day} · ${fmtClock(w.start)}`;
+  return { startAt, endAt, label };
+}
+
 async function jobTitleFor(db: any, jdId: string | null | undefined): Promise<string | undefined> {
   if (!jdId) return undefined;
   const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, jdId) });
@@ -507,6 +520,43 @@ export const schedulingRouter = router({
         email: candidate.email, firstName: candidate.firstName, jobTitle,
       }).catch((err) => console.error('[scheduling.phoneScreenReachOutDirect] candidate email failed:', err));
       return { firstName: candidate.firstName, email: candidate.email, phone: (candidate as any).phone ?? null };
+    }),
+
+  // ── PUBLIC: recruiter logs a time they arranged DIRECTLY (from the reach-out
+  // popup) so an offline agreement is recorded in the system like any booking.
+  logPhoneScreenDirectTime: publicProcedure
+    .input(z.object({ token: z.string().min(1), date: z.string().min(1), start: z.string().min(1), end: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenRecruiterToken, input.token) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
+      const { startAt, endAt, label } = buildDirectSlot(input);
+      if (!startAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Enter a valid date and time.' });
+      await ctx.db.update(candidates).set({
+        phoneScreenScheduledAt: startAt,
+        phoneScreenEndAt: endAt,
+        phoneScreenSelectedSlot: `${label} · arranged directly`,
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, candidate.id));
+      return { ok: true as const, label };
+    }),
+
+  // ── PROTECTED: recruiter logs a directly-arranged time from inside the app
+  // (candidate's phone-screen panel). Durable catch-all for offline scheduling.
+  logPhoneScreenScheduled: protectedProcedure
+    .input(z.object({ candidateId: z.string().uuid(), date: z.string().min(1), start: z.string().min(1), end: z.string().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const { startAt, endAt, label } = buildDirectSlot(input);
+      if (!startAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Enter a valid date and time.' });
+      await ctx.db.update(candidates).set({
+        phoneScreenScheduledAt: startAt,
+        phoneScreenEndAt: endAt,
+        phoneScreenSelectedSlot: `${label} · arranged directly`,
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, input.candidateId));
+      await auditChange(ctx.db, ctx.user.id, input.candidateId, 'candidates', 'update');
+      return { ok: true as const, label };
     }),
 
   // ── PUBLIC: interviewer opens the "can't interview for this role" link from

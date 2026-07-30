@@ -1893,31 +1893,58 @@ export function PhoneScreenSchedulingSection({ candidate, onChanged: _onChanged,
   const status = trpc.scheduling.phoneScreenStatusFor.useQuery({ candidateId: candidate.id });
   const s = status.data;
   const scheduled = s?.scheduledAt ? new Date(s.scheduledAt) : null;
+  const logMut = trpc.scheduling.logPhoneScreenScheduled.useMutation({ onSuccess: () => status.refetch() });
+  const [ld, setLd] = useState('');
+  const [ls, setLs] = useState('');
+  const [le, setLe] = useState('');
   return (
     <Section title="Screening call" defaultOpen={defaultOpen}>
       {scheduled ? (
         <div className="text-sm text-green-700 font-medium">Call confirmed{s?.selectedSlot ? ` — ${s.selectedSlot}` : `: ${scheduled.toLocaleString()}`}</div>
-      ) : s?.opened ? (
-        <div className="text-sm text-gray-600 space-y-1">
-          <div>Your availability was sent to the candidate. Waiting on them to confirm a time (or tell us none work).</div>
-          {s?.availability && <div className="text-xs text-gray-500 whitespace-pre-wrap border border-gray-100 rounded p-2">{s.availability}</div>}
-          {s?.bookingUrl && <div className="text-xs">Candidate link: <a className="text-ls-primary underline" href={s.bookingUrl}>confirmation page</a></div>}
-          {s?.recruiterUrl && <div className="text-xs">Update your availability: <a className="text-ls-primary underline" href={s.recruiterUrl}>availability page</a></div>}
-        </div>
-      ) : s?.recruiterUrl ? (
-        <div className="space-y-2">
-          <p className="text-xs text-gray-500">
-            Recruiter-first scheduling: enter your availability, then the candidate is emailed those windows to confirm.
-            The candidate is not contacted until you submit. A link was also emailed to the recruiter inbox.
-          </p>
-          <a href={s.recruiterUrl} className="inline-block px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600">
-            Set your availability
-          </a>
-        </div>
       ) : (
-        <div className="text-xs text-gray-500">
-          Scheduling starts automatically when the candidate reaches Phone Screen. If you don't see a link yet, refresh in a moment.
-        </div>
+        <>
+          {s?.opened ? (
+            <div className="text-sm text-gray-600 space-y-1">
+              <div>Your availability was sent to the candidate. Waiting on them to confirm a time (or tell us none work).</div>
+              {s?.availability && <div className="text-xs text-gray-500 whitespace-pre-wrap border border-gray-100 rounded p-2">{s.availability}</div>}
+              {s?.bookingUrl && <div className="text-xs">Candidate link: <a className="text-ls-primary underline" href={s.bookingUrl}>confirmation page</a></div>}
+              {s?.recruiterUrl && <div className="text-xs">Update your availability: <a className="text-ls-primary underline" href={s.recruiterUrl}>availability page</a></div>}
+            </div>
+          ) : s?.recruiterUrl ? (
+            <div className="space-y-2">
+              <p className="text-xs text-gray-500">
+                Recruiter-first scheduling: enter your availability, then the candidate is emailed those windows to confirm.
+                The candidate is not contacted until you submit. A link was also emailed to the recruiter inbox.
+              </p>
+              <a href={s.recruiterUrl} className="inline-block px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600">
+                Set your availability
+              </a>
+            </div>
+          ) : (
+            <div className="text-xs text-gray-500">
+              Scheduling starts automatically when the candidate reaches Phone Screen. If you don't see a link yet, refresh in a moment.
+            </div>
+          )}
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="text-xs font-semibold text-gray-600 mb-2">Scheduled it directly? Log the confirmed time</div>
+            <div className="flex items-center gap-2">
+              <input type="date" value={ld} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setLd(e.target.value)}
+                className="flex-1 px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+              <input type="time" value={ls} onChange={(e) => setLs(e.target.value)}
+                className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+              <span className="text-gray-400 text-xs">to</span>
+              <input type="time" value={le} onChange={(e) => setLe(e.target.value)}
+                className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">End time optional. Records the call as scheduled and clears the “needs action” flag.</p>
+            {logMut.error && <p className="text-xs text-red-600 mt-1">{logMut.error.message}</p>}
+            <button onClick={() => logMut.mutate({ candidateId: candidate.id, date: ld, start: ls, end: le || undefined })}
+              disabled={!ld || !ls || logMut.isLoading}
+              className="mt-2 px-4 py-2 rounded-md border border-ls-primary text-ls-primary text-sm font-semibold hover:bg-ls-primary/5 disabled:opacity-50">
+              {logMut.isLoading ? 'Saving…' : 'Log confirmed time'}
+            </button>
+          </div>
+        </>
       )}
     </Section>
   );

@@ -45,6 +45,10 @@ export default function PhoneScreenAvailability() {
   const pick = trpc.scheduling.confirmCandidateSlot.useMutation({ onSuccess: () => refetch() });
   const [reachedOut, setReachedOut] = useState<{ firstName: string; email: string; phone: string | null } | null>(null);
   const reachOut = trpc.scheduling.phoneScreenReachOutDirect.useMutation({ onSuccess: (r) => setReachedOut(r) });
+  const [logDate, setLogDate] = useState('');
+  const [logStart, setLogStart] = useState('');
+  const [logEnd, setLogEnd] = useState('');
+  const logDirect = trpc.scheduling.logPhoneScreenDirectTime.useMutation({ onSuccess: () => refetch() });
 
   if (isLoading) return <Card><p className="text-sm text-gray-400">Loading…</p></Card>;
   if (error || !data) {
@@ -90,6 +94,25 @@ export default function PhoneScreenAvailability() {
           className="mt-4 inline-block w-full text-center py-2.5 rounded-lg bg-ls-primary text-white font-semibold text-sm hover:bg-ls-primary-600">
           Email {reachedOut.firstName} in Outlook
         </a>
+        <div className="mt-5 pt-4 border-t border-gray-100">
+          <div className="text-xs font-semibold text-gray-600 mb-2">Agreed on a time? Log it so the phone screen is on the record.</div>
+          <div className="flex items-center gap-2">
+            <input type="date" value={logDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setLogDate(e.target.value)}
+              className="flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+            <input type="time" value={logStart} onChange={(e) => setLogStart(e.target.value)}
+              className="px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+            <span className="text-gray-400 text-sm">to</span>
+            <input type="time" value={logEnd} onChange={(e) => setLogEnd(e.target.value)}
+              className="px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1">End time optional.</p>
+          {logDirect.error && <p className="text-sm text-red-600 mt-2">{logDirect.error.message}</p>}
+          <button onClick={() => logDirect.mutate({ token, date: logDate, start: logStart, end: logEnd || undefined })}
+            disabled={!logDate || !logStart || logDirect.isLoading}
+            className="mt-3 w-full py-2.5 rounded-lg border border-ls-primary text-ls-primary font-semibold text-sm hover:bg-ls-primary/5 disabled:opacity-50">
+            {logDirect.isLoading ? 'Saving…' : 'Log the confirmed time'}
+          </button>
+        </div>
       </Card>
     );
   }
