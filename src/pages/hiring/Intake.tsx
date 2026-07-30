@@ -40,7 +40,7 @@ const APPROVAL_BADGE: Record<string, string> = { pending: 'bg-gray-100 text-gray
 
 interface Round { roundName: string; lengthMin?: number; interviewer?: string; interviewerEmail?: string; }
 interface Person { personRef: string; roleInProcess?: string; roundRef?: string; }
-interface Aware { personRef: string; source: 'auto' | 'manual'; }
+interface Aware { personRef: string; email?: string; source: 'auto' | 'manual'; }
 
 const EMPTY = {
   openingType: '', reasonType: '', roleChangeNote: '', roleTitle: '', baseJdId: '', workSampleRequired: true,
@@ -186,7 +186,7 @@ export default function Intake() {
       };
       const nextRounds = f.rounds?.map((r: any) => ({ roundName: r.roundName, lengthMin: r.lengthMin ?? undefined, interviewer: r.interviewer ?? undefined, interviewerEmail: r.interviewerEmail ?? undefined })) ?? [];
       const nextTeam = f.team?.map((p: any) => ({ personRef: p.personRef, roleInProcess: p.roleInProcess ?? undefined, roundRef: p.roundRef ?? undefined })) ?? [];
-      const nextAwareness = f.awareness?.map((a: any) => ({ personRef: a.personRef, source: a.source })) ?? [];
+      const nextAwareness = f.awareness?.map((a: any) => ({ personRef: a.personRef, email: a.email ?? '', source: a.source })) ?? [];
       setForm(nextForm);
       setRounds(nextRounds);
       setTeam(nextTeam);
@@ -695,28 +695,18 @@ export default function Intake() {
             <button onClick={() => setRounds([...rounds, { roundName: '' }])} className="text-sm text-ls-primary hover:underline">+ Add round</button>
           </section>
 
-          {/* 6 — Team & awareness */}
+          {/* 6 — Awareness (interview team comes from the rounds above) */}
           <section>
-            <h3 className="text-sm font-semibold text-ls-primary mb-2">6 · Hiring team &amp; awareness</h3>
-            <label className={lbl}>Interview team</label>
-            {team.map((p, i) => (
-              <div key={i} className="flex gap-2 mb-2">
-                <input value={p.personRef} onChange={(e) => setTeam(team.map((x, j) => j === i ? { ...x, personRef: e.target.value } : x))} placeholder="Name" className={inp} />
-                <input value={p.roleInProcess ?? ''} onChange={(e) => setTeam(team.map((x, j) => j === i ? { ...x, roleInProcess: e.target.value } : x))} placeholder="Role (e.g. panelist)" className={inp} />
-                <input value={p.roundRef ?? ''} onChange={(e) => setTeam(team.map((x, j) => j === i ? { ...x, roundRef: e.target.value } : x))} placeholder="Round" className="w-32 px-3 py-2 border border-gray-300 rounded-md text-sm" />
-                <button onClick={() => setTeam(team.filter((_, j) => j !== i))} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>
-              </div>
-            ))}
-            <button onClick={() => setTeam([...team, { personRef: '' }])} className="text-sm text-ls-primary hover:underline">+ Add team member</button>
-
-            <label className={`${lbl} mt-4`}>Awareness list (notified, not approvers)</label>
+            <h3 className="text-sm font-semibold text-ls-primary mb-2">6 · Awareness list</h3>
+            <label className={lbl}>Awareness list (notified, not approvers)</label>
             {awareness.map((a, i) => (
               <div key={i} className="flex gap-2 mb-2">
                 <input value={a.personRef} onChange={(e) => setAwareness(awareness.map((x, j) => j === i ? { ...x, personRef: e.target.value } : x))} placeholder="Name (e.g. ELT leader)" className={inp} />
+                <input type="email" value={a.email ?? ''} onChange={(e) => setAwareness(awareness.map((x, j) => j === i ? { ...x, email: e.target.value } : x))} placeholder="Email" className={inp} />
                 <button onClick={() => setAwareness(awareness.filter((_, j) => j !== i))} className="p-2 text-gray-400 hover:text-red-600"><Trash2 size={15} /></button>
               </div>
             ))}
-            <button onClick={() => setAwareness([...awareness, { personRef: '', source: 'manual' }])} className="text-sm text-ls-primary hover:underline">+ Add to awareness list</button>
+            <button onClick={() => setAwareness([...awareness, { personRef: '', email: '', source: 'manual' }])} className="text-sm text-ls-primary hover:underline">+ Add to awareness list</button>
 
             <div className="mt-4 flex items-center gap-2">
               <input type="checkbox" id="avail" checked={form.teamAvailabilityConfirmed} onChange={(e) => setForm({ ...form, teamAvailabilityConfirmed: e.target.checked })} className="rounded" />

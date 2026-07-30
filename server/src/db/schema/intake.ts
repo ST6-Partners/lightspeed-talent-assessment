@@ -32,6 +32,7 @@ export const awarenessList = pgTable('awareness_list', {
   id: uuid('id').primaryKey().defaultRandom(),
   reqId: uuid('req_id').references(() => jobRequisitions.id, { onDelete: 'cascade' }).notNull(),
   personRef: varchar('person_ref', { length: 200 }).notNull(),
+  email: varchar('email', { length: 300 }),
   source: varchar('source', { length: 20 }).notNull().default('manual'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

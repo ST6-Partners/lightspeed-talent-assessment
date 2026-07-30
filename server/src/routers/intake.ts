@@ -36,6 +36,15 @@ function appBaseUrl(): string {
 
 function money(n: number | null | undefined): string { return n != null ? `$${Number(n).toLocaleString()}` : '—'; }
 
+// Resolve an awareness recipient's email: prefer the dedicated email column,
+// fall back to person_ref when it already looks like an address (legacy rows).
+function awarenessEmail(a: any): string | null {
+  const isEmail = (x: any): x is string => typeof x === 'string' && /.+@.+\..+/.test(x);
+  if (isEmail(a?.email)) return a.email;
+  if (isEmail(a?.personRef)) return a.personRef;
+  return null;
+}
+
 function intakeSummaryRows(req: any): Array<{ label: string; value: string }> {
   const rows: Array<{ label: string; value: string }> = [
     { label: 'Department', value: req.department ?? '—' },
@@ -164,8 +173,10 @@ async function sendKickoff(db: DrizzleClient, req: any, extras?: { jdTitle?: str
     ].filter((x: any): x is string => typeof x === 'string' && /.+@.+\..+/.test(x)),
   );
   // Team + awareness addresses that look like email.
-  const teamAwarenessEmails = [...team.map((t: any) => t.personRef), ...awareness.map((a: any) => a.personRef)]
-    .filter((x: string) => /.+@.+\..+/.test(x));
+  const teamAwarenessEmails = [
+    ...team.map((t: any) => t.personRef).filter((x: any): x is string => typeof x === 'string' && /.+@.+\..+/.test(x)),
+    ...awareness.map(awarenessEmail).filter((x): x is string => !!x),
+  ];
   // Interviewers (from rounds/team) get the availability email; everyone else on team + awareness
   // gets the base kickoff. De-duplicated across both lists.
   const interviewerEmails = Array.from(interviewerRefs);
@@ -246,7 +257,7 @@ async function notifyAddedRecipients(
       ...team.filter((t: any) => t.roundRef || /interview/i.test(t.roleInProcess ?? '')).map((t: any) => t.personRef),
     ].filter(isEmail),
   );
-  const teamAwarenessEmails = [...team.map((t: any) => t.personRef), ...awareness.map((a: any) => a.personRef)].filter(isEmail);
+  const teamAwarenessEmails = [...team.map((t: any) => t.personRef).filter(isEmail), ...awareness.map(awarenessEmail).filter((x): x is string => !!x)];
   const allEmails = new Set<string>([...interviewerRefs, ...teamAwarenessEmails]);
   const newlyAdded = [...allEmails].filter((e) => !beforeEmails.has(e));
   const newInterviewers = newlyAdded.filter((e) => interviewerRefs.has(e));
@@ -451,6 +462,7 @@ const PersonInput = z.object({
 });
 const AwarenessInput = z.object({
   personRef: z.string().min(1).max(200),
+  email: z.string().max(300).optional().or(z.literal('')),
   source: z.enum(['auto', 'manual']).default('manual'),
 });
 
@@ -750,7 +762,7 @@ export const intakeRouter = router({
         const isEmailRef = (x: any): x is string => typeof x === 'string' && /.+@.+\..+/.test(x);
         beforeEmails = new Set<string>([
           ...beforeRounds.map((r: any) => r.interviewerEmail), ...beforeRounds.map((r: any) => r.interviewer),
-          ...beforeTeam.map((t: any) => t.personRef), ...beforeAware.map((a: any) => a.personRef),
+          ...beforeTeam.map((t: any) => t.personRef), ...beforeAware.map((a: any) => awarenessEmail(a)),
         ].filter(isEmailRef));
       } else {
         const [created] = await ctx.db.insert(jobRequisitions)
@@ -776,7 +788,7 @@ export const intakeRouter = router({
       await ctx.db.delete(awarenessList).where(eq(awarenessList.reqId, reqId));
       if (awareness.length) {
         await ctx.db.insert(awarenessList).values(
-          awareness.map((a) => ({ reqId, personRef: a.personRef, source: a.source })),
+          awareness.map((a) => ({ reqId, personRef: a.personRef, email: a.email || null, source: a.source })),
         );
       }
 
