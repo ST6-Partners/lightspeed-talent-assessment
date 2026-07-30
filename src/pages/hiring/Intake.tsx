@@ -196,7 +196,7 @@ export default function Intake() {
   }, [full, editingId]);
 
   const close = () => { setShowForm(false); setEditingId(null); setForm({ ...EMPTY }); setRounds([]); setTeam([]); setAwareness([]); setErr(null); setSaved(false); };
-  const startCreate = () => { close(); setRounds([{ roundName: 'Round 1' }, { roundName: 'Round 2' }]); setShowForm(true); };
+  const startCreate = () => { close(); setRounds([{ roundName: 'Round 1' }, { roundName: 'Round 2' }]); setAwareness([{ personRef: '', email: '', source: 'manual' }, { personRef: '', email: '', source: 'manual' }]); setShowForm(true); };
   const startEdit = (r: any) => { setErr(null); setEditingId(r.id); setShowForm(true); };
 
   const saveMutation = trpc.intake.saveDraft.useMutation({
