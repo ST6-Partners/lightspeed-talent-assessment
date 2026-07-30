@@ -792,6 +792,70 @@ export async function emailPhoneScreenHR(data: CandidateEmailData) {
   });
 }
 
+// ── Recruiter-first phone-screen scheduling ────────────────────────────────
+// The recruiter submits availability first; only then is the candidate emailed
+// that window to confirm (or say it doesn't work).
+
+export async function emailPhoneScreenRecruiterAvailability(data: { candidateName: string; jobTitle?: string; availabilityUrl: string }) {
+  await sendEmail({
+    to: HR_EMAIL,
+    templateId: 'phone_screen_recruiter_availability',
+    subject: `Set your availability for a phone screen: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+    html: wrap(`
+      ${h1('Set your availability for a phone screen')}
+      ${p(`<strong>${esc(data.candidateName)}</strong> cleared the automated screen${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''} and is ready for a phone screen.`)}
+      ${p('Add a few time windows that work for you. Once you submit, the candidate is emailed those windows to confirm a time — they are not contacted until you do this.')}
+      ${button('Set your availability', data.availabilityUrl)}
+      ${p(`<span style="font-size:12px;color:#888;">If the button doesn't work, paste this link: ${data.availabilityUrl}</span>`)}
+    `),
+  });
+}
+
+export async function emailPhoneScreenCandidateWindow(data: { email: string; firstName: string; jobTitle?: string; availability: string; bookingUrl: string }) {
+  const windows = esc(data.availability).replace(/\n/g, '<br/>');
+  await sendEmail({
+    to: data.email,
+    templateId: 'phone_screen_candidate_window',
+    subject: `Let's schedule your phone screen — ${data.jobTitle ?? 'Lightspeed Systems'}`,
+    html: wrap(`
+      ${h1('Pick a time for your phone screen')}
+      ${p(`Hi ${esc(data.firstName)},`)}
+      ${p(`Thanks for your interest in <strong>${esc(data.jobTitle ?? 'the role')}</strong>. Our recruiter is available at the following times:`)}
+      <div style="margin:8px 0 16px;padding:12px 14px;background:#f6f9fb;border:1px solid #e3eef5;border-radius:8px;font-size:14px;line-height:1.7;">${windows}</div>
+      ${p('Open the link below to confirm one of these times — or, if none of them work, let us know and the recruiter will reach out with more options.')}
+      ${button('Confirm a time', data.bookingUrl)}
+      ${p(`<span style="font-size:12px;color:#888;">If the button doesn't work, paste this link: ${data.bookingUrl}</span>`)}
+    `),
+  });
+}
+
+export async function emailPhoneScreenConfirmedRecruiter(data: { candidateName: string; jobTitle?: string; availability?: string | null }) {
+  await sendEmail({
+    to: HR_EMAIL,
+    templateId: 'phone_screen_confirmed_recruiter',
+    subject: `Phone screen confirmed: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+    html: wrap(`
+      ${h1('The candidate confirmed a phone-screen time')}
+      ${p(`<strong>${esc(data.candidateName)}</strong> confirmed a time from your availability${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}.`)}
+      ${data.availability ? `<div style="margin:8px 0 16px;padding:12px 14px;background:#f6f9fb;border:1px solid #e3eef5;border-radius:8px;font-size:14px;line-height:1.7;">${esc(data.availability).replace(/\n/g, '<br/>')}</div>` : ''}
+      ${p('Please follow up with the calendar invite and the number to call.')}
+    `),
+  });
+}
+
+export async function emailPhoneScreenNoAvailabilityRecruiter(data: { candidateName: string; jobTitle?: string }) {
+  await sendEmail({
+    to: HR_EMAIL,
+    templateId: 'phone_screen_no_availability_recruiter',
+    subject: `Phone screen — no availability match: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+    html: wrap(`
+      ${h1('The candidate could not make your proposed times')}
+      ${p(`<strong>${esc(data.candidateName)}</strong> reviewed your availability${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''} and none of the windows worked for them.`)}
+      ${p('Please reach out to the candidate directly to find a time, or send a new set of windows.')}
+    `),
+  });
+}
+
 export async function dispatchStageEmail(
   toStage: string,
   fromStage: string | null | undefined,

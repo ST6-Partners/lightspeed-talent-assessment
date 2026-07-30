@@ -1870,38 +1870,36 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
   );
 }
 
-export function PhoneScreenSchedulingSection({ candidate, onChanged, defaultOpen }: { candidate: any; onChanged?: () => void; defaultOpen?: boolean }) {
+export function PhoneScreenSchedulingSection({ candidate, onChanged: _onChanged, defaultOpen }: { candidate: any; onChanged?: () => void; defaultOpen?: boolean }) {
   const status = trpc.scheduling.phoneScreenStatusFor.useQuery({ candidateId: candidate.id });
-  const open = trpc.scheduling.openPhoneScreen.useMutation({ onSuccess: () => { status.refetch(); onChanged?.(); } });
   const s = status.data;
   const scheduled = s?.scheduledAt ? new Date(s.scheduledAt) : null;
   return (
     <Section title="Screening call" defaultOpen={defaultOpen}>
       {scheduled ? (
-        <div className="text-sm text-green-700 font-medium">Call booked for {scheduled.toLocaleString()}</div>
+        <div className="text-sm text-green-700 font-medium">Call confirmed for {scheduled.toLocaleString()}</div>
       ) : s?.opened ? (
         <div className="text-sm text-gray-600 space-y-1">
-          <div>Booking link sent. Waiting on the candidate to pick a time.</div>
-          {s?.bookingUrl && <div className="text-xs">Candidate link: <a className="text-ls-primary underline" href={s.bookingUrl}>booking page</a></div>}
-          {!s?.phoneUrlSet && <div className="text-xs text-amber-600">No Zoom Scheduler link configured yet (set PHONE_SCREEN_SCHEDULING_URL) — the candidate page will say scheduling isn't ready.</div>}
-          <button onClick={() => open.mutate({ candidateId: candidate.id })} disabled={open.isLoading} className="mt-1 text-xs text-ls-primary font-medium">Re-send call link</button>
+          <div>Your availability was sent to the candidate. Waiting on them to confirm a time (or tell us none work).</div>
+          {s?.availability && <div className="text-xs text-gray-500 whitespace-pre-wrap border border-gray-100 rounded p-2">{s.availability}</div>}
+          {s?.bookingUrl && <div className="text-xs">Candidate link: <a className="text-ls-primary underline" href={s.bookingUrl}>confirmation page</a></div>}
+          {s?.recruiterUrl && <div className="text-xs">Update your availability: <a className="text-ls-primary underline" href={s.recruiterUrl}>availability page</a></div>}
         </div>
-      ) : (
+      ) : s?.recruiterUrl ? (
         <div className="space-y-2">
           <p className="text-xs text-gray-500">
-            Emails the candidate a link to book a short phone screen via the Zoom Scheduler (Outlook-connected).
-            It's a phone call — they add their number and we call them. No video link is sent.
+            Recruiter-first scheduling: enter your availability, then the candidate is emailed those windows to confirm.
+            The candidate is not contacted until you submit. A link was also emailed to the recruiter inbox.
           </p>
-          {!s?.phoneUrlSet && <p className="text-xs text-amber-600">Set PHONE_SCREEN_SCHEDULING_URL to the Zoom Scheduler booking link to go live.</p>}
-          <button
-            onClick={() => open.mutate({ candidateId: candidate.id })}
-            disabled={open.isLoading}
-            className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50">
-            {open.isLoading ? 'Sending...' : 'Send screening-call link'}
-          </button>
+          <a href={s.recruiterUrl} className="inline-block px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600">
+            Set your availability
+          </a>
+        </div>
+      ) : (
+        <div className="text-xs text-gray-500">
+          Scheduling starts automatically when the candidate reaches Phone Screen. If you don't see a link yet, refresh in a moment.
         </div>
       )}
-      {open.error && <p className="text-sm text-red-600">{open.error.message}</p>}
     </Section>
   );
 }

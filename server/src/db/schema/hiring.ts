@@ -236,6 +236,10 @@ export const candidates = pgTable('candidates', {
   phoneScreenBookingToken: varchar('phone_screen_booking_token', { length: 64 }),
   phoneScreenBookingOpenedAt: timestamp('phone_screen_booking_opened_at', { withTimezone: true }),
   phoneScreenScheduledAt: timestamp('phone_screen_scheduled_at', { withTimezone: true }),
+  // Recruiter-first phone-screen scheduling: the recruiter submits availability
+  // via a tokenized link, then the candidate is emailed that window to confirm.
+  phoneScreenRecruiterToken: varchar('phone_screen_recruiter_token', { length: 64 }),
+  phoneScreenAvailability: text('phone_screen_availability'),
   // Work-sample live-walkthrough scheduling (its own booking link so a walkthrough
   // booking is never mistaken for an interview booking by the Calendly webhook).
   workSampleBookingToken: varchar('work_sample_booking_token', { length: 64 }),

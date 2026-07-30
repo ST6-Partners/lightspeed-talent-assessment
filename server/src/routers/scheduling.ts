@@ -24,7 +24,7 @@ import { interviewerAvailability } from '../db/schema/interviewerAvailability.js
 import { inboundEmails } from '../db/schema/email.js';
 import { interviewPlan, hiringTeam } from '../db/schema/intake.js';
 import { INTERVIEW_WINDOW_HOURS } from './interviews.js';
-import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX } from '../services/email.js';
+import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter } from '../services/email.js';
 
 // Capability tokens for the interviewer "can't interview for this role" link that
 // ships in the intake-approval availability email. reqId is a random UUID, so the
@@ -223,6 +223,8 @@ export const schedulingRouter = router({
         scheduledAt: candidate.phoneScreenScheduledAt,
         bookingUrl: candidate.phoneScreenBookingToken ? `${appBaseUrl()}/book-interview/${candidate.phoneScreenBookingToken}` : null,
         phoneUrlSet: !!phoneScreenSchedulingUrl(),
+        recruiterUrl: (candidate as any).phoneScreenRecruiterToken ? `${appBaseUrl()}/phone-screen-availability/${(candidate as any).phoneScreenRecruiterToken}` : null,
+        availability: (candidate as any).phoneScreenAvailability ?? null,
       };
     }),
 
@@ -295,7 +297,76 @@ export const schedulingRouter = router({
           : null,
         // External booking link to open (phone-screen / Zoom Scheduler mode).
         schedulingUrl: mode === 'phone_screen' ? (phoneScreenSchedulingUrl() || null) : null,
+        // Recruiter-submitted availability windows for the phone screen (recruiter-first flow).
+        availability: mode === 'phone_screen' ? ((candidate as any).phoneScreenAvailability ?? null) : null,
       };
+    }),
+
+  // ── PUBLIC: recruiter opens their phone-screen availability link ───────────
+  phoneScreenSchedulingContext: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenRecruiterToken, input.token) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      return {
+        candidateName: `${candidate.firstName} ${candidate.lastName}`,
+        jobTitle: jobTitle ?? null,
+        availability: (candidate as any).phoneScreenAvailability ?? null,
+        submitted: !!candidate.phoneScreenBookingOpenedAt,
+        candidateBooked: !!candidate.phoneScreenScheduledAt,
+      };
+    }),
+
+  // ── PUBLIC: recruiter submits availability → candidate is emailed the window ─
+  submitPhoneScreenAvailability: publicProcedure
+    .input(z.object({ token: z.string().min(1), availability: z.string().min(1).max(4000) }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenRecruiterToken, input.token) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
+      const bookingToken = candidate.phoneScreenBookingToken ?? randomUUID();
+      await ctx.db.update(candidates).set({
+        phoneScreenAvailability: input.availability,
+        phoneScreenBookingToken: bookingToken,
+        phoneScreenBookingOpenedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, candidate.id));
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      const bookingUrl = `${appBaseUrl()}/book-interview/${bookingToken}`;
+      await emailPhoneScreenCandidateWindow({
+        email: candidate.email, firstName: candidate.firstName, jobTitle,
+        availability: input.availability, bookingUrl,
+      }).catch((err) => console.error('[scheduling.submitPhoneScreenAvailability] candidate email failed:', err));
+      return { ok: true as const };
+    }),
+
+  // ── PUBLIC: candidate confirms one of the recruiter's windows ──────────────
+  confirmPhoneScreen: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenBookingToken, input.token) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
+      if (!candidate.phoneScreenScheduledAt) {
+        await ctx.db.update(candidates).set({ phoneScreenScheduledAt: new Date(), updatedAt: new Date() }).where(eq(candidates.id, candidate.id));
+      }
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      await emailPhoneScreenConfirmedRecruiter({
+        candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle, availability: (candidate as any).phoneScreenAvailability,
+      }).catch((err) => console.error('[scheduling.confirmPhoneScreen] recruiter email failed:', err));
+      return { ok: true as const };
+    }),
+
+  // ── PUBLIC: candidate says none of the windows work — notify the recruiter ──
+  phoneScreenNoAvailability: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenBookingToken, input.token) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      await emailPhoneScreenNoAvailabilityRecruiter({
+        candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle,
+      }).catch((err) => console.error('[scheduling.phoneScreenNoAvailability] recruiter email failed:', err));
+      return { ok: true as const };
     }),
 
   // ── PUBLIC: interviewer opens the "can't interview for this role" link from

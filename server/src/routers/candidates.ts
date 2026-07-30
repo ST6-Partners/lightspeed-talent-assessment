@@ -44,6 +44,7 @@ import { getInternalReportConfig, setInternalReportConfig } from '../services/in
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 import { prepInterviewQuestions } from '../services/interviewPrep.js';
 import { seedCandidateResume, seedAssessmentResults, simulateUpstreamScores } from '../services/postAssessmentReview.js';
+import { startPhoneScreenScheduling } from '../services/phoneScreen.js';
 import { rankOneCandidateIntoRole } from '../services/candidateRanking.js';
 import { maybeAutoCloseFilledReq } from '../services/requisitionClose.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
@@ -401,7 +402,10 @@ async function advanceFromReview(db: any, userId: string | null, existing: any, 
       const inv = await ensureAssessmentInvite(db, existing).catch((err) => { console.warn('[assessment] ensure invite failed:', err); return null; });
       assessmentLink = inv?.link;
     }
-    if (!skipStageEmail) dispatchStageEmail(toStage, existing.currentStage, {
+    if (toStage === 'Phone Screen') {
+      // Recruiter-first phone-screen scheduling instead of an immediate candidate email.
+      await startPhoneScreenScheduling(db, existing.id).catch((err: any) => console.warn('[phoneScreen] start scheduling failed (non-blocking):', err));
+    } else if (!skipStageEmail) dispatchStageEmail(toStage, existing.currentStage, {
       firstName: existing.firstName, lastName: existing.lastName, email: existing.email, jobTitle,
       workSampleInstructions, workSampleUrl, assessmentLink,
       interviewerName: existing.interviewerName, interviewerEmail: existing.interviewerEmail,
@@ -827,10 +831,13 @@ export const candidatesRouter = router({
         const inv = await ensureAssessmentInvite(ctx.db, existing).catch((err) => { console.warn('[assessment] ensure invite failed:', err); return null; });
         assessmentLink = inv?.link;
       }
-      // For a move into Phone Screen, address the scheduling email to the role's hiring manager.
-      const hiringManagerName = input.toStage === 'Phone Screen' && (jd as any)?.reqId
-        ? ((await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, (jd as any).reqId) })) as any)?.hiringManager ?? undefined
-        : undefined;
+      // Phone Screen uses recruiter-first scheduling (recruiter submits availability,
+      // then the candidate is emailed that window) — not the generic stage email.
+      if (input.toStage === 'Phone Screen') {
+        skipStageEmail = true;
+        await startPhoneScreenScheduling(ctx.db, input.id)
+          .catch((err) => console.warn('[phoneScreen] start scheduling failed (non-blocking):', err));
+      }
       if (!skipStageEmail) dispatchStageEmail(input.toStage, existing.currentStage, {
         firstName: existing.firstName,
         lastName: existing.lastName,
@@ -841,7 +848,6 @@ export const candidatesRouter = router({
         assessmentLink,
         interviewerName: (existing as any).interviewerName,
         interviewerEmail: (existing as any).interviewerEmail,
-        hiringManagerName,
       }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
 
       // When advancing to Interview Scheduled:
@@ -1184,9 +1190,13 @@ export const candidatesRouter = router({
           reason: 'Resume screen passed: all required qualifications met',
         });
         movedToStage = nextStage;
-        await dispatchStageEmail(nextStage, candidate.currentStage, {
-          firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-        }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
+        if (nextStage === 'Phone Screen') {
+          await startPhoneScreenScheduling(ctx.db, input.id).catch((err) => console.warn('[phoneScreen] start scheduling failed (non-blocking):', err));
+        } else {
+          await dispatchStageEmail(nextStage, candidate.currentStage, {
+            firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
+          }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
+        }
       } else if (decision === 'advanced') {
         // Passed, but not in an early stage (or terminal): record only, no stage change.
         decision = 'flagged';
@@ -1264,9 +1274,13 @@ export const candidatesRouter = router({
           changedBy: ctx.user.id, reason: `Combined screen passed: requirements met, score ${composite}/100`,
         });
         movedToStage = nextStage;
-        await dispatchStageEmail(nextStage, candidate.currentStage, {
-          firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
-        }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
+        if (nextStage === 'Phone Screen') {
+          await startPhoneScreenScheduling(ctx.db, input.id).catch((err) => console.warn('[phoneScreen] start scheduling failed (non-blocking):', err));
+        } else {
+          await dispatchStageEmail(nextStage, candidate.currentStage, {
+            firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
+          }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
+        }
       }
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');

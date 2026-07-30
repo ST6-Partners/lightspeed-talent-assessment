@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Calendar } from 'lucide-react';
+import PhoneScreenConfirm from './PhoneScreenConfirm';
 import { trpc } from '../lib/trpc';
 
 export default function BookInterview() {
@@ -83,6 +84,16 @@ export default function BookInterview() {
   }
 
   if (data.mode === 'phone_screen') {
+    // Recruiter-first flow: show the recruiter's proposed windows with a confirm /
+    // "no availability" choice. Fall back to the external scheduler link if no
+    // windows were submitted (legacy Calendly/Zoom-scheduler path).
+    if (data.availability) {
+      return (
+        <Shell>
+          <PhoneScreenConfirm token={token} firstName={data.firstName} jobTitle={data.jobTitle} availability={data.availability} />
+        </Shell>
+      );
+    }
     return (
       <Shell>
         <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">

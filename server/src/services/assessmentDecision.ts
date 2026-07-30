@@ -28,6 +28,7 @@ import { dispatchStageEmail } from './email.js';
 import { runPostAssessmentReview, MATCH_PASS_THRESHOLD } from './postAssessmentReview.js';
 import { logDecision } from './decisionLog.js';
 import { computeAndStoreScreen } from './resumeScreen.js';
+import { startPhoneScreenScheduling } from './phoneScreen.js';
 
 // Candidates need a CCAT score of at least this to advance.
 // Below it, they are automatically rejected. (Flowchart: "Score 30+".)
@@ -187,15 +188,10 @@ export async function applyAssessmentDecision(
         reason: `Both automated gates cleared (role-fit match ${roleFit}% and all required resume qualifications met) — auto-advanced to Phone Screen.`,
         inputs: { roleFit, threshold: MATCH_PASS_THRESHOLD, resumeMet: true },
       });
-      // Phone Screen emails: candidate invite + hiring-manager "please schedule".
-      const hiringManagerName = await resolveHiringManagerName(db, jd);
-      await dispatchStageEmail('Phone Screen', 'Candidate Review', {
-        firstName: candidate.firstName,
-        lastName: candidate.lastName,
-        email: candidate.email,
-        jobTitle,
-        hiringManagerName,
-      }).catch((err: unknown) => console.error('[AssessmentDecision] phone-screen email failed:', err));
+      // Recruiter-first scheduling: email the recruiter to submit availability.
+      // The candidate is emailed the window only once the recruiter submits.
+      await startPhoneScreenScheduling(db, candidate.id)
+        .catch((err: unknown) => console.error('[AssessmentDecision] phone-screen scheduling failed:', err));
       console.log(`[AssessmentDecision] ${candidate.email} auto-advanced to Phone Screen (role-fit ${roleFit}%, resume requirements met)`);
       return { decision: 'advanced', score };
     }
