@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, AlertCircle, CalendarClock } from 'lucide-react';
+import { CheckCircle2, AlertCircle, CalendarClock, PhoneCall } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
 type Win = { date: string; start: string; end: string };
@@ -43,6 +43,8 @@ export default function PhoneScreenAvailability() {
   });
   const [pickSelected, setPickSelected] = useState<string | null>(null);
   const pick = trpc.scheduling.confirmCandidateSlot.useMutation({ onSuccess: () => refetch() });
+  const [reachedOut, setReachedOut] = useState<{ firstName: string; email: string; phone: string | null } | null>(null);
+  const reachOut = trpc.scheduling.phoneScreenReachOutDirect.useMutation({ onSuccess: (r) => setReachedOut(r) });
 
   if (isLoading) return <Card><p className="text-sm text-gray-400">Loading…</p></Card>;
   if (error || !data) {
@@ -67,6 +69,26 @@ export default function PhoneScreenAvailability() {
             {data.candidateName}{data.jobTitle ? ` (${data.jobTitle})` : ''} is booked{(data as any).selectedSlot ? ` for ${(data as any).selectedSlot}` : ''}.
           </p>
         </div>
+      </Card>
+    );
+  }
+
+  if (reachedOut) {
+    return (
+      <Card>
+        <PhoneCall className="mb-3 text-ls-primary" size={26} />
+        <h1 className="text-xl font-bold text-gray-900">Reach out to {reachedOut.firstName} directly</h1>
+        <p className="text-gray-500 text-sm mt-1 mb-4">
+          The scheduling options didn't line up. Contact {reachedOut.firstName} directly to find a time — we've emailed them to expect your message.
+        </p>
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm">
+          <div className="mb-1"><span className="text-gray-500">Email:</span> <a href={`mailto:${reachedOut.email}`} className="text-ls-primary hover:underline">{reachedOut.email}</a></div>
+          {reachedOut.phone && <div><span className="text-gray-500">Phone:</span> {reachedOut.phone}</div>}
+        </div>
+        <a href={`mailto:${reachedOut.email}?subject=${encodeURIComponent('Scheduling your phone screen')}`}
+          className="mt-4 inline-block w-full text-center py-2.5 rounded-lg bg-ls-primary text-white font-semibold text-sm hover:bg-ls-primary-600">
+          Email {reachedOut.firstName}
+        </a>
       </Card>
     );
   }
@@ -99,6 +121,12 @@ export default function PhoneScreenAvailability() {
           disabled={!pickSelected || pick.isLoading}
           className="w-full py-2.5 rounded-lg bg-ls-primary text-white font-semibold text-sm hover:bg-ls-primary-600 disabled:opacity-50">
           {pick.isLoading ? 'Confirming…' : pickSelected ? 'Confirm this time' : 'Select a time above'}
+        </button>
+        {reachOut.error && <p className="text-sm text-red-600 mt-2">{reachOut.error.message}</p>}
+        <button onClick={() => reachOut.mutate({ token })}
+          disabled={reachOut.isLoading || pick.isLoading}
+          className="w-full mt-2 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-semibold text-sm hover:bg-gray-50 disabled:opacity-50">
+          {reachOut.isLoading ? 'One sec…' : 'None of these work either — I’ll reach out directly'}
         </button>
       </Card>
     );

@@ -862,6 +862,19 @@ export async function emailPhoneScreenNoAvailabilityRecruiter(data: { candidateN
   });
 }
 
+export async function emailPhoneScreenReachOutCandidate(data: { email: string; firstName: string; jobTitle?: string }) {
+  await sendEmail({
+    to: data.email,
+    templateId: 'phone_screen_reach_out_candidate',
+    subject: `Scheduling your phone screen${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+    html: wrap(`
+      ${h1('Let’s find a time directly')}
+      ${p(`Hi ${esc(data.firstName)}, we weren’t able to line up a time from the options we exchanged${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}. Our recruiter will reach out to you directly to find one that works.`)}
+      ${p('No action needed on your end — just keep an eye out for their message.')}
+    `),
+  });
+}
+
 export async function emailPhoneScreenConfirmedCandidate(data: { email: string; firstName: string; jobTitle?: string; slot: string }) {
   await sendEmail({
     to: data.email,

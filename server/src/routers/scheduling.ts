@@ -24,7 +24,7 @@ import { interviewerAvailability } from '../db/schema/interviewerAvailability.js
 import { inboundEmails } from '../db/schema/email.js';
 import { interviewPlan, hiringTeam } from '../db/schema/intake.js';
 import { INTERVIEW_WINDOW_HOURS } from './interviews.js';
-import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate } from '../services/email.js';
+import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate, emailPhoneScreenReachOutCandidate } from '../services/email.js';
 
 // Capability tokens for the interviewer "can't interview for this role" link that
 // ships in the intake-approval availability email. reqId is a random UUID, so the
@@ -492,6 +492,21 @@ export const schedulingRouter = router({
         email: candidate.email, firstName: candidate.firstName, jobTitle, slot: input.slot,
       }).catch((err) => console.error('[scheduling.confirmCandidateSlot] candidate email failed:', err));
       return { ok: true as const };
+    }),
+
+  // ── PUBLIC: recruiter can't make the candidate's counter-proposed times either —
+  // stop the back-and-forth and reach out directly. Notifies the candidate and
+  // returns their contact info so the recruiter can email/call them.
+  phoneScreenReachOutDirect: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenRecruiterToken, input.token) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      await emailPhoneScreenReachOutCandidate({
+        email: candidate.email, firstName: candidate.firstName, jobTitle,
+      }).catch((err) => console.error('[scheduling.phoneScreenReachOutDirect] candidate email failed:', err));
+      return { firstName: candidate.firstName, email: candidate.email, phone: (candidate as any).phone ?? null };
     }),
 
   // ── PUBLIC: interviewer opens the "can't interview for this role" link from
