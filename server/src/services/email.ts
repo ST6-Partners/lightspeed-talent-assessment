@@ -843,7 +843,8 @@ export async function emailPhoneScreenConfirmedRecruiter(data: { candidateName: 
   });
 }
 
-export async function emailPhoneScreenNoAvailabilityRecruiter(data: { candidateName: string; jobTitle?: string }) {
+export async function emailPhoneScreenNoAvailabilityRecruiter(data: { candidateName: string; jobTitle?: string; candidateAvailability?: string }) {
+  const avail = (data.candidateAvailability ?? '').trim();
   await sendEmail({
     to: HR_EMAIL,
     templateId: 'phone_screen_no_availability_recruiter',
@@ -851,7 +852,8 @@ export async function emailPhoneScreenNoAvailabilityRecruiter(data: { candidateN
     html: wrap(`
       ${h1('The candidate could not make your proposed times')}
       ${p(`<strong>${esc(data.candidateName)}</strong> reviewed your availability${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''} and none of the windows worked for them.`)}
-      ${p('Please reach out to the candidate directly to find a time, or send a new set of windows.')}
+      ${avail ? `${p('They shared the times that <strong>do</strong> work for them:')}<div style="margin:8px 0 16px;padding:12px 14px;background:#f6f9fb;border:1px solid #e3eef5;border-radius:8px;font-size:14px;line-height:1.7;white-space:pre-line;">${esc(avail)}</div>` : ''}
+      ${p('Please reach out to the candidate to confirm a time, or send a new set of windows.')}
     `),
   });
 }

@@ -405,13 +405,14 @@ export const schedulingRouter = router({
 
   // ── PUBLIC: candidate says none of the windows work — notify the recruiter ──
   phoneScreenNoAvailability: publicProcedure
-    .input(z.object({ token: z.string().min(1) }))
+    .input(z.object({ token: z.string().min(1), availability: z.string().max(2000).optional() }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenBookingToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
       await emailPhoneScreenNoAvailabilityRecruiter({
         candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle,
+        candidateAvailability: input.availability,
       }).catch((err) => console.error('[scheduling.phoneScreenNoAvailability] recruiter email failed:', err));
       return { ok: true as const };
     }),

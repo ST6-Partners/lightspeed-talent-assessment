@@ -8,8 +8,9 @@ export default function PhoneScreenConfirm({ token, firstName, jobTitle, slots }
   jobTitle: string | null;
   slots: string[];
 }) {
-  const [state, setState] = useState<'choose' | 'confirmed' | 'declined'>('choose');
+  const [state, setState] = useState<'choose' | 'declining' | 'confirmed' | 'declined'>('choose');
   const [selected, setSelected] = useState<string | null>(null);
+  const [altAvailability, setAltAvailability] = useState('');
 
   const confirm = trpc.scheduling.confirmPhoneScreen.useMutation({ onSuccess: () => setState('confirmed') });
   const decline = trpc.scheduling.phoneScreenNoAvailability.useMutation({ onSuccess: () => setState('declined') });
@@ -35,8 +36,44 @@ export default function PhoneScreenConfirm({ token, firstName, jobTitle, slots }
         <PhoneCall className="mx-auto mb-3 text-ls-primary" size={28} />
         <h1 className="font-semibold text-gray-900 mb-1">Thanks for letting us know</h1>
         <p className="text-sm text-gray-500">
-          We’ve told our recruiter that none of these times work. They’ll reach out to you directly to find one that does.
+          We’ve sent your availability to our recruiter. They’ll reach out directly to lock in a time that works for you.
         </p>
+      </div>
+    );
+  }
+
+  if (state === 'declining') {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <Calendar className="mb-3 text-ls-primary" size={26} />
+        <h1 className="text-xl font-bold text-gray-900">When are you available?</h1>
+        <p className="text-gray-500 text-sm mt-1 mb-4">
+          No problem, {firstName} — none of those times have to work. Share a few days and time ranges that do, and our recruiter will follow up to lock one in.
+        </p>
+        <textarea
+          value={altAvailability}
+          onChange={(e) => setAltAvailability(e.target.value)}
+          rows={5}
+          placeholder={'e.g. Tue 8/12 after 2pm ET, Wed 8/13 mornings, or any time Thu 8/14'}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+        />
+        {decline.error && <p className="text-xs text-red-600 mt-2">{decline.error.message}</p>}
+        <div className="flex flex-col sm:flex-row gap-2 mt-4">
+          <button
+            onClick={() => decline.mutate({ token, availability: altAvailability.trim() })}
+            disabled={busy || !altAvailability.trim()}
+            className="flex-1 px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50"
+          >
+            {decline.isLoading ? 'Sending…' : 'Send my availability'}
+          </button>
+          <button
+            onClick={() => setState('choose')}
+            disabled={busy}
+            className="flex-1 px-5 py-2.5 border border-gray-300 text-gray-700 rounded-md text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
+          >
+            Back to the proposed times
+          </button>
+        </div>
       </div>
     );
   }
@@ -80,11 +117,11 @@ export default function PhoneScreenConfirm({ token, firstName, jobTitle, slots }
           {confirm.isLoading ? 'Confirming…' : selected ? 'Confirm this time' : 'Select a time above'}
         </button>
         <button
-          onClick={() => decline.mutate({ token })}
+          onClick={() => setState('declining')}
           disabled={busy}
           className="flex-1 px-5 py-2.5 border border-gray-300 text-gray-700 rounded-md text-sm font-semibold hover:bg-gray-50 disabled:opacity-50"
         >
-          {decline.isLoading ? 'Sending…' : 'No availability in this window — contact recruiter'}
+          None of these work — suggest other times
         </button>
       </div>
     </div>
