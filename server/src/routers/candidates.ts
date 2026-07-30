@@ -512,6 +512,12 @@ async function bulkMoveStageCore(db: any, userId: string, id: string, toStage: s
   });
 
   await auditChange(db, userId, id, 'candidates', 'update');
+
+  // Phone Screen uses recruiter-first scheduling — a bulk move into Phone Screen
+  // must still email the recruiter their availability link (same as advanceStage).
+  if (toStage === 'Phone Screen') {
+    await startPhoneScreenScheduling(db, id).catch((err) => console.warn('[phoneScreen] bulk start scheduling failed (non-blocking):', err));
+  }
   return candidate;
 }
 
