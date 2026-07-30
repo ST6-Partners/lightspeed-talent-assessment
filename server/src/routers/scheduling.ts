@@ -341,7 +341,9 @@ export const schedulingRouter = router({
         availability: (candidate as any).phoneScreenAvailability ?? null,
         submitted: !!candidate.phoneScreenBookingOpenedAt,
         candidateBooked: !!candidate.phoneScreenScheduledAt,
-        candidateSlots: Array.isArray((candidate as any).phoneScreenCandidateSlots) ? ((candidate as any).phoneScreenCandidateSlots as string[]) : [],
+        candidateSlots: Array.isArray((candidate as any).phoneScreenCandidateSlots)
+          ? ((candidate as any).phoneScreenCandidateSlots as any[]).map((s) => (typeof s === 'string' ? s : s.label))
+          : [],
         selectedSlot: (candidate as any).phoneScreenSelectedSlot ?? null,
       };
     }),
@@ -437,9 +439,12 @@ export const schedulingRouter = router({
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenBookingToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
-      const slotLines = input.windows.map(fmtAvailabilityWindow);
+      // Same structured shape as the recruiter's own slots (see submitPhoneScreenAvailability)
+      // so confirmCandidateSlot can parse a real start/end once the recruiter picks one.
+      const candidateSlotObjs = input.windows.map((w) => ({ date: w.date, start: w.start, end: w.end, label: fmtAvailabilityWindow(w) }));
+      const slotLines = candidateSlotObjs.map((s) => s.label);
       await ctx.db.update(candidates).set({
-        phoneScreenCandidateSlots: slotLines,
+        phoneScreenCandidateSlots: candidateSlotObjs,
         updatedAt: new Date(),
       }).where(eq(candidates.id, candidate.id));
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
@@ -458,13 +463,28 @@ export const schedulingRouter = router({
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenRecruiterToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
-      const proposed: string[] = Array.isArray((candidate as any).phoneScreenCandidateSlots) ? ((candidate as any).phoneScreenCandidateSlots as string[]) : [];
-      if (!proposed.includes(input.slot)) {
+      // Same normalize-then-match approach as confirmPhoneScreen — candidate-proposed
+      // slots are objects ({date,start,end,label}) going forward; guard legacy string[].
+      const proposedRaw: any[] = Array.isArray((candidate as any).phoneScreenCandidateSlots) ? ((candidate as any).phoneScreenCandidateSlots as any[]) : [];
+      const proposed = proposedRaw.map((s) => (typeof s === 'string' ? { label: s } : s));
+      const matched = proposed.find((s) => s.label === input.slot);
+      if (!matched) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'That time is no longer offered. Please pick one of the listed times.' });
+      }
+      // Parse the real call start/end so the post-call decision reminder fires at the
+      // actual end of the call, same as the recruiter-proposed-slot path above.
+      let startAt: Date | null = null;
+      let endAt: Date | null = null;
+      if (matched.date && matched.start && matched.end) {
+        const s = new Date(`${matched.date}T${matched.start}:00`);
+        const e = new Date(`${matched.date}T${matched.end}:00`);
+        if (!Number.isNaN(s.getTime())) startAt = s;
+        if (!Number.isNaN(e.getTime())) endAt = e;
       }
       await ctx.db.update(candidates).set({
         phoneScreenSelectedSlot: input.slot,
-        phoneScreenScheduledAt: new Date(),
+        phoneScreenScheduledAt: startAt ?? new Date(),
+        phoneScreenEndAt: endAt,
         updatedAt: new Date(),
       }).where(eq(candidates.id, candidate.id));
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
