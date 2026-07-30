@@ -13,8 +13,6 @@ const KEY = 'email_alert_prefs'; // value: { [templateId]: boolean }
 // (application received, offer, rejection, etc.) are intentionally NOT here.
 export const ALERT_TEMPLATES: { id: string; label: string; group: string }[] = [
   { id: 'new_application_hr',        label: 'New application received',        group: 'Applications' },
-  { id: 'assessment_passed_hr',      label: 'Candidate passed the assessment', group: 'Assessment' },
-  { id: 'assessment_failed_hr',      label: 'Candidate below assessment threshold', group: 'Assessment' },
   { id: 'work_sample_submitted_hr',  label: 'Work sample submitted',           group: 'Work sample' },
   { id: 'interview_scheduled_hr',    label: 'Interview scheduled',             group: 'Interviews' },
   { id: 'interview_completed_hr',    label: 'Interview completed',             group: 'Interviews' },

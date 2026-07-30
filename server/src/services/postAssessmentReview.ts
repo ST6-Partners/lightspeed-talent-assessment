@@ -22,7 +22,7 @@ import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema
 import { candidateEppScores } from '../db/schema/epp.js';
 import { computeEppScans, buildRoleFitNotes } from './eppScans.js';
 import { screenResumeRequirements } from './ai.js';
-import { dispatchStageEmail, emailAssessmentFailedHR } from './email.js';
+import { dispatchStageEmail } from './email.js';
 import { logDecision } from './decisionLog.js';
 
 // Both EPP match and company-values match must be at or above this to advance.

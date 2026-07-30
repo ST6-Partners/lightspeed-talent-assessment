@@ -400,36 +400,6 @@ export async function emailNewApplicationHR(data: CandidateEmailData) {
   });
 }
 
-// 11. Assessment passed → HR
-export async function emailAssessmentPassedHR(data: CandidateEmailData & { ccatScore?: number }) {
-  await sendEmail({
-    to: HR_EMAIL,
-    templateId: 'assessment_passed_hr',
-    subject: `Assessment passed: ${data.firstName} ${data.lastName} — ${data.jobTitle ?? 'position'}`,
-    html: wrap(`
-      ${h1('Candidate passed the assessment')}
-      ${p(`<strong>${data.firstName} ${data.lastName}</strong> passed the CCAT/EPP assessment for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
-      ${(data as any).ccatScore != null ? p(`CCAT Score: <strong>${(data as any).ccatScore}</strong>`) : ''}
-      ${p('They have been automatically advanced to the Work Sample stage and notified.')}
-    `),
-  });
-}
-
-// 12. Assessment failed → HR
-export async function emailAssessmentFailedHR(data: CandidateEmailData & { ccatScore?: number; threshold?: number }) {
-  await sendEmail({
-    to: HR_EMAIL,
-    templateId: 'assessment_failed_hr',
-    subject: `Assessment below threshold: ${data.firstName} ${data.lastName} — ${data.jobTitle ?? 'position'}`,
-    html: wrap(`
-      ${h1('Candidate did not meet assessment threshold')}
-      ${p(`<strong>${data.firstName} ${data.lastName}</strong> did not meet the CCAT threshold for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
-      ${(data as any).ccatScore != null ? p(`Score: <strong>${(data as any).ccatScore}</strong> (threshold: ${(data as any).threshold ?? 30})`) : ''}
-      ${p('They have been moved to Rejected and notified. You can override this in the pipeline if needed.')}
-    `),
-  });
-}
-
 // 13. Work sample submitted → HR
 export async function emailWorkSampleSubmittedHR(data: CandidateEmailData) {
   await sendEmail({
@@ -444,33 +414,83 @@ export async function emailWorkSampleSubmittedHR(data: CandidateEmailData) {
   });
 }
 
-// 14. Interview scheduled → interviewer
-export async function emailInterviewScheduledHR(data: CandidateEmailData) {
-  const recipient = data.interviewerEmail || HR_EMAIL;
+// 14. Interview scheduled (candidate self-booked) → hiring team, with per-round briefing links
+export async function emailInterviewScheduledHR(data: {
+  firstName: string;
+  lastName: string;
+  jobTitle?: string;
+  interviewDate?: string;
+  candidateUrl?: string;
+  rounds?: { roundName: string; interviewerName?: string | null; briefingUrl?: string }[];
+}) {
+  const rounds = data.rounds ?? [];
+  const roundsBlock = rounds.length
+    ? `
+      ${p('<strong>Interview rounds</strong> — open each round\u2019s pre-interview briefing:')}
+      <div style="margin: 0 0 20px;">
+        ${rounds.map((r) => `
+          <div style="border:1px solid #e5e5e5;border-radius:8px;padding:12px 16px;margin:0 0 10px;">
+            <div style="font-size:15px;font-weight:600;color:#1a1a1a;">${esc(r.roundName)}</div>
+            ${r.interviewerName ? `<div style="font-size:13px;color:#555;margin-top:2px;">Interviewer: ${esc(r.interviewerName)}</div>` : ''}
+            ${r.briefingUrl ? `<div style="margin-top:8px;"><a href="${r.briefingUrl}" style="color:#4FA9D6;font-size:14px;font-weight:600;text-decoration:none;">Open pre-interview briefing &rarr;</a></div>` : ''}
+          </div>
+        `).join('')}
+      </div>`
+    : '';
   await sendEmail({
-    to: recipient,
+    to: HR_EMAIL,
     templateId: 'interview_scheduled_hr',
     subject: `Interview scheduled: ${data.firstName} ${data.lastName} — ${data.jobTitle ?? 'position'}`,
     html: wrap(`
       ${h1('Interview scheduled')}
-      ${p(`An interview has been scheduled with <strong>${data.firstName} ${data.lastName}</strong> for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
-      ${data.interviewDate ? p(`Date: <strong>${data.interviewDate}</strong>`) : ''}
-      ${p('The candidate has been notified. A Zoom meeting should be set up and shared with the candidate.')}
+      ${p(`<strong>${data.firstName} ${data.lastName}</strong> booked their interview time for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
+      ${data.interviewDate ? p(`Time: <strong>${esc(data.interviewDate)}</strong>`) : ''}
+      ${roundsBlock}
+      ${data.candidateUrl ? button('Open candidate', data.candidateUrl) : ''}
     `),
   });
 }
 
-// 15. Interview completed → HR
-export async function emailInterviewCompletedHR(data: CandidateEmailData) {
+// 15. Interview round completed → hiring team, with feedback + next-round briefing
+export async function emailInterviewCompletedHR(data: {
+  firstName: string;
+  lastName: string;
+  jobTitle?: string;
+  roundName?: string;
+  interviewScore?: number | null;
+  feedback?: string | null;
+  candidateUrl?: string;
+  nextRound?: { roundName: string; interviewerName?: string | null } | null;
+  nextBriefing?: {
+    rounds: { roundName: string; interviewerName: string | null; writtenRead: string }[];
+    followUps: { roundName: string; type: string; text: string }[];
+  } | null;
+}) {
+  const fb = (data.feedback ?? '').trim();
+  const feedbackBlock = fb
+    ? `
+      ${p('<strong>Post-interview feedback</strong>')}
+      <div style="background:#f5f5f5;border-radius:8px;padding:16px 20px;margin:0 0 20px;font-size:14px;line-height:1.6;">${esc(fb).replace(/\n/g, '<br/>')}</div>`
+    : '';
+  const nb = data.nextBriefing;
+  const hasNext = !!(data.nextRound || (nb && (nb.rounds.length || nb.followUps.length)));
+  const nextBlock = hasNext
+    ? `
+      ${p(`<strong>Briefing for the next round${data.nextRound?.roundName ? ` — ${esc(data.nextRound.roundName)}` : ''}</strong>${data.nextRound?.interviewerName ? ` (Interviewer: ${esc(data.nextRound.interviewerName)})` : ''}`)}
+      ${nb && nb.rounds.length ? `<div style="margin:0 0 12px;">${nb.rounds.map((r) => `<div style="border-left:3px solid #4FA9D6;padding:6px 12px;margin:0 0 8px;font-size:14px;line-height:1.6;"><strong>${esc(r.roundName)}${r.interviewerName ? ` — ${esc(r.interviewerName)}` : ''}:</strong> ${esc(r.writtenRead)}</div>`).join('')}</div>` : ''}
+      ${nb && nb.followUps.length ? `${p('Follow-ups to chase:')}<ul style="font-size:14px;line-height:1.6;color:#374151;margin:0 0 16px;padding-left:20px;">${nb.followUps.map((ff) => `<li>${esc(ff.text)}${ff.roundName ? ` <span style="color:#9ca3af;">(${esc(ff.roundName)})</span>` : ''}</li>`).join('')}</ul>` : ''}`
+    : `${p('This was the final interview round.')}`;
   await sendEmail({
     to: HR_EMAIL,
     templateId: 'interview_completed_hr',
-    subject: `Interview complete: ${data.firstName} ${data.lastName} — awaiting feedback`,
+    subject: `Interview complete: ${data.firstName} ${data.lastName}${data.roundName ? ` — ${data.roundName}` : ''}`,
     html: wrap(`
       ${h1('Interview completed')}
-      ${p(`The interview with <strong>${data.firstName} ${data.lastName}</strong> for <strong>${data.jobTitle ?? 'the position'}</strong> has been completed.`)}
-      ${p('The Zoom recording and transcript will be processed automatically. AI-generated feedback will be available in the pipeline shortly.')}
-      ${p('Log in to review the feedback and advance or reject the candidate.')}
+      ${p(`The ${data.roundName ? `<strong>${esc(data.roundName)}</strong> round` : 'interview'} with <strong>${data.firstName} ${data.lastName}</strong> for <strong>${data.jobTitle ?? 'the position'}</strong> is complete.`)}
+      ${data.interviewScore != null ? p(`Interview score: <strong>${data.interviewScore}/100</strong> (advisory)`) : ''}
+      ${feedbackBlock}
+      ${nextBlock}
+      ${data.candidateUrl ? button('Review in pipeline', data.candidateUrl) : ''}
     `),
   });
 }
@@ -790,7 +810,6 @@ export async function dispatchStageEmail(
       break;
     case 'Work Sample':
       await emailInvitedToWorkSample(data);
-      await emailAssessmentPassedHR(data);
       break;
     case 'Candidate Review':
       await emailAdvancingToCandidateReview(data);
@@ -802,11 +821,9 @@ export async function dispatchStageEmail(
       break;
     case 'Interview Scheduled':
       await emailInterviewScheduled(data);
-      await emailInterviewScheduledHR(data);
       break;
     case 'Interviewed':
       await emailPostInterviewThankYou(data);
-      await emailInterviewCompletedHR(data);
       break;
     case 'Offered':
       await emailOfferExtended(data);

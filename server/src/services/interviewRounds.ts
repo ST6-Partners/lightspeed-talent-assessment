@@ -20,12 +20,92 @@ import { getCompanyTalkingPoints, type CompanyTalkingPoints } from './companyTal
 import { scoreWalkthroughFromTranscript } from './workSampleScoring.js';
 import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
 import { logDecision } from './decisionLog.js';
-import { emailInterviewRoundPrep } from './email.js';
+import { emailInterviewRoundPrep, emailInterviewScheduledHR, emailInterviewCompletedHR } from './email.js';
 import {
   analyzeInterviewTranscript,
   synthesizeInterviewTranscript,
   type InterviewFollowUp,
 } from './ai.js';
+
+function appBaseUrl(): string {
+  const explicit = process.env.APP_BASE_URL;
+  if (explicit) return explicit.replace(/\/$/, '');
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (railway) return `https://${railway}`;
+  return '';
+}
+
+/** Notify the hiring team that the candidate self-booked their interview, with a
+ *  per-round list linking each round to the candidate's page (where its
+ *  pre-interview briefing lives). Fired from the Calendly booking flow. */
+export async function sendInterviewScheduledTeamEmail(candidateId: string): Promise<boolean> {
+  const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
+  if (!candidate) return false;
+  const jd = candidate.jdId
+    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+    : null;
+  await seedRoundsFromPlan(candidateId).catch((err) => console.error('[interview-rounds] seed for scheduled email failed:', err));
+  const rounds = await db.select().from(candidateInterviews)
+    .where(eq(candidateInterviews.candidateId, candidateId))
+    .orderBy(asc(candidateInterviews.sortOrder));
+  const base = appBaseUrl();
+  const candidateUrl = base ? `${base}/hiring/candidates?id=${candidateId}` : undefined;
+  const interviewDate = candidate.interviewScheduledAt
+    ? new Date(candidate.interviewScheduledAt).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+    : undefined;
+  await emailInterviewScheduledHR({
+    firstName: candidate.firstName,
+    lastName: candidate.lastName,
+    jobTitle: jd?.jobTitle ?? undefined,
+    interviewDate,
+    candidateUrl,
+    rounds: rounds.map((r) => ({
+      roundName: r.roundName,
+      interviewerName: r.interviewerName ?? null,
+      briefingUrl: candidateUrl,
+    })),
+  });
+  return true;
+}
+
+/** Notify the hiring team that an interview round is complete, including that
+ *  round's feedback and the briefing that carries to the next round's
+ *  interviewer. Fired once a round's feedback is generated. */
+export async function sendInterviewCompletedTeamEmail(roundId: string): Promise<boolean> {
+  const round = await db.query.candidateInterviews.findFirst({ where: eq(candidateInterviews.id, roundId) });
+  if (!round) return false;
+  const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, round.candidateId) });
+  if (!candidate) return false;
+  const jd = candidate.jdId
+    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+    : null;
+  const all = await db.select().from(candidateInterviews)
+    .where(eq(candidateInterviews.candidateId, round.candidateId))
+    .orderBy(asc(candidateInterviews.sortOrder));
+  const next = all.find((r) => r.sortOrder > round.sortOrder) ?? null;
+  const base = appBaseUrl();
+  const candidateUrl = base ? `${base}/hiring/candidates?id=${round.candidateId}` : undefined;
+  let nextBriefing: { rounds: BriefingRound[]; followUps: { roundName: string; type: string; text: string }[] } | null = null;
+  if (next) {
+    const b = await buildPriorRoundsBriefing(round.candidateId, next.sortOrder);
+    nextBriefing = {
+      rounds: b.rounds,
+      followUps: b.followUps.map((ff) => ({ roundName: ff.roundName, type: ff.type as string, text: ff.text })),
+    };
+  }
+  await emailInterviewCompletedHR({
+    firstName: candidate.firstName,
+    lastName: candidate.lastName,
+    jobTitle: jd?.jobTitle ?? undefined,
+    roundName: round.roundName,
+    interviewScore: (round.score as number | null) ?? null,
+    feedback: (round.feedbackHr as string | null) ?? null,
+    candidateUrl,
+    nextRound: next ? { roundName: next.roundName, interviewerName: next.interviewerName ?? null } : null,
+    nextBriefing,
+  });
+  return true;
+}
 
 // ── Prep-email automation ──────────────────────────────────
 // The interviewer prep email (with the cross-round briefing) sends
@@ -301,6 +381,10 @@ export async function generateRoundFeedback(roundId: string, transcriptIn?: stri
   // interview done and auto-advance to Reference Check.
   await maybeAdvanceOnAllRoundsComplete(round.candidateId)
     .catch((err) => console.error('[interview-rounds] all-rounds-complete check failed:', err));
+
+  // Notify the hiring team this round is complete — feedback + next-round briefing.
+  await sendInterviewCompletedTeamEmail(roundId)
+    .catch((err) => console.error('[interview-rounds] completed team email failed:', err));
 
   return { roundId, transcript, feedback };
 }

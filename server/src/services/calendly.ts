@@ -26,7 +26,7 @@ import { and } from 'drizzle-orm';
 import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
 import { emailInterviewBookedCandidate, emailBookingStalledHR } from './email.js';
 import { prepInterviewQuestions } from './interviewPrep.js';
-import { sendFirstRoundPrep } from './interviewRounds.js';
+import { sendFirstRoundPrep, sendInterviewScheduledTeamEmail } from './interviewRounds.js';
 
 export function isCalendlyConfigured(): boolean {
   return Boolean(process.env.CALENDLY_WEBHOOK_SIGNING_KEY);
@@ -192,6 +192,9 @@ export async function applyCalendlyEvent(event: string, payload: any): Promise<{
 
     // Round 1's prep + briefing goes out automatically when the interview is booked.
     void sendFirstRoundPrep(candidate.id).catch((err) => console.error('[Calendly] round-1 prep auto-send failed:', err));
+
+    // Candidate self-booked -> notify the hiring team, with each round's briefing link.
+    void sendInterviewScheduledTeamEmail(candidate.id).catch((err) => console.error('[Calendly] interview-scheduled team email failed:', err));
 
     await emailInterviewBookedCandidate({
       email: candidate.email,

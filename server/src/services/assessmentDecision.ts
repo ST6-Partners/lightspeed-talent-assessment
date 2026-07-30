@@ -24,7 +24,7 @@ import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { resolveDeptWorkSample } from './workSampleResolver.js';
-import { dispatchStageEmail, emailAssessmentFailedHR } from './email.js';
+import { dispatchStageEmail } from './email.js';
 import { runPostAssessmentReview } from './postAssessmentReview.js';
 import { logDecision } from './decisionLog.js';
 
@@ -173,16 +173,6 @@ export async function applyAssessmentDecision(
     jobTitle,
   }).catch((err: unknown) => console.error('[AssessmentDecision] rejection email failed:', err));
 
-  // HR "below threshold" notification (SendGrid)
-  await emailAssessmentFailedHR({
-    firstName: candidate.firstName,
-    lastName: candidate.lastName,
-    email: candidate.email,
-    jobTitle,
-    ccatScore: score,
-    threshold: ASSESSMENT_PASS_THRESHOLD,
-  }).catch((err: unknown) => console.error('[AssessmentDecision] HR fail email failed:', err));
-
   console.log(`[AssessmentDecision] ${candidate.email} scored ${score} -> rejected`);
   return { decision: 'rejected', score };
 }
@@ -230,15 +220,6 @@ async function rejectForInvalidResult(
     email: candidate.email,
     jobTitle,
   }).catch((err: unknown) => console.error('[AssessmentDecision] invalid-result rejection email failed:', err));
-
-  await emailAssessmentFailedHR({
-    firstName: candidate.firstName,
-    lastName: candidate.lastName,
-    email: candidate.email,
-    jobTitle,
-    ccatScore: score ?? -1,
-    threshold: ASSESSMENT_PASS_THRESHOLD,
-  }).catch((err: unknown) => console.error('[AssessmentDecision] invalid-result HR email failed:', err));
 
   console.log(`[AssessmentDecision] ${candidate.email} flagged invalid result -> rejected`);
   return { decision: 'rejected', score: score ?? -1 };
