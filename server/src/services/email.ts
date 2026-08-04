@@ -1041,15 +1041,18 @@ export async function emailPhoneScreenConfirmedRecruiter(data: {
   if (data.startAt) {
     const uidKey = data.candidateId ?? data.candidateName.replace(/\s+/g, '-').toLowerCase();
     const end = data.endAt ?? new Date(data.startAt.getTime() + 30 * 60 * 1000);
-    // Primary CTA: "Add to my calendar" opens Google Calendar with the event
-    // prefilled (the recruiter just hits Save — as close to one-click as email allows;
-    // an email can't add an event silently). Floating local time (no "Z") preserves the
-    // exact clock time. The .ics stays attached as a fallback for Outlook/Apple.
-    const gcalUrl = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
-      + `&text=${encodeURIComponent(summary)}`
-      + `&dates=${icsFloating(data.startAt)}/${icsFloating(end)}`
-      + `&details=${encodeURIComponent(description)}`;
-    addToCalendarBtn = button('Add to my calendar', gcalUrl);
+    // Primary CTA: "Add to my calendar" opens Outlook on the web (Microsoft 365) with
+    // the event prefilled (the recruiter just hits Save — as close to one-click as email
+    // allows; an email can't add an event silently). Times are ISO local without a "Z"
+    // so Outlook shows the exact clock time. The .ics stays attached as a fallback for
+    // Apple Mail / personal Outlook / any other calendar app.
+    const isoLocal = (d: Date) => `${d.getFullYear()}-${icsPad(d.getMonth() + 1)}-${icsPad(d.getDate())}T${icsPad(d.getHours())}:${icsPad(d.getMinutes())}:${icsPad(d.getSeconds())}`;
+    const outlookUrl = 'https://outlook.office.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent'
+      + `&subject=${encodeURIComponent(summary)}`
+      + `&startdt=${encodeURIComponent(isoLocal(data.startAt))}`
+      + `&enddt=${encodeURIComponent(isoLocal(end))}`
+      + `&body=${encodeURIComponent(description)}`;
+    addToCalendarBtn = button('Add to my calendar', outlookUrl);
     const ics = buildPhoneScreenIcsBase64({
       uid: `phone-screen-${uidKey}@lightspeed-talent-assessment`,
       start: data.startAt,
@@ -1072,7 +1075,7 @@ export async function emailPhoneScreenConfirmedRecruiter(data: {
       ${p(lead)}
       ${data.slot ? `<div style="margin:8px 0 16px;padding:12px 14px;background:#eef7f0;border:1px solid #cfe8d6;border-radius:8px;font-size:15px;font-weight:600;color:#1f7a3d;">${esc(data.slot)}</div>` : ''}
       ${data.startAt
-        ? p('Add this call to your calendar with the button below, then call the number on file at that time.') + addToCalendarBtn + p('<span style="font-size:12px;color:#888;">Not on Google Calendar? A calendar file is attached that opens in any calendar app.</span>')
+        ? p('Add this call to your calendar with the button below, then call the number on file at that time.') + addToCalendarBtn + p('<span style="font-size:12px;color:#888;">Not on Outlook? A calendar file is attached that opens in any calendar app.</span>')
         : p('Please send the calendar invite for that time and call the number on file.')}
     `),
     attachments,
