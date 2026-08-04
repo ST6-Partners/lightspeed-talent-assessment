@@ -187,11 +187,12 @@ export async function applyCalendlyEvent(event: string, payload: any): Promise<{
       });
     }
 
-    // Tailored interview questions are generated once the interview is scheduled.
-    void prepInterviewQuestions(db, candidate.id).catch((err) => console.error('[Calendly] interview question prep failed:', err));
-
-    // Round 1's prep + briefing goes out automatically when the interview is booked.
-    void sendFirstRoundPrep(candidate.id).catch((err) => console.error('[Calendly] round-1 prep auto-send failed:', err));
+    // Generate the tailored questions FIRST, then send the single combined prep email
+    // (talking points + earlier-round context + those questions) — one email per
+    // interviewer, not two.
+    void prepInterviewQuestions(db, candidate.id)
+      .then(() => sendFirstRoundPrep(candidate.id))
+      .catch((err) => console.error('[Calendly] interviewer prep failed:', err));
 
     // Candidate self-booked -> notify the hiring team, with each round's briefing link.
     void sendInterviewScheduledTeamEmail(candidate.id).catch((err) => console.error('[Calendly] interview-scheduled team email failed:', err));

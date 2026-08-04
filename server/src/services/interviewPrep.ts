@@ -19,7 +19,6 @@ import { candidates, jobDescriptions } from '../db/schema/hiring.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { valueReviews, candidateValueScores, companyValues } from '../db/schema/values.js';
 import { generateInterviewQuestions } from './ai.js';
-import { emailInterviewerQuestions } from './email.js';
 
 export async function prepInterviewQuestions(db: any, candidateId: string): Promise<{ generated: boolean }> {
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
@@ -76,14 +75,9 @@ export async function prepInterviewQuestions(db: any, candidateId: string): Prom
     .set({ interviewQuestions: questions, updatedAt: new Date() })
     .where(eq(candidates.id, candidateId));
 
-  await emailInterviewerQuestions({
-    interviewerEmail: candidate.interviewerEmail || process.env.HR_EMAIL || 'jade.friedman@lsscorp.net',
-    interviewerName: candidate.interviewerName ?? 'Interviewer',
-    candidateFirstName: candidate.firstName,
-    candidateLastName: candidate.lastName,
-    jobTitle: jobTitle ?? 'the role',
-    questions,
-  }).catch((err) => console.error('[interviewPrep] interviewer email failed:', err));
-
+  // No separate "AI-Generated Interview Questions" email is sent here anymore. The
+  // questions are stored on the candidate and rendered inside the single combined
+  // interviewer prep/briefing email (emailInterviewRoundPrep, sent via sendRoundPrep),
+  // so each interviewer gets ONE email per round instead of two.
   return { generated: true };
 }
