@@ -572,34 +572,20 @@ export async function emailInterviewScheduledHR(data: {
   firstName: string;
   lastName: string;
   jobTitle?: string;
-  interviewDate?: string;
-  candidateUrl?: string;
-  rounds?: { roundName: string; interviewerName?: string | null; briefingUrl?: string }[];
+  rounds?: { roundName: string; interviewerName?: string | null; when?: string | null }[];
 }) {
   const rounds = data.rounds ?? [];
-  const roundsBlock = rounds.length
-    ? `
-      ${p('<strong>Interview rounds</strong> — open each round\u2019s pre-interview briefing:')}
-      <div style="margin: 0 0 20px;">
-        ${rounds.map((r) => `
-          <div style="border:1px solid #e5e5e5;border-radius:8px;padding:12px 16px;margin:0 0 10px;">
-            <div style="font-size:15px;font-weight:600;color:#1a1a1a;">${esc(r.roundName)}</div>
-            ${r.interviewerName ? `<div style="font-size:13px;color:#555;margin-top:2px;">Interviewer: ${esc(r.interviewerName)}</div>` : ''}
-            ${r.briefingUrl ? `<div style="margin-top:8px;"><a href="${r.briefingUrl}" style="color:#4FA9D6;font-size:14px;font-weight:600;text-decoration:none;">Open pre-interview briefing &rarr;</a></div>` : ''}
-          </div>
-        `).join('')}
-      </div>`
-    : '';
+  const rows = rounds.map((r) =>
+    `<li style="margin: 0 0 8px; font-size: 15px; line-height: 1.5;"><strong>${esc(r.roundName)}</strong> \u2014 ${r.when ? esc(r.when) : 'time to be scheduled'}${r.interviewerName ? ` with ${esc(r.interviewerName)}` : ''}</li>`
+  ).join('');
   await sendEmail({
     to: HR_EMAIL,
     templateId: 'interview_scheduled_hr',
-    subject: `Interview scheduled: ${data.firstName} ${data.lastName} — ${data.jobTitle ?? 'position'}`,
+    subject: `Interview scheduled: ${data.firstName} ${data.lastName} \u2014 ${data.jobTitle ?? 'position'}`,
     html: wrap(`
       ${h1('Interview scheduled')}
-      ${p(`<strong>${data.firstName} ${data.lastName}</strong> booked their interview time for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
-      ${data.interviewDate ? p(`Time: <strong>${esc(data.interviewDate)}</strong>`) : ''}
-      ${roundsBlock}
-      ${data.candidateUrl ? button('Open candidate', data.candidateUrl) : ''}
+      ${p(`<strong>${esc(data.firstName)} ${esc(data.lastName)}</strong> booked their interview time${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}. Here's when each round will take place:`)}
+      <ul style="margin: 0 0 20px; padding-left: 20px;">${rows}</ul>
     `),
   });
 }

@@ -48,21 +48,15 @@ export async function sendInterviewScheduledTeamEmail(candidateId: string): Prom
   const rounds = await db.select().from(candidateInterviews)
     .where(eq(candidateInterviews.candidateId, candidateId))
     .orderBy(asc(candidateInterviews.sortOrder));
-  const base = appBaseUrl();
-  const candidateUrl = base ? `${base}/hiring/candidates?id=${candidateId}` : undefined;
-  const interviewDate = candidate.interviewScheduledAt
-    ? new Date(candidate.interviewScheduledAt).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
-    : undefined;
+  const fmt = (d: any) => new Date(d).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
   await emailInterviewScheduledHR({
     firstName: candidate.firstName,
     lastName: candidate.lastName,
     jobTitle: jd?.jobTitle ?? undefined,
-    interviewDate,
-    candidateUrl,
     rounds: rounds.map((r) => ({
       roundName: r.roundName,
       interviewerName: r.interviewerName ?? null,
-      briefingUrl: candidateUrl,
+      when: r.scheduledAt ? fmt(r.scheduledAt) : null,
     })),
   });
   return true;
