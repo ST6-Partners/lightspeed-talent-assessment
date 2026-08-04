@@ -63,41 +63,36 @@ export async function sendInterviewScheduledTeamEmail(candidateId: string): Prom
   return true;
 }
 
-/** Notify the hiring team that an interview round is complete, including that
- *  round's feedback and the briefing that carries to the next round's
- *  interviewer. Fired once a round's feedback is generated. */
+/** Send THIS round's completed feedback (from the transcript) to the round's own
+ *  interviewer — not the hiring team. Fired when the round's scorecard is submitted
+ *  (values.saveReview). The NEXT round's interviewer gets their briefing separately
+ *  via sendNextRoundPrep, so this email is just the feedback for the round they ran.
+ *  No-op if the round has no interviewer email. */
 export async function sendInterviewCompletedTeamEmail(roundId: string): Promise<boolean> {
   const round = await db.query.candidateInterviews.findFirst({ where: eq(candidateInterviews.id, roundId) });
   if (!round) return false;
+  if (!round.interviewerEmail) {
+    console.warn(`[interview-rounds] round ${roundId} completed but has no interviewer email — feedback email skipped`);
+    return false;
+  }
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, round.candidateId) });
   if (!candidate) return false;
   const jd = candidate.jdId
     ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
     : null;
-  const all = await db.select().from(candidateInterviews)
-    .where(eq(candidateInterviews.candidateId, round.candidateId))
-    .orderBy(asc(candidateInterviews.sortOrder));
-  const next = all.find((r) => r.sortOrder > round.sortOrder) ?? null;
-  const base = appBaseUrl();
-  const candidateUrl = base ? `${base}/hiring/candidates?id=${round.candidateId}` : undefined;
-  let nextBriefing: { rounds: BriefingRound[]; followUps: { roundName: string; type: string; text: string }[] } | null = null;
-  if (next) {
-    const b = await buildPriorRoundsBriefing(round.candidateId, next.sortOrder);
-    nextBriefing = {
-      rounds: b.rounds,
-      followUps: b.followUps.map((ff) => ({ roundName: ff.roundName, type: ff.type as string, text: ff.text })),
-    };
-  }
   await emailInterviewCompletedHR({
+    to: round.interviewerEmail,
     firstName: candidate.firstName,
     lastName: candidate.lastName,
     jobTitle: jd?.jobTitle ?? undefined,
     roundName: round.roundName,
     interviewScore: (round.score as number | null) ?? null,
     feedback: (round.feedbackHr as string | null) ?? null,
-    candidateUrl,
-    nextRound: next ? { roundName: next.roundName, interviewerName: next.interviewerName ?? null } : null,
-    nextBriefing,
+    // No candidate link and no next-round briefing here — the next interviewer is
+    // briefed separately (sendNextRoundPrep); this is just the interviewer's own read.
+    candidateUrl: undefined,
+    nextRound: null,
+    nextBriefing: null,
   });
   return true;
 }

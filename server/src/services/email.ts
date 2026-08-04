@@ -592,6 +592,7 @@ export async function emailInterviewScheduledHR(data: {
 
 // 15. Interview round completed → hiring team, with feedback + next-round briefing
 export async function emailInterviewCompletedHR(data: {
+  to: string;
   firstName: string;
   lastName: string;
   jobTitle?: string;
@@ -620,8 +621,8 @@ export async function emailInterviewCompletedHR(data: {
       ${nb && nb.followUps.length ? `${p('Follow-ups to chase:')}<ul style="font-size:14px;line-height:1.6;color:#374151;margin:0 0 16px;padding-left:20px;">${nb.followUps.map((ff) => `<li>${esc(ff.text)}${ff.roundName ? ` <span style="color:#9ca3af;">(${esc(ff.roundName)})</span>` : ''}</li>`).join('')}</ul>` : ''}`
     : `${p('This was the final interview round.')}`;
   await sendEmail({
-    to: HR_EMAIL,
-    templateId: 'interview_completed_hr',
+    to: data.to,
+    templateId: 'interview_completed_interviewer',
     subject: `Interview complete: ${data.firstName} ${data.lastName}${data.roundName ? ` — ${data.roundName}` : ''}`,
     html: wrap(`
       ${h1('Interview completed')}
