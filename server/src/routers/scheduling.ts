@@ -321,6 +321,13 @@ export const schedulingRouter = router({
     .query(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      // Times the candidate proposed after saying none of the recruiter's windows
+      // worked. Their presence (with nothing booked) means there was no common
+      // availability, so the recruiter must reach out directly to set a time.
+      const candidateSlots = Array.isArray((candidate as any).phoneScreenCandidateSlots)
+        ? ((candidate as any).phoneScreenCandidateSlots as any[]).map((sl) => (typeof sl === 'string' ? sl : sl.label))
+        : [];
+      const needsOutreach = candidateSlots.length > 0 && !candidate.phoneScreenScheduledAt;
       return {
         opened: !!candidate.phoneScreenBookingOpenedAt,
         scheduledAt: candidate.phoneScreenScheduledAt,
@@ -329,6 +336,12 @@ export const schedulingRouter = router({
         recruiterUrl: (candidate as any).phoneScreenRecruiterToken ? `${appBaseUrl()}/phone-screen-availability/${(candidate as any).phoneScreenRecruiterToken}` : null,
         availability: (candidate as any).phoneScreenAvailability ?? null,
         selectedSlot: (candidate as any).phoneScreenSelectedSlot ?? null,
+        // Reach-out-for-availability state + candidate contact for the panel.
+        needsOutreach,
+        candidateSlots,
+        candidateFirstName: candidate.firstName,
+        candidateEmail: candidate.email,
+        candidatePhone: (candidate as any).phone ?? null,
       };
     }),
 

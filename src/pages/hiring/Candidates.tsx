@@ -266,6 +266,9 @@ export default function Candidates() {
   };
   const needsActionReason = (c: any): string => {
     if (c.currentStage === 'Phone Screen' && !c.phoneScreenScheduledAt) {
+      if (Array.isArray(c.phoneScreenCandidateSlots) && c.phoneScreenCandidateSlots.length > 0) {
+        return 'No common availability — reach out to the candidate to set a time, then log it';
+      }
       return c.phoneScreenBookingOpenedAt
         ? 'Phone screen not confirmed yet — the candidate hasn\u2019t booked a time (or replied that none work); follow up'
         : 'Set your phone-screen availability so the candidate can confirm a time';
@@ -1960,6 +1963,24 @@ export function PhoneScreenSchedulingSection({ candidate, onChanged: _onChanged,
         <div className="text-sm text-green-700 font-medium">Call confirmed{s?.selectedSlot ? ` — ${s.selectedSlot}` : `: ${scheduled.toLocaleString()}`}</div>
       ) : (
         <>
+          {s?.needsOutreach && (
+            <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 p-3">
+              <div className="text-sm font-semibold text-amber-800">Reach out to set a time</div>
+              <p className="text-xs text-amber-700 mt-0.5">
+                {s?.candidateFirstName ?? 'The candidate'} couldn’t make your proposed times, so there’s no common availability. Contact them directly to agree on a time, then log it below. They stay flagged for action until you do.
+              </p>
+              <div className="text-xs text-amber-800 mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                {s?.candidateEmail && <span><span className="text-amber-600">Email:</span> <a className="underline" href={`mailto:${s.candidateEmail}`}>{s.candidateEmail}</a></span>}
+                {s?.candidatePhone && <span><span className="text-amber-600">Phone:</span> {s.candidatePhone}</span>}
+              </div>
+              {(s?.candidateSlots?.length ?? 0) > 0 && (
+                <div className="text-xs text-amber-700 mt-2">
+                  <div className="font-medium">Times the candidate said work for them:</div>
+                  <ul className="list-disc ml-4 mt-0.5">{(s?.candidateSlots ?? []).map((sl: string, i: number) => <li key={i}>{sl}</li>)}</ul>
+                </div>
+              )}
+            </div>
+          )}
           {s?.opened ? (
             <div className="text-sm text-gray-600 space-y-1">
               <div>Your availability was sent to the candidate. Waiting on them to confirm a time (or tell us none work).</div>
