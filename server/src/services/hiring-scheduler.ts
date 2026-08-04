@@ -662,6 +662,44 @@ async function runPhoneScreenDecisionReminder(): Promise<JobResult> {
   return { affected: sent, details: sent ? `Nudged the hiring team on ${sent} phone screen(s) awaiting a decision.` : 'No phone screens awaiting a decision.' };
 }
 
+// ── Job: phone-screen "reach out for availability" reminder (bell) ──
+// While a candidate is stuck with no common phone-screen availability — they
+// proposed times but nothing is booked — drop a daily bell notification on the
+// hiring team to reach out directly and log the agreed time. Repeats each day
+// until a time is logged (which sets phoneScreenScheduledAt and clears the state).
+// Bell only, no email — the recruiter handles the actual outreach from their inbox.
+async function runPhoneScreenOutreachReminderBell(): Promise<JobResult> {
+  const team = await hiringTeamUsers();
+  if (!team.length) return { affected: 0, details: 'No hiring-team users to notify.' };
+  const rows = await db.query.candidates.findMany({ where: eq(candidates.currentStage, 'Phone Screen') });
+  const dedupeSince = new Date(Date.now() - 20 * 60 * 60 * 1000); // once a day, not a flood
+  let notified = 0;
+  for (const c of rows as any[]) {
+    if (c.phoneScreenScheduledAt) continue; // booked → flag cleared
+    const proposed = Array.isArray(c.phoneScreenCandidateSlots) && c.phoneScreenCandidateSlots.length > 0;
+    if (!proposed) continue; // only the "no common availability" state
+    const recent = (await db.select().from(notifications).where(and(
+      eq(notifications.type, 'phone_screen_outreach'),
+      eq(notifications.referenceId, c.id),
+      gte(notifications.createdAt, dedupeSince),
+    )).limit(1))[0];
+    if (recent) continue; // already reminded within the last day
+    const jd = c.jdId ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;
+    const jobTitle = jd?.jobTitle ?? 'the role';
+    try {
+      await db.insert(notifications).values((team as any[]).map((u) => ({
+        userId: u.id,
+        type: 'phone_screen_outreach',
+        message: `Reach out to ${c.firstName} ${c.lastName} for a phone-screen time (${jobTitle}) — no common availability yet. Log the time once you agree.`,
+        referenceId: c.id,
+        referenceType: 'candidate',
+      })));
+      notified++;
+    } catch (err) { console.error('[phone-screen-outreach-reminder] notify failed for', c.id, err); }
+  }
+  return { affected: notified, details: notified ? `Bell-reminded the hiring team on ${notified} candidate(s) needing outreach.` : 'No candidates needing outreach.' };
+}
+
 // ── Job: work-sample walkthrough decision reminder ─────────
 // ~30 min after a completed work-sample walkthrough round, if the candidate is
 // still in Work Sample, nudge the interviewer who ran it (and the hiring team)
@@ -955,6 +993,15 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '20 9 * * *',  // 9:20 AM daily
     handler:        runApprovalReminder,
+  });
+  registerJob({
+    name:           'phone-screen-outreach-reminder',
+    label:          'Phone Screen Outreach Reminder',
+    description:    'Daily bell reminder to the hiring team to reach out and log a phone-screen time when the recruiter and candidate have no common availability. Repeats until a time is logged.',
+    color:          '#f59e0b',
+    jobType:        'cron',
+    cronExpression: '25 9 * * *',  // 9:25 AM daily
+    handler:        runPhoneScreenOutreachReminderBell,
   });
   registerJob({
     name:           'interview-day-before-reminder',
