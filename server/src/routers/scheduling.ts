@@ -14,7 +14,7 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, inArray } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
@@ -71,6 +71,46 @@ function fmtAvailabilityWindow(w: { date: string; start: string; end: string }):
     ? w.date
     : d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   return `${day} · ${fmtClock(w.start)} – ${fmtClock(w.end)}`;
+}
+
+// Every requisition the candidate could be attached to — the JD's home req plus any
+// requisition that reuses the JD (baseJdId). Interviewer availability is keyed by
+// (reqId, email); a reused JD can seed rounds under one req while availability was
+// submitted under another, so we search all of them rather than only jd.reqId.
+async function candidateRelatedReqIds(db: any, candidate: any): Promise<string[]> {
+  const ids = new Set<string>();
+  if (candidate?.jdId) {
+    const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) });
+    if ((jd as any)?.reqId) ids.add((jd as any).reqId);
+    try {
+      const reuse = await db.select().from(jobRequisitions).where(eq(jobRequisitions.baseJdId, candidate.jdId));
+      for (const r of reuse as any[]) ids.add(r.id);
+    } catch { /* baseJdId column optional in some rows — home req is enough */ }
+  }
+  return [...ids];
+}
+
+// Resolve a round's offered availability windows resiliently: match by interviewer
+// EMAIL (case-insensitive) first, then fall back to interviewer NAME — because the
+// interview plan often carries only a name (email is optional at intake), which used
+// to make the whole booking page show "no times". Searches across all the candidate's
+// related requisitions. Returns the windows plus the email the availability was stored
+// under (so a nameless-email round can be self-healed).
+async function resolveRoundWindows(
+  db: any,
+  reqIds: string[],
+  round: { interviewerEmail?: string | null; interviewerName?: string | null },
+): Promise<{ windows: { date: string; start: string; end: string }[]; matchedEmail: string | null }> {
+  if (!reqIds.length) return { windows: [], matchedEmail: null };
+  const rows = await db.select().from(interviewerAvailability).where(inArray(interviewerAvailability.reqId, reqIds));
+  const hasWindows = (r: any) => Array.isArray(r?.windows) && r.windows.length > 0;
+  const email = (round.interviewerEmail || '').trim().toLowerCase();
+  const name = (round.interviewerName || '').trim().toLowerCase();
+  let match: any = null;
+  if (email) match = (rows as any[]).find((r) => (r.email || '').trim().toLowerCase() === email && hasWindows(r));
+  if (!match && name) match = (rows as any[]).find((r) => (r.name || '').trim().toLowerCase() === name && hasWindows(r));
+  if (!match) return { windows: [], matchedEmail: null };
+  return { windows: Array.isArray(match.windows) ? match.windows : [], matchedEmail: match.email ?? null };
 }
 
 // Build the stored fields for a phone screen a recruiter arranged directly
@@ -660,15 +700,9 @@ export const schedulingRouter = router({
         };
       }
 
-      const jd = candidate.jdId ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) }) : null;
-      const reqId = (jd as any)?.reqId as string | undefined;
-      const interviewerEmail = (round as any).interviewerEmail as string | null;
-      let offeredWindows: { date: string; start: string; end: string }[] = [];
-      if (reqId && interviewerEmail) {
-        const avail = (await ctx.db.select().from(interviewerAvailability)
-          .where(and(eq(interviewerAvailability.reqId, reqId), eq(interviewerAvailability.email, interviewerEmail))).limit(1))[0];
-        offeredWindows = Array.isArray((avail as any)?.windows) ? (avail as any).windows : [];
-      }
+      const reqIds = await candidateRelatedReqIds(ctx.db, candidate);
+      const { windows: offeredWindows, matchedEmail } = await resolveRoundWindows(ctx.db, reqIds, round as any);
+      const interviewerEmail = ((round as any).interviewerEmail as string | null) || matchedEmail;
 
       // Filter out any window some OTHER candidate has already booked with this same
       // interviewer (their exact start instant matches an already-scheduled round) —
@@ -708,13 +742,9 @@ export const schedulingRouter = router({
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This scheduling link is invalid or has expired.' });
 
       const jd = candidate.jdId ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) }) : null;
-      const reqId = (jd as any)?.reqId as string | undefined;
-      const interviewerEmail = (round as any).interviewerEmail as string | null;
-      const avail = reqId && interviewerEmail
-        ? (await ctx.db.select().from(interviewerAvailability)
-            .where(and(eq(interviewerAvailability.reqId, reqId), eq(interviewerAvailability.email, interviewerEmail))).limit(1))[0]
-        : undefined;
-      const offeredWindows: { date: string; start: string; end: string }[] = Array.isArray((avail as any)?.windows) ? (avail as any).windows : [];
+      const reqIds = await candidateRelatedReqIds(ctx.db, candidate);
+      const { windows: offeredWindows, matchedEmail } = await resolveRoundWindows(ctx.db, reqIds, round as any);
+      const interviewerEmail = ((round as any).interviewerEmail as string | null) || matchedEmail;
       const matched = offeredWindows.find((w) => fmtAvailabilityWindow(w) === input.slot);
       if (!matched) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'That time is no longer offered. Please pick one of the listed times.' });
@@ -771,8 +801,7 @@ export const schedulingRouter = router({
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, entry.candidateId) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This scheduling link is invalid or has expired.' });
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
-      const jd = candidate.jdId ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) }) : null;
-      const reqId = (jd as any)?.reqId as string | undefined;
+      const reqIds = await candidateRelatedReqIds(ctx.db, candidate);
 
       const rounds = await ctx.db.select().from(candidateInterviews)
         .where(eq(candidateInterviews.candidateId, candidate.id))
@@ -786,17 +815,21 @@ export const schedulingRouter = router({
       for (const round of rounds as any[]) {
         if (round.scheduledAt) { infos.push({ round, state: 'scheduled', offered: [] }); continue; }
         if (round.status === 'candidate_proposed') { infos.push({ round, state: 'proposed', offered: [] }); continue; }
-        const interviewerEmail = round.interviewerEmail as string | null;
-        let offeredWindows: { date: string; start: string; end: string }[] = [];
-        if (reqId && interviewerEmail) {
-          const avail = (await ctx.db.select().from(interviewerAvailability)
-            .where(and(eq(interviewerAvailability.reqId, reqId), eq(interviewerAvailability.email, interviewerEmail))).limit(1))[0];
-          offeredWindows = Array.isArray((avail as any)?.windows) ? (avail as any).windows : [];
+        const { windows: offeredWindows, matchedEmail } = await resolveRoundWindows(ctx.db, reqIds, round);
+        // Self-heal: if the round had no interviewer email but we matched availability
+        // by name, persist the email so confirm/propose/notifications work by email.
+        if (!round.interviewerEmail && matchedEmail) {
+          await ctx.db.update(candidateInterviews).set({ interviewerEmail: matchedEmail, updatedAt: new Date() }).where(eq(candidateInterviews.id, round.id));
+          round.interviewerEmail = matchedEmail;
+        }
+        const effEmail = (round.interviewerEmail as string | null) || matchedEmail;
+        if (!offeredWindows.length) {
+          console.log(`[getInterviewBookingContext] round ${round.id} "${round.roundName}" — no availability matched (email=${round.interviewerEmail ?? 'null'} name=${round.interviewerName ?? 'null'} reqIds=${reqIds.join(',')})`);
         }
         let takenStarts = new Set<number>();
-        if (interviewerEmail) {
+        if (effEmail) {
           const bookedRounds = await ctx.db.select().from(candidateInterviews)
-            .where(and(eq(candidateInterviews.interviewerEmail, interviewerEmail), eq(candidateInterviews.status, 'scheduled')));
+            .where(and(eq(candidateInterviews.interviewerEmail, effEmail), eq(candidateInterviews.status, 'scheduled')));
           takenStarts = new Set((bookedRounds as any[]).filter((r) => r.scheduledAt).map((r) => new Date(r.scheduledAt).getTime()));
         }
         const offered: SlotOpt[] = offeredWindows
@@ -982,7 +1015,7 @@ export const schedulingRouter = router({
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, entry.candidateId) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This scheduling link is invalid or has expired.' });
       const jd = candidate.jdId ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) }) : null;
-      const reqId = (jd as any)?.reqId as string | undefined;
+      const reqIds = await candidateRelatedReqIds(ctx.db, candidate);
 
       const rounds = await ctx.db.select().from(candidateInterviews)
         .where(eq(candidateInterviews.candidateId, candidate.id))
@@ -995,12 +1028,8 @@ export const schedulingRouter = router({
         const round = byId.get(pick.roundId);
         if (!round) throw new TRPCError({ code: 'BAD_REQUEST', message: 'One of the selected rounds no longer exists.' });
         if (round.scheduledAt) continue; // already booked — skip
-        const interviewerEmail = round.interviewerEmail as string | null;
-        const avail = reqId && interviewerEmail
-          ? (await ctx.db.select().from(interviewerAvailability)
-              .where(and(eq(interviewerAvailability.reqId, reqId), eq(interviewerAvailability.email, interviewerEmail))).limit(1))[0]
-          : undefined;
-        const offeredWindows: { date: string; start: string; end: string }[] = Array.isArray((avail as any)?.windows) ? (avail as any).windows : [];
+        const { windows: offeredWindows, matchedEmail } = await resolveRoundWindows(ctx.db, reqIds, round);
+        const interviewerEmail = (round.interviewerEmail as string | null) || matchedEmail;
         const matched = offeredWindows.find((w) => fmtAvailabilityWindow(w) === pick.slot);
         if (!matched) throw new TRPCError({ code: 'BAD_REQUEST', message: `A selected time for "${round.roundName}" is no longer offered. Please refresh and pick again.` });
         const start = new Date(`${matched.date}T${matched.start}:00`);
