@@ -394,7 +394,6 @@ export async function generateRoundFeedback(roundId: string, transcriptIn?: stri
     feedbackCandidate: feedback.feedbackCandidate,
     feedbackInterviewer: feedback.feedbackInterviewer,
     followUps: feedback.followUps,
-    status: 'completed',
     updatedAt: new Date(),
   }).where(eq(candidateInterviews.id, roundId));
 
@@ -406,14 +405,12 @@ export async function generateRoundFeedback(roundId: string, transcriptIn?: stri
       .catch((err) => console.error('[walkthrough] work-sample scoring failed:', err));
   }
 
-  // This round just completed -- if that was the LAST one still open, mark the
-  // interview done and auto-advance to Reference Check.
-  await maybeAdvanceOnAllRoundsComplete(round.candidateId)
-    .catch((err) => console.error('[interview-rounds] all-rounds-complete check failed:', err));
-
-  // Notify the hiring team this round is complete — feedback + next-round briefing.
-  await sendInterviewCompletedTeamEmail(roundId)
-    .catch((err) => console.error('[interview-rounds] completed team email failed:', err));
+  // NOTE: generating the transcript does NOT close the round. The round closes
+  // only when its scorecard is submitted (values.saveReview) — that submit is what
+  // marks the round complete, fires the completed-team email (this round's feedback
+  // + next-round briefing) and the next round's interviewer prep, and runs the
+  // all-rounds-complete advance. Here we only store the transcript + AI feedback so
+  // it's ready for the scorecard.
 
   return { roundId, transcript, feedback };
 }

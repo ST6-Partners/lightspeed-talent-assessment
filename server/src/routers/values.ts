@@ -11,7 +11,7 @@ import { capabilityItems, candidateCapabilityScores } from '../db/schema/capabil
 import { candidates, jobDescriptions } from '../db/schema/hiring.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
 import { recommendCapabilityScores } from '../services/ai.js';
-import { sendNextRoundPrep, maybeAdvanceOnAllRoundsComplete } from '../services/interviewRounds.js';
+import { sendNextRoundPrep, maybeAdvanceOnAllRoundsComplete, sendInterviewCompletedTeamEmail } from '../services/interviewRounds.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { employees } from '../db/schema/employees.js';
 import { auditChange } from '../services/audit.js';
@@ -170,6 +170,9 @@ export const valuesRouter = router({
               .set({ status: 'completed', updatedAt: new Date() })
               .where(eq(candidateInterviews.id, input.interviewId));
             await maybeAdvanceOnAllRoundsComplete(rd.candidateId).catch((err) => console.error('[values] round-complete advance failed:', err));
+            // Round closed here (not at transcript generation) — now fire the
+            // completed-team email: this round's feedback + the next-round briefing.
+            await sendInterviewCompletedTeamEmail(input.interviewId).catch((err) => console.error('[values] completed team email failed:', err));
           }
           await sendNextRoundPrep(rd.candidateId, rd.sortOrder).catch((err) => console.error('[values] next-round prep auto-send failed:', err));
         }
