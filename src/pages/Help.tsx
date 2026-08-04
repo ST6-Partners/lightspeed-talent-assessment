@@ -26,7 +26,7 @@ const STAGES: { name: string; blurb: string }[] = [
   { name: 'Interviewed', blurb: 'Rounds happen; interviewers get AI-tailored questions and briefings.' },
   { name: 'Work Sample', blurb: 'Candidate completes a role-relevant task sent by tokenized link.' },
   { name: 'Reference Check', blurb: 'References are gathered once interviews clear.' },
-  { name: 'Offered', blurb: 'An offer is drafted and routed to the hiring manager to review and sign off.' },
+  { name: 'Offer', blurb: 'An offer is drafted and routed to the hiring manager to review and sign off.' },
   { name: 'Hired', blurb: 'Offer accepted — the candidate joins Lightspeed.' },
 ];
 

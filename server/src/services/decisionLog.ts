@@ -17,6 +17,7 @@ export type DecisionType =
   | 'interview_questions'
   | 'interview_feedback'
   | 'manual_stage_change'
+  | 'reference_check'
   | 'requisition_closed';
 
 export type DecisionOutcome =

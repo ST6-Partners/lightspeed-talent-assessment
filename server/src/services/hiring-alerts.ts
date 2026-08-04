@@ -32,7 +32,7 @@ export const STAGE_SLA_DAYS: Record<string, number> = {
   'Interview Scheduled': STAGE_SLA_DEFAULT_DAYS,
   'Interviewed': STAGE_SLA_DEFAULT_DAYS,
   'Reference Check': STAGE_SLA_DEFAULT_DAYS,
-  'Offered': STAGE_SLA_DEFAULT_DAYS,
+  'Offer': STAGE_SLA_DEFAULT_DAYS,
 };
 
 // Days a requisition may stay open before it's past its overall timeline.
@@ -134,13 +134,13 @@ export async function computeHiringAlerts(db: any): Promise<HiringAlerts> {
 
     if (daysOpen > sla) reasons.push(`Open ${daysOpen} days (target ~${sla})`);
 
-    // JDs for this req, then whether any candidate is Offered/Hired.
+    // JDs for this req, then whether any candidate is Offer/Hired.
     const jds = await db.query.jobDescriptions.findMany({ where: eq(jobDescriptions.reqId, r.id) });
     const jdIds = jds.map((j: any) => j.id);
     let hasOfferOrHire = false;
     if (jdIds.length) {
       const cands = await db.query.candidates.findMany({ where: inArray(candidates.jdId, jdIds) });
-      hasOfferOrHire = cands.some((c: any) => c.currentStage === 'Offered' || c.currentStage === 'Hired');
+      hasOfferOrHire = cands.some((c: any) => c.currentStage === 'Offer' || c.currentStage === 'Hired');
     }
 
     const offerBy = r.targetOfferDate ? new Date(r.targetOfferDate) : null;

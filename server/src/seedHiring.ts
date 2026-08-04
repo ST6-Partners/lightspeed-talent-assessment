@@ -113,7 +113,7 @@ const DISTRIBUTION: Array<{ stage: Stage | 'Rejected'; n: number; rejectedFrom?:
   { stage: 'Candidate Review', n: 4 },
   { stage: 'Interview Scheduled', n: 3 },
   { stage: 'Interviewed', n: 3 },
-  { stage: 'Offered', n: 2 },
+  { stage: 'Offer', n: 2 },
   { stage: 'Hired', n: 2 },
   // Rejected, varied by where they dropped:
   { stage: 'Rejected', n: 4, rejectedFrom: 'Applied' },

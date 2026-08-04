@@ -16,7 +16,7 @@ const STAGE_BADGE: Record<string, string> = {
   'Candidate Review': 'bg-amber-100 text-amber-700',
   'Interview Scheduled': 'bg-blue-100 text-blue-700',
   Interviewed: 'bg-cyan-100 text-cyan-700',
-  Offered: 'bg-green-100 text-green-700',
+  Offer: 'bg-green-100 text-green-700',
   Hired: 'bg-emerald-100 text-emerald-700',
   Rejected: 'bg-red-100 text-red-700',
 };

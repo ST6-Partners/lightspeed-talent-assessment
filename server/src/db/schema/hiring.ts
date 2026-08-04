@@ -32,7 +32,9 @@ export const candidateStageEnum = pgEnum('candidate_stage', [
   'Interviewed',
   // Reference Check follows the (optional, per-role) Work Sample, before an offer.
   'Reference Check',
-  'Offered',
+  // The offer step: reached when reference checks clear. Sending the actual
+  // offer letter is the follow-on action, so present-tense "Offer" reads right.
+  'Offer',
   'Hired',
   'Rejected',
   // Terminal disposition for candidates whose role closed/filled. NOT an
@@ -214,6 +216,14 @@ export const candidates = pgTable('candidates', {
   screenedAt: timestamp('screened_at', { withTimezone: true }),
   companyValuesMatchScore: integer('company_values_match_score'),
   companyValuesNotes: text('company_values_notes'),
+  // ── Reference check (manual decision gate before the offer) ──
+  // The recorder marks the outcome of the candidate's references. 'cleared'
+  // promotes to Offer, 'failed' rejects, 'concerns' holds in Reference Check.
+  // Values are constrained in the tRPC layer (see candidates.recordReferenceOutcome).
+  referenceOutcome: text('reference_outcome'),
+  referenceNotes: text('reference_notes'),
+  referenceDecidedAt: timestamp('reference_decided_at', { withTimezone: true }),
+  referenceDecidedBy: uuid('reference_decided_by').references(() => users.id, { onDelete: 'set null' }),
   // Assessment timing (for reminder + auto-reject scheduler)
   assessmentSentAt: timestamp('assessment_sent_at', { withTimezone: true }),
   assessmentCompletedAt: timestamp('assessment_completed_at', { withTimezone: true }),

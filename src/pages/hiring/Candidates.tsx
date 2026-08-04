@@ -17,7 +17,7 @@ const STAGE_COLORS: Record<string, string> = {
   'Interview Scheduled': 'bg-yellow-100 text-yellow-700',
   Interviewed: 'bg-orange-100 text-orange-700',
   'Reference Check': 'bg-rose-100 text-rose-700',
-  Offered: 'bg-emerald-100 text-emerald-700',
+  Offer: 'bg-emerald-100 text-emerald-700',
   Hired: 'bg-green-100 text-green-700',
   Rejected: 'bg-red-100 text-red-700',
   'Not Selected': 'bg-gray-100 text-gray-600',
@@ -691,7 +691,7 @@ export default function Candidates() {
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Offers out</div>
-            <div className="text-2xl font-bold text-gray-900 mt-1">{visibleCandidates.filter((c: any) => c.currentStage === 'Offered').length}</div>
+            <div className="text-2xl font-bold text-gray-900 mt-1">{visibleCandidates.filter((c: any) => c.currentStage === 'Offer').length}</div>
           </div>
         </div>
 
@@ -965,19 +965,78 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
         </div>
       );
     case 'Reference Check':
-      return (
-        <div className="space-y-2">
-          <div className="text-gray-500">Reference checks are done manually — the app doesn&apos;t automate them. Record the outcome, then advance or reject.</div>
-          <div className="text-gray-400 italic">Candidate-provided references aren&apos;t captured in the system yet, so there&apos;s nothing to list here. (Flagged as a follow-up.)</div>
-        </div>
-      );
-    case 'Offered':
-      return <div className="text-gray-500">Sending an offer letter (Offer section below) advances the candidate to Offered.</div>;
+      return <ReferenceCheckSection candidate={c} onChanged={onChanged} />;
+    case 'Offer':
+      return <div className="text-gray-500">The candidate is in the Offer stage. Send the offer letter from the Offer section below.</div>;
     case 'Hired':
       return <div className="text-gray-400 italic">Final stage.</div>;
     default:
       return null;
   }
+}
+
+// Reference Check decision gate. References are checked off-system; the recorder
+// marks the outcome here and the app acts on it: Cleared advances the candidate
+// to the Offer stage (the recruiter then sends the offer letter from the Offer
+// section), Failed rejects (with the standard rejection-email undo window), and
+// Concerns records the note and holds the candidate in Reference Check.
+function ReferenceCheckSection({ candidate, onChanged }: { candidate: any; onChanged: () => void }) {
+  const c = candidate;
+  const [outcome, setOutcome] = useState<'cleared' | 'concerns' | 'failed' | ''>('');
+  const [notes, setNotes] = useState('');
+  const record = trpc.candidates.recordReferenceOutcome.useMutation({
+    onSuccess: () => { setOutcome(''); setNotes(''); onChanged(); },
+  });
+  const LABEL: Record<string, string> = { cleared: 'Cleared', concerns: 'Concerns', failed: 'Failed' };
+  const prior = c.referenceOutcome as string | null;
+  const submitLabel = outcome === 'cleared' ? 'Record & advance to Offer'
+    : outcome === 'failed' ? 'Record & reject'
+    : outcome === 'concerns' ? 'Save note & hold'
+    : 'Choose an outcome';
+  return (
+    <div className="space-y-3">
+      <div className="text-gray-500">Reference checks are done manually. Record the outcome and the app moves the candidate accordingly.</div>
+      {prior && (
+        <div className="text-[12px] bg-gray-50 border border-gray-200 rounded px-2.5 py-1.5">
+          Last recorded: <b>{LABEL[prior] ?? prior}</b>{c.referenceNotes ? <> — {c.referenceNotes}</> : null}
+          {c.referenceDecidedAt ? <span className="text-gray-400"> ({new Date(c.referenceDecidedAt).toLocaleDateString()})</span> : null}
+        </div>
+      )}
+      <div className="flex gap-2 flex-wrap">
+        {(['cleared', 'concerns', 'failed'] as const).map((o) => (
+          <button
+            key={o}
+            type="button"
+            onClick={() => setOutcome(o)}
+            className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${outcome === o ? 'bg-ls-primary text-white border-ls-primary' : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'}`}
+          >
+            {LABEL[o]}
+          </button>
+        ))}
+      </div>
+      {outcome === 'cleared' && <div className="text-[12px] text-emerald-700">Advances the candidate to the Offer stage. You then send the offer letter from the Offer section.</div>}
+      {outcome === 'failed' && <div className="text-[12px] text-rose-700">Rejects the candidate. The rejection email sends after a short undo window.</div>}
+      {outcome === 'concerns' && <div className="text-[12px] text-amber-700">Records the concern and keeps the candidate in Reference Check.</div>}
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Notes (optional)"
+        className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 min-h-[60px]"
+      />
+      <div>
+        <button
+          type="button"
+          disabled={!outcome || record.isLoading}
+          onClick={() => outcome && record.mutate({ id: c.id, outcome, notes: notes.trim() || undefined })}
+          className={`text-xs font-semibold px-3 py-2 rounded-md ${!outcome || record.isLoading ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : outcome === 'failed' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-ls-primary text-white hover:opacity-90'}`}
+        >
+          {record.isLoading ? 'Saving…' : submitLabel}
+        </button>
+      </div>
+      {record.error && <div className="text-[12px] text-rose-600">{record.error.message}</div>}
+      <div className="text-gray-400 italic text-[12px]">Candidate-provided references aren&apos;t captured in the system yet, so there&apos;s nothing to list here. (Flagged as a follow-up.)</div>
+    </div>
+  );
 }
 
 function PipelineStages({ candidate, wsApplicable, nextStage, onAdvance, onReject, advancing, onChanged }: {

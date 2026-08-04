@@ -231,7 +231,7 @@ export const insightsRouter = router({
         ROUND(AVG(EXTRACT(EPOCH FROM (exited_at - entered_at)) / 86400)::numeric, 1) AS avg_days
       FROM stage_windows
       WHERE exited_at IS NOT NULL
-        AND stage NOT IN ('Rejected', 'Hired', 'Offered', 'Not Selected')
+        AND stage NOT IN ('Rejected', 'Hired', 'Offer', 'Not Selected')
       GROUP BY stage
       ORDER BY CASE stage
         WHEN 'Applied'             THEN 1
@@ -260,7 +260,7 @@ export const insightsRouter = router({
     // ── Summary totals ─────────────────────────────────────
     const totalApplicants = stageFunnel.reduce((sum, r) => sum + Number(r.count), 0);
     const hired = stageFunnel.find(r => r.stage === 'Hired');
-    const offered = stageFunnel.find(r => r.stage === 'Offered');
+    const offered = stageFunnel.find(r => r.stage === 'Offer');
 
     const STAGE_ORDER = CANDIDATE_STAGES;
 

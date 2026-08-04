@@ -517,7 +517,7 @@ export async function emailRejection(data: CandidateEmailData) {
     'Candidate Review': 'After reviewing your profile against the role',
     'Interview Scheduled': 'After further consideration',
     Interviewed: 'After your interview with our team',
-    Offered: 'After reviewing our offer',
+    Offer: 'After reviewing our offer',
   };
   const opener = stageMessages[data.fromStage ?? 'Applied'] ?? 'After careful consideration';
 
@@ -1208,7 +1208,7 @@ export async function dispatchStageEmail(
     case 'Interviewed':
       await emailPostInterviewThankYou(data);
       break;
-    case 'Offered':
+    case 'Offer':
       await emailOfferExtended(data);
       await emailOfferAcceptedHR(data);
       break;

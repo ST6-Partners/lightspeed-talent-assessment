@@ -158,7 +158,7 @@ export async function sendNextRoundPrep(candidateId: string, afterSortOrder: num
 }
 
 // Stages the candidate can be auto-advanced FROM when every round wraps up.
-// Anyone already further along (Work Sample, Reference Check, Offered,
+// Anyone already further along (Work Sample, Reference Check, Offer,
 // Rejected, ...) is left alone -- this only fires once, for whoever is still
 // sitting in the interview phase when the last round completes.
 const INTERVIEW_PHASE_STAGES = ['Interview Scheduled', 'Interviewed'];

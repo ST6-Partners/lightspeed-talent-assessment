@@ -177,7 +177,7 @@ function escHtml(s: any): string {
 }
 
 // Deliver a finalized external offer to the candidate: email + test-inbox copy
-// + advance to Offered + audit/activity. Shared by the direct send path and the
+// + advance to Offer + audit/activity. Shared by the direct send path and the
 // hiring-manager sign-off path so the two can't drift. `userId` is the acting
 // user (the recruiter); it may be null when triggered from a tokenized link.
 async function deliverOfferToCandidate(db: any, userId: string | null, candidate: any, offer: OfferLetterInput): Promise<{ html: string; jobTitle: string }> {
@@ -202,12 +202,12 @@ async function deliverOfferToCandidate(db: any, userId: string | null, candidate
     console.error('[offer] inbox record failed:', err);
   }
 
-  if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
-    await db.update(candidates).set({ currentStage: 'Offered', updatedAt: new Date() }).where(eq(candidates.id, candidate.id));
+  if (candidate.currentStage !== 'Offer' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
+    await db.update(candidates).set({ currentStage: 'Offer', updatedAt: new Date() }).where(eq(candidates.id, candidate.id));
     await db.insert(candidateStageHistory).values({
       candidateId: candidate.id,
       fromStage: candidate.currentStage,
-      toStage: 'Offered',
+      toStage: 'Offer',
       changedBy: userId,
       reason: 'External offer letter sent',
     });
@@ -237,10 +237,10 @@ async function deliverInternalOfferToCandidate(db: any, userId: string | null, c
       raw: { kind: 'internal_offer_letter', candidateId: candidate.id },
     });
   } catch (err) { console.error('[internal-offer] inbox record failed:', err); }
-  if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
-    await db.update(candidates).set({ currentStage: 'Offered', updatedAt: new Date() }).where(eq(candidates.id, candidate.id));
+  if (candidate.currentStage !== 'Offer' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
+    await db.update(candidates).set({ currentStage: 'Offer', updatedAt: new Date() }).where(eq(candidates.id, candidate.id));
     await db.insert(candidateStageHistory).values({
-      candidateId: candidate.id, fromStage: candidate.currentStage, toStage: 'Offered',
+      candidateId: candidate.id, fromStage: candidate.currentStage, toStage: 'Offer',
       changedBy: userId, reason: 'Internal offer letter sent',
     });
   }
@@ -956,6 +956,91 @@ export const candidatesRouter = router({
       return rejectCandidateCore(ctx.db, ctx.user.id, input.id, input.reason);
     }),
 
+  // Record the outcome of a candidate's reference check and act on it — the
+  // Reference Check decision gate. 'cleared' promotes the candidate to Offer as a
+  // silent internal move (mirrors the offer-send path; the recruiter then sends
+  // the actual offer letter, which is the candidate-facing comms). 'failed'
+  // rejects through the shared reject path (rejection-email undo window).
+  // 'concerns' records the note and holds the candidate in Reference Check.
+  // Only valid while the candidate is in Reference Check.
+  recordReferenceOutcome: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      outcome: z.enum(['cleared', 'concerns', 'failed']),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.id) });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      if (existing.currentStage !== 'Reference Check') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Reference outcome can only be recorded while the candidate is in Reference Check.' });
+      }
+      const notes = input.notes?.trim() || null;
+      const refFields = {
+        referenceOutcome: input.outcome,
+        referenceNotes: notes,
+        referenceDecidedAt: new Date(),
+        referenceDecidedBy: ctx.user.id,
+      };
+
+      // Failed → reject through the shared path (opens the rejection-email undo
+      // window). Stamp the reference fields first so the outcome is recorded even
+      // as the stage becomes Rejected; rejectCandidateCore reads the still-current
+      // 'Reference Check' stage as the from-stage.
+      if (input.outcome === 'failed') {
+        await ctx.db.update(candidates).set({ ...refFields, updatedAt: new Date() }).where(eq(candidates.id, input.id));
+        const reason = notes ? `Reference check failed — ${notes}` : 'Reference check failed';
+        return rejectCandidateCore(ctx.db, ctx.user.id, input.id, reason);
+      }
+
+      // Concerns → record and hold in Reference Check. No stage move, no email.
+      if (input.outcome === 'concerns') {
+        const [held] = await ctx.db.update(candidates)
+          .set({ ...refFields, updatedAt: new Date() })
+          .where(eq(candidates.id, input.id))
+          .returning();
+        await logDecision(ctx.db, {
+          candidateId: input.id,
+          decisionType: 'reference_check',
+          outcome: 'pending_review',
+          decidedByType: 'human',
+          decidedBy: ctx.user.id,
+          reason: notes ? `References flagged with concerns — held. ${notes}` : 'References flagged with concerns — held in Reference Check.',
+          inputs: { outcome: 'concerns', stage: existing.currentStage },
+        });
+        await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+        trackActivity(ctx.db, ctx.user.id, 'reference_outcome', 'candidates', { candidateId: input.id, outcome: 'concerns' }).catch((err: unknown) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
+        return held;
+      }
+
+      // Cleared → promote to Offer. Silent internal move (mirrors the offer-send
+      // path, which flips the stage without a candidate-facing stage email); the
+      // recruiter sends the real offer letter next from the Offer section.
+      const [candidate] = await ctx.db.update(candidates)
+        .set({ ...refFields, currentStage: 'Offer', updatedAt: new Date() })
+        .where(eq(candidates.id, input.id))
+        .returning();
+      await ctx.db.insert(candidateStageHistory).values({
+        candidateId: input.id,
+        fromStage: existing.currentStage,
+        toStage: 'Offer',
+        changedBy: ctx.user.id,
+        reason: notes ? `References cleared — ${notes}` : 'References cleared',
+      });
+      await logDecision(ctx.db, {
+        candidateId: input.id,
+        decisionType: 'reference_check',
+        outcome: 'advanced',
+        decidedByType: 'human',
+        decidedBy: ctx.user.id,
+        reason: notes ? `References cleared — advanced to Offer. ${notes}` : 'References cleared — advanced to Offer.',
+        inputs: { outcome: 'cleared', fromStage: existing.currentStage, toStage: 'Offer' },
+      });
+      await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'reference_outcome', 'candidates', { candidateId: input.id, outcome: 'cleared' }).catch((err: unknown) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
+      return candidate;
+    }),
+
   // Bulk-reject a set of candidates with one shared reason. Reuses the exact
   // same per-candidate logic as `reject` (stage history, decision log,
   // rejection email) — just looped. Failures on individual ids don't stop
@@ -1417,7 +1502,7 @@ export const candidatesRouter = router({
       return { html: renderOfferLetter(offer), jobTitle: offer.jobTitle };
     }),
 
-  // Send the external offer letter via SendGrid and move the candidate to Offered.
+  // Send the external offer letter via SendGrid and move the candidate to Offer.
   sendOffer: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
@@ -1693,11 +1778,11 @@ export const candidatesRouter = router({
         return { configured: true as const, error: result.error };
       }
 
-      // Advance to Offered + record for visibility.
-      if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
-        await ctx.db.update(candidates).set({ currentStage: 'Offered', updatedAt: new Date() }).where(eq(candidates.id, input.id));
+      // Advance to Offer + record for visibility.
+      if (candidate.currentStage !== 'Offer' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
+        await ctx.db.update(candidates).set({ currentStage: 'Offer', updatedAt: new Date() }).where(eq(candidates.id, input.id));
         await ctx.db.insert(candidateStageHistory).values({
-          candidateId: input.id, fromStage: candidate.currentStage, toStage: 'Offered',
+          candidateId: input.id, fromStage: candidate.currentStage, toStage: 'Offer',
           changedBy: ctx.user.id, reason: `Offer sent for e-signature via Adobe Sign (agreement ${result.agreementId})`,
         });
       }
@@ -1819,7 +1904,7 @@ export const candidatesRouter = router({
       return { html: renderInternalOfferLetter(offer), newTitle: offer.comp.newTitle };
     }),
 
-  // Send the internal-move offer letter via SendGrid + inbox copy, and move to Offered.
+  // Send the internal-move offer letter via SendGrid + inbox copy, and move to Offer.
   sendInternalOffer: protectedProcedure
     .input(z.object({
       id: z.string().uuid(),
@@ -1890,10 +1975,10 @@ export const candidatesRouter = router({
         return { configured: true as const, error: result.error };
       }
 
-      if (candidate.currentStage !== 'Offered' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
-        await ctx.db.update(candidates).set({ currentStage: 'Offered', updatedAt: new Date() }).where(eq(candidates.id, input.id));
+      if (candidate.currentStage !== 'Offer' && candidate.currentStage !== 'Hired' && candidate.currentStage !== 'Rejected') {
+        await ctx.db.update(candidates).set({ currentStage: 'Offer', updatedAt: new Date() }).where(eq(candidates.id, input.id));
         await ctx.db.insert(candidateStageHistory).values({
-          candidateId: input.id, fromStage: candidate.currentStage, toStage: 'Offered',
+          candidateId: input.id, fromStage: candidate.currentStage, toStage: 'Offer',
           changedBy: ctx.user.id, reason: `Internal offer sent for e-signature via Adobe Sign (agreement ${result.agreementId})`,
         });
       }
