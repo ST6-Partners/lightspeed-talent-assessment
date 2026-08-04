@@ -673,6 +673,13 @@
       "when": 1960000066000,
       "tag": "0095_rejection_email_delay",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1960000067000,
+      "tag": "0096_interview_round_proposals",
+      "breakpoints": true
     }
   ]
 }

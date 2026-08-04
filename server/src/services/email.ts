@@ -337,6 +337,57 @@ export async function emailInterviewSchedulingInviteAll(data: {
   });
 }
 
+// Candidate couldn't make any of a round's offered times and proposed their own.
+// Emails that round's INTERVIEWER a link to pick one of the candidate's times (or
+// reach out directly). Mirrors emailPhoneScreenNoAvailabilityRecruiter.
+export async function emailInterviewRoundCandidateProposed(data: {
+  to: string;
+  interviewerName?: string | null;
+  candidateName: string;
+  jobTitle?: string;
+  roundName: string;
+  proposedSlots: string[];
+  pickUrl: string;
+}) {
+  const slots = (data.proposedSlots ?? []).filter(Boolean);
+  const slotList = slots.length
+    ? '<ul style="margin:6px 0 16px;padding-left:18px;font-size:14px;color:#333;line-height:1.8;">' + slots.map((sl) => `<li>${esc(sl)}</li>`).join('') + '</ul>'
+    : '';
+  await sendEmail({
+    to: data.to,
+    templateId: 'interview_round_candidate_proposed',
+    subject: `Interview scheduling — ${data.candidateName} proposed new times (${data.roundName})`,
+    html: wrap(`
+      ${h1('The candidate proposed their own times')}
+      ${p(`${data.interviewerName ? `Hi ${esc(data.interviewerName)}, ` : ''}<strong>${esc(data.candidateName)}</strong> couldn't make any of the times offered for their <strong>${esc(data.roundName)}</strong>${data.jobTitle ? ` (${esc(data.jobTitle)})` : ''}, and sent back the times that work for them:`)}
+      ${slotList}
+      ${p('Open the scheduler to pick one of their times and lock in the interview — or, if none work, to reach out to them directly.')}
+      ${button('Pick one of their times', data.pickUrl)}
+    `),
+  });
+}
+
+// Interviewer couldn't make any of the candidate's proposed times either — tell the
+// candidate the interviewer will reach out directly. Mirrors emailPhoneScreenReachOutCandidate.
+export async function emailInterviewRoundReachOutCandidate(data: {
+  email: string;
+  firstName: string;
+  jobTitle?: string;
+  roundName?: string;
+  interviewerName?: string | null;
+}) {
+  await sendEmail({
+    to: data.email,
+    templateId: 'interview_round_reach_out_candidate',
+    subject: `Scheduling your interview${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+    html: wrap(`
+      ${h1('We’ll find a time directly')}
+      ${p(`Hi ${esc(data.firstName)}, we weren’t able to line up a time from the options we exchanged for your ${data.roundName ? `<strong>${esc(data.roundName)}</strong>` : 'interview'}${data.jobTitle ? ` (${esc(data.jobTitle)})` : ''}. ${data.interviewerName ? esc(data.interviewerName) : 'Your interviewer'} will reach out to you directly to find one that works.`)}
+      ${p('No action needed on your end — just keep an eye out for their message.')}
+    `),
+  });
+}
+
 // All-rounds candidate confirmation: lists every round the candidate just booked
 // with its chosen time. Sent once after confirmInterviewBooking.
 export async function emailInterviewsBookedCandidate(data: {

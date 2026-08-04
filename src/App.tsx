@@ -10,6 +10,7 @@ import EeoSurvey from './pages/EeoSurvey';
 import Fairness from './pages/hiring/Fairness';
 import BookInterview from './pages/BookInterview';
 import ScheduleInterview from './pages/ScheduleInterview';
+import InterviewRoundPick from './pages/InterviewRoundPick';
 import PhoneScreenAvailability from './pages/PhoneScreenAvailability';
 import InterviewerUnavailable from './pages/InterviewerUnavailable';
 import InterviewerAvailability from './pages/InterviewerAvailability';
@@ -50,6 +51,7 @@ export default function App() {
       <Route path="/interviewer-reassign/:token" element={<InterviewerReassign />} />
       <Route path="/book-interview/:token" element={<BookInterview />} />
       <Route path="/schedule-interview/:token" element={<ScheduleInterview />} />
+      <Route path="/interviewer-pick/:token" element={<InterviewRoundPick />} />
       <Route path="/phone-screen-availability/:token" element={<PhoneScreenAvailability />} />
       <Route path="/apply-internal/:jdId" element={<ApplyInternal />} />
       <Route path="/approve/:token" element={<Approve />} />

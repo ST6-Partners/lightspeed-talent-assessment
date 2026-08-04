@@ -32,6 +32,13 @@ export const candidateInterviews = pgTable('candidate_interviews', {
   // submitted availability (interviewerAvailability, collected at intake). Minted the
   // first time this round's scheduling is opened (see startInterviewRoundScheduling).
   bookingToken: varchar('booking_token', { length: 64 }),
+  // Counter-proposal path (mirrors the phone-screen flow). When none of the
+  // interviewer's offered times work, the candidate proposes their own slots
+  // (stored here as {date,start,end,label}[]), the round flips to
+  // status 'candidate_proposed', and the round's interviewer gets a tokenized
+  // link (interviewerToken) to pick one of these — or to reach out directly.
+  candidateProposedSlots: jsonb('candidate_proposed_slots'),
+  interviewerToken: varchar('interviewer_token', { length: 64 }),
   transcript: text('transcript'),
   score: integer('score'),
   feedbackHr: text('feedback_hr'),
