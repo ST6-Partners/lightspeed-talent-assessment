@@ -1032,16 +1032,30 @@ export async function emailPhoneScreenConfirmedRecruiter(data: {
     ? `You arranged a phone screen with <strong>${esc(data.candidateName)}</strong>${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}:`
     : `<strong>${esc(data.candidateName)}</strong> picked one of your offered times${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}:`;
 
+  const summary = `Phone screen: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`;
+  const callLine = data.candidatePhone ? `Call ${data.candidatePhone}.` : 'Call the number on file.';
+  const description = `Phone screen with ${data.candidateName}${data.jobTitle ? ` for ${data.jobTitle}` : ''}. ${callLine}`;
+
   let attachments: EmailAttachment[] | undefined;
+  let addToCalendarBtn = '';
   if (data.startAt) {
     const uidKey = data.candidateId ?? data.candidateName.replace(/\s+/g, '-').toLowerCase();
-    const callLine = data.candidatePhone ? `Call ${data.candidatePhone}.` : 'Call the number on file.';
+    const end = data.endAt ?? new Date(data.startAt.getTime() + 30 * 60 * 1000);
+    // Primary CTA: "Add to my calendar" opens Google Calendar with the event
+    // prefilled (the recruiter just hits Save — as close to one-click as email allows;
+    // an email can't add an event silently). Floating local time (no "Z") preserves the
+    // exact clock time. The .ics stays attached as a fallback for Outlook/Apple.
+    const gcalUrl = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+      + `&text=${encodeURIComponent(summary)}`
+      + `&dates=${icsFloating(data.startAt)}/${icsFloating(end)}`
+      + `&details=${encodeURIComponent(description)}`;
+    addToCalendarBtn = button('Add to my calendar', gcalUrl);
     const ics = buildPhoneScreenIcsBase64({
       uid: `phone-screen-${uidKey}@lightspeed-talent-assessment`,
       start: data.startAt,
       end: data.endAt ?? null,
-      summary: `Phone screen: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
-      description: `Phone screen with ${data.candidateName}${data.jobTitle ? ` for ${data.jobTitle}` : ''}. ${callLine}`,
+      summary,
+      description,
       organizerEmail: FROM_ADDRESS,
       organizerName: FROM_NAME,
       attendeeEmail: HR_EMAIL,
@@ -1057,9 +1071,9 @@ export async function emailPhoneScreenConfirmedRecruiter(data: {
       ${h1(heading)}
       ${p(lead)}
       ${data.slot ? `<div style="margin:8px 0 16px;padding:12px 14px;background:#eef7f0;border:1px solid #cfe8d6;border-radius:8px;font-size:15px;font-weight:600;color:#1f7a3d;">${esc(data.slot)}</div>` : ''}
-      ${p(data.startAt
-        ? 'A calendar invite is attached — accept it to add the call to your calendar, then call the number on file at that time.'
-        : 'Please send the calendar invite for that time and call the number on file.')}
+      ${data.startAt
+        ? p('Add this call to your calendar with the button below, then call the number on file at that time.') + addToCalendarBtn + p('<span style="font-size:12px;color:#888;">Not on Google Calendar? A calendar file is attached that opens in any calendar app.</span>')
+        : p('Please send the calendar invite for that time and call the number on file.')}
     `),
     attachments,
   });
