@@ -11,6 +11,10 @@ import { PROMPTS } from './prompts.js';
 const SANDBOX = !process.env.ANTHROPIC_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? '';
 const MODEL = 'claude-sonnet-4-6';
+// Fast model for latency-sensitive, low-stakes generations (e.g. the synthetic demo
+// interview transcript). Much quicker than the default Sonnet; quality isn't critical
+// for throwaway sample text.
+const FAST_MODEL = 'claude-haiku-4-5-20251001';
 
 const LIGHTSPEED_VALUES = [
   'Integrity', 'Accountability', 'Collaboration', 'Innovation',
@@ -471,7 +475,7 @@ export async function synthesizeInterviewTranscript(input: TranscriptSynthInput)
   const system = `You are generating a REALISTIC but SYNTHETIC interview transcript for a demo of Lightspeed Systems' hiring tool. It is clearly not a real interview. Make it read like a genuine ~30-minute Zoom transcript: speaker labels ("Interviewer:" / candidate first name + ":"), natural back-and-forth, some strong answers and some weaker/evasive ones. Deliberately (a) skip one or two of the planned questions and (b) have the candidate dodge or give a non-answer to at least one question, so downstream feedback has something to catch. Plain text only, no markdown.`;
   const user = `Candidate: ${input.firstName} ${input.lastName}\nRole: ${input.jobTitle ?? 'Unknown'}\nInterviewer: ${input.interviewerName ?? 'Interviewer'}\n\nPlanned questions:\n${qs}\n\nWrite the transcript.`;
   try {
-    return await callClaude(system, user);
+    return await callClaude(system, user, FAST_MODEL);
   } catch (err) {
     console.error('[AI] synthesizeInterviewTranscript failed, using mock:', err);
     return getMockTranscript(input);

@@ -51,11 +51,14 @@ export const PROMPTS = {
   },
   interviewFeedback: {
     id: 'interview-feedback',
-    version: '1.0.0',
-    model: 'claude-sonnet-4-6',
+    version: '1.1.0',
+    model: 'claude-haiku-4-5-20251001',
     purpose: 'Analyze an interview transcript into HR report, candidate feedback, and interviewer coaching.',
-    lastRevised: '2026-07-14',
-    changelog: ['1.0.0 — initial registry entry.'],
+    lastRevised: '2026-08-04',
+    changelog: [
+      '1.0.0 — initial registry entry.',
+      '1.1.0 — switched to the Haiku model to speed up transcript feedback generation (advisory output; revert to claude-sonnet-4-6 if feedback quality regresses).',
+    ],
   },
   interviewQuestions: {
     id: 'interview-questions',
