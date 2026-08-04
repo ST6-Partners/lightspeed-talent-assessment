@@ -343,10 +343,18 @@ export async function autofillSampleRounds(candidateId: string): Promise<void> {
       .where(eq(candidateInterviews.candidateId, candidateId))
       .orderBy(asc(candidateInterviews.sortOrder));
   }
-  for (const r of rounds) {
-    if (((r.feedbackHr as string | null) ?? '').trim()) continue; // already has feedback — leave it
-    await generateRoundFeedback(r.id).catch((err) => console.error('[autofill] round feedback failed', r.id, err));
-  }
+  // Generate each round's transcript + feedback CONCURRENTLY. The rounds are
+  // independent records — each generateRoundFeedback reads the shared candidate
+  // row read-only and writes only its own candidateInterviews row — so running
+  // them in parallel turns N sequential Claude round-trips (synthesize → analyze,
+  // per round) into one wave: the batch now takes about as long as its slowest
+  // single round instead of the sum of all of them. Per-round .catch keeps one
+  // failing round from rejecting the whole batch (matches the prior loop).
+  await Promise.all(
+    rounds
+      .filter((r) => !(((r.feedbackHr as string | null) ?? '').trim())) // skip rounds that already have feedback
+      .map((r) => generateRoundFeedback(r.id).catch((err) => console.error('[autofill] round feedback failed', r.id, err))),
+  );
 }
 
 /** Run AI feedback for a single round and store it on that round. */

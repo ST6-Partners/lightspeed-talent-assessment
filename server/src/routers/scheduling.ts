@@ -247,6 +247,49 @@ function fmtWindowRange(start: Date, end: Date): string {
   return `${start.toLocaleDateString('en-US', opt)} – ${end.toLocaleDateString('en-US', opt)}`;
 }
 
+// The role week-window a candidate's counter-proposed interview times must fall
+// in — the SAME window interviewers picked their availability from (see
+// computeAvailabilityWindow / submitInterviewerAvailability). A candidate can
+// relate to more than one requisition (a reused JD); union the per-req windows
+// (earliest start, latest end) so any date a real interviewer could have offered
+// stays valid. Returns null when there's no requisition to anchor to (leave the
+// candidate unbounded rather than block them).
+async function windowForCandidate(db: any, candidate: any): Promise<{ start: Date; end: Date } | null> {
+  const reqIds = await candidateRelatedReqIds(db, candidate);
+  if (!reqIds.length) return null;
+  let start: number | null = null;
+  let end: number | null = null;
+  for (const reqId of reqIds) {
+    const w = await computeAvailabilityWindow(db, reqId);
+    const s = w.start.getTime();
+    const e = w.end.getTime();
+    start = start == null ? s : Math.min(start, s);
+    end = end == null ? e : Math.max(end, e);
+  }
+  if (start == null || end == null) return null;
+  return { start: new Date(start), end: new Date(end) };
+}
+
+// Whether any of the proposed windows fall outside the role week-window, compared
+// at DAY granularity (the propose form's date picker chooses whole days, so a slot
+// on a valid day must not be rejected for its time-of-day). Mirrors the check in
+// submitInterviewerAvailability so the candidate and interviewer flows agree.
+function anyWindowOutside(
+  win: { start: Date; end: Date },
+  windows: { date: string; start?: string; end?: string }[],
+): boolean {
+  const wsDay = new Date(win.start); wsDay.setHours(0, 0, 0, 0);
+  const weDay = new Date(win.end); weDay.setHours(23, 59, 59, 999);
+  const ws = wsDay.getTime();
+  const we = weDay.getTime();
+  return windows.some((w) => {
+    const st = Date.parse(`${w.date}T${w.start || '00:00'}`);
+    const en = Date.parse(`${w.date}T${w.end || w.start || '23:59'}`);
+    if (Number.isNaN(st)) return true;
+    return st < ws || (Number.isNaN(en) ? st > we : en > we);
+  });
+}
+
 export const schedulingRouter = router({
   // ── PROTECTED: HR opens scheduling for a candidate ─────────
   open: protectedProcedure
@@ -873,7 +916,18 @@ export const schedulingRouter = router({
         return { roundId: i.round.id, roundName: i.round.roundName, interviewerName: i.round.interviewerName ?? null, alreadyBooked: false, proposed: false, scheduledAt: null, slots };
       });
 
-      return { firstName: candidate.firstName, jobTitle: jobTitle ?? null, rounds: out, converged };
+      // Surface the role week-window so the candidate's "suggest other times"
+      // date picker can bound to (and guide toward) the same span interviewers
+      // offered from — keeping every round clustered. Null when unbounded.
+      const win = await windowForCandidate(ctx.db, candidate);
+      return {
+        firstName: candidate.firstName,
+        jobTitle: jobTitle ?? null,
+        rounds: out,
+        converged,
+        windowStart: win ? win.start.toISOString() : null,
+        windowEnd: win ? win.end.toISOString() : null,
+      };
     }),
 
   // ── PUBLIC: candidate proposes their own times for ONE round when none of the
@@ -894,6 +948,17 @@ export const schedulingRouter = router({
       const round = await ctx.db.query.candidateInterviews.findFirst({ where: eq(candidateInterviews.id, input.roundId) });
       if (!round || round.candidateId !== candidate.id) throw new TRPCError({ code: 'BAD_REQUEST', message: 'That round no longer exists.' });
       if (round.scheduledAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This round is already scheduled.' });
+
+      // Keep the candidate's counter-proposal inside the same role week-window the
+      // interviewers picked from, so all rounds stay clustered (mirrors the guard on
+      // submitInterviewerAvailability). Day-granularity; skipped when unbounded.
+      const win = await windowForCandidate(ctx.db, candidate);
+      if (win && anyWindowOutside(win, input.windows)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Please suggest times within this role's interview window (${fmtWindowRange(win.start, win.end)}) so all rounds stay close together.`,
+        });
+      }
 
       const proposed = input.windows.map((w) => ({ date: w.date, start: w.start, end: w.end, label: fmtAvailabilityWindow(w) }));
       const interviewerToken = (round as any).interviewerToken ?? randomUUID();

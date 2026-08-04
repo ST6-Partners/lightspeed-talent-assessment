@@ -73,6 +73,12 @@ export default function ScheduleInterview() {
   }
 
   const rounds = data.rounds ?? [];
+  // Role week-window the interviewers offered from — bound the "suggest other
+  // times" date picker to it (and guide toward it) so counter-proposals stay in
+  // the same span and every round clusters together. Undefined = unbounded.
+  const winStart = (data as any).windowStart ? (data as any).windowStart.slice(0, 10) : undefined;
+  const winEnd = (data as any).windowEnd ? (data as any).windowEnd.slice(0, 10) : undefined;
+  const fmtWin = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : '');
   const schedulable = rounds.filter((r: any) => !r.alreadyBooked && !r.proposed && r.slots.length > 0);
   const allChosen = schedulable.every((r: any) => selections[r.roundId]);
   const nothingLeftToDo = rounds.length > 0 && rounds.every((r: any) => r.alreadyBooked || r.proposed);
@@ -139,11 +145,13 @@ export default function ScheduleInterview() {
                 </div>
               ) : proposing ? (
                 <div className="rounded-md border border-gray-200 p-3">
-                  <p className="text-xs text-gray-500 mb-2">Suggest at least 3 times that work for you.</p>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Suggest at least 3 times that work for you{winStart ? <> between <strong>{fmtWin(winStart)}</strong> and <strong>{fmtWin(winEnd)}</strong>, so all your rounds stay close together</> : null}.
+                  </p>
                   <div className="space-y-2">
                     {proposeRows[r.roundId].map((row, i) => (
                       <div key={i} className="flex items-center gap-2">
-                        <input type="date" value={row.date} onChange={(e) => setRow(r.roundId, i, { date: e.target.value })} className="flex-1 min-w-0 px-2 py-1.5 border border-gray-200 rounded text-sm" />
+                        <input type="date" value={row.date} min={winStart} max={winEnd} onChange={(e) => setRow(r.roundId, i, { date: e.target.value })} className="flex-1 min-w-0 px-2 py-1.5 border border-gray-200 rounded text-sm" />
                         <input type="time" value={row.start} onChange={(e) => setRow(r.roundId, i, { start: e.target.value })} className="px-2 py-1.5 border border-gray-200 rounded text-sm" />
                         <span className="text-gray-400 text-xs">to</span>
                         <input type="time" value={row.end} onChange={(e) => setRow(r.roundId, i, { end: e.target.value })} className="px-2 py-1.5 border border-gray-200 rounded text-sm" />
