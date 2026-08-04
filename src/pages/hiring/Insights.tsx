@@ -28,7 +28,7 @@ function readableInk(i: number, n: number) {
 }
 const SOURCE_COLORS = ['#2E89B8', '#4EABD2', '#14b8a6', '#6FBCE0', '#8A969E', '#c4b5fd', '#f59e0b'];
 // Pipeline stages shown in the funnel (closed/rejected stages excluded).
-const FUNNEL_STAGES = ['Applied', 'Assessment', 'Candidate Review', 'Phone Screen', 'Interview', 'Work Sample', 'Reference Check', 'Offered', 'Hired'];
+const FUNNEL_STAGES = ['Applied', 'Assessment', 'Candidate Review', 'Phone Screen', 'Interview', 'Work Sample', 'Reference Check', 'Offer', 'Hired'];
 
 // ── Small building blocks ──────────────────────────────────
 function Card({ title, children, className = '' }: { title?: string; children: any; className?: string }) {
@@ -472,7 +472,7 @@ export default function Insights() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <KpiTile label="Applicants" value={s.totalApplicants} delta={delta(s.totalApplicants, cs?.totalApplicants)} sub={hasRange ? (range as any).label : 'all time'} />
-            <KpiTile label="Offered" value={s.totalOffered} delta={delta(s.totalOffered, cs?.totalOffered)} sub={`${s.offerRate}% offer rate`} />
+            <KpiTile label="Offer" value={s.totalOffered} delta={delta(s.totalOffered, cs?.totalOffered)} sub={`${s.offerRate}% offer rate`} />
             <KpiTile label="Hired" value={s.totalHired} delta={delta(s.totalHired, cs?.totalHired)} sub={`${s.hireRate}% hire rate`} />
             <KpiTile label="Avg CCAT" value={data.ccat ? data.ccat.avg : '—'} unit={data.ccat ? '/50' : ''} sub={data.ccat ? `${Math.round((data.ccat.passed / data.ccat.total) * 100)}% pass` : 'no scores'} />
             <KpiTile label="Avg EPP" value={data.epp ? `${data.epp.avg}%` : '—'} sub={data.epp ? `${Math.round((data.epp.passed / data.epp.total) * 100)}% pass` : 'no scores'} />

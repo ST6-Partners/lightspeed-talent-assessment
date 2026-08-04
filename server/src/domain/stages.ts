@@ -29,7 +29,7 @@ export const CANDIDATE_STAGES = [
   // an automated up-front narrowing step. Reference Check follows it.
   'Work Sample',
   'Reference Check',
-  'Offered',
+  'Offer',
   'Hired',
   'Rejected',
   'Not Selected',
@@ -43,7 +43,7 @@ const has = (list: readonly string[], s: string) => list.includes(s);
 export const TERMINAL_STAGES: readonly string[] = ['Rejected', 'Hired', 'Not Selected'];
 // Closed-out but not hired (rejected on merits, or role closed/filled).
 export const CLOSED_STAGES: readonly string[] = ['Rejected', 'Not Selected'];
-// Still in flight — everything up to and including Offered.
+// Still in flight — everything up to and including Offer.
 export const ACTIVE_STAGES: readonly string[] = CANDIDATE_STAGES.filter((s) => !has(TERMINAL_STAGES, s));
 // Non-terminal pipeline including Hired — the funnel display set.
 export const PIPELINE_STAGES: readonly string[] = CANDIDATE_STAGES.filter((s) => !has(CLOSED_STAGES, s));

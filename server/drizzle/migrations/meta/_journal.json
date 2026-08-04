@@ -694,6 +694,20 @@
       "when": 1960000069000,
       "tag": "0098_collapse_interview_stages",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1960000070000,
+      "tag": "0100_reference_check_outcome",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1960000071000,
+      "tag": "0101_rename_offered_stage",
+      "breakpoints": true
     }
   ]
 }

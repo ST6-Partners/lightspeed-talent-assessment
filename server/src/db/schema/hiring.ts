@@ -31,7 +31,9 @@ export const candidateStageEnum = pgEnum('candidate_stage', [
   'Interview',
   // Reference Check follows the (optional, per-role) Work Sample, before an offer.
   'Reference Check',
-  'Offered',
+  // The offer step: reached when reference checks clear. Sending the actual
+  // offer letter is the follow-on action, so present-tense "Offer" reads right.
+  'Offer',
   'Hired',
   'Rejected',
   // Terminal disposition for candidates whose role closed/filled. NOT an
@@ -213,6 +215,14 @@ export const candidates = pgTable('candidates', {
   screenedAt: timestamp('screened_at', { withTimezone: true }),
   companyValuesMatchScore: integer('company_values_match_score'),
   companyValuesNotes: text('company_values_notes'),
+  // ── Reference check (manual decision gate before the offer) ──
+  // The recorder marks the outcome of the candidate's references. 'cleared'
+  // promotes to Offer, 'failed' rejects, 'concerns' holds in Reference Check.
+  // Values are constrained in the tRPC layer (see candidates.recordReferenceOutcome).
+  referenceOutcome: text('reference_outcome'),
+  referenceNotes: text('reference_notes'),
+  referenceDecidedAt: timestamp('reference_decided_at', { withTimezone: true }),
+  referenceDecidedBy: uuid('reference_decided_by').references(() => users.id, { onDelete: 'set null' }),
   // Assessment timing (for reminder + auto-reject scheduler)
   assessmentSentAt: timestamp('assessment_sent_at', { withTimezone: true }),
   assessmentCompletedAt: timestamp('assessment_completed_at', { withTimezone: true }),
@@ -299,6 +309,29 @@ export const candidateStageHistory = pgTable('candidate_stage_history', {
   toStage: candidateStageEnum('to_stage').notNull(),
   changedBy: uuid('changed_by').references(() => users.id, { onDelete: 'set null' }),
   reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ── candidate_references ───────────────────────────────────
+// References a candidate provides (captured on the add-candidate form). The
+// table already exists in the DB (migration 0023); this models it. `token` +
+// `status`/`response`/`wouldRehire`/`requestedAt`/`respondedAt` pre-position a
+// future "email the reference for a response" flow — for now we capture the
+// reference (name/email/relationship) and default status to 'pending'.
+export const candidateReferences = pgTable('candidate_references', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  candidateId: uuid('candidate_id')
+    .references(() => candidates.id, { onDelete: 'cascade' })
+    .notNull(),
+  name: varchar('name', { length: 200 }).notNull(),
+  email: varchar('email', { length: 300 }).notNull(),
+  relationship: varchar('relationship', { length: 200 }),
+  token: varchar('token', { length: 64 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  requestedAt: timestamp('requested_at', { withTimezone: true }),
+  respondedAt: timestamp('responded_at', { withTimezone: true }),
+  response: text('response'),
+  wouldRehire: varchar('would_rehire', { length: 20 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

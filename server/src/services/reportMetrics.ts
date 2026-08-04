@@ -29,7 +29,7 @@ export async function buildPeriodMetrics(db: any, fromISO: string, toISO: string
   const advancedRows = await db.select({ c: count() }).from(candidateStageHistory)
     .where(and(inWindow, sql`${candidateStageHistory.toStage} NOT IN ('Rejected','Not Selected')`));
   const offeredRows = await db.select({ c: count() }).from(candidateStageHistory)
-    .where(and(inWindow, eq(candidateStageHistory.toStage, 'Offered')));
+    .where(and(inWindow, eq(candidateStageHistory.toStage, 'Offer')));
   const hiredRows = await db.select({ c: count() }).from(candidateStageHistory)
     .where(and(inWindow, eq(candidateStageHistory.toStage, 'Hired')));
   const rejectedRows = await db.select({ c: count() }).from(candidateStageHistory)

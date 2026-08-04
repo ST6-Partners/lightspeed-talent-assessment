@@ -33,6 +33,7 @@ export {
   jobDescriptions,
   candidates,
   candidateStageHistory,
+  candidateReferences,
   emailLog,
   rankingRuns,
   candidateRankings,

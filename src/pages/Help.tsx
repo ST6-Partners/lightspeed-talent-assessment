@@ -25,7 +25,7 @@ const STAGES: { name: string; blurb: string }[] = [
   { name: 'Interview', blurb: 'Rounds are booked and run: the candidate self-schedules via a Calendly link, interviewers get AI-tailored questions and briefings, and each round is scored on a scorecard. When the last round is scored the candidate auto-advances to Work Sample (if the role has one) or Reference Check.' },
   { name: 'Work Sample', blurb: 'Candidate completes a role-relevant task sent by tokenized link.' },
   { name: 'Reference Check', blurb: 'References are gathered once interviews clear.' },
-  { name: 'Offered', blurb: 'An offer is drafted and routed to the hiring manager to review and sign off.' },
+  { name: 'Offer', blurb: 'An offer is drafted and routed to the hiring manager to review and sign off.' },
   { name: 'Hired', blurb: 'Offer accepted — the candidate joins Lightspeed.' },
 ];
 

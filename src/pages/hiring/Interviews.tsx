@@ -20,7 +20,7 @@ const STATUS_STYLE: Record<string, string> = {
 };
 const FOLLOW_LABEL: Record<string, string> = { avoided: 'Avoided', half_answered: 'Half-answered', suggested: 'Suggested' };
 // Interviews tab only surfaces candidates at the interview stage or beyond.
-const INTERVIEW_STAGES = ['Interview', 'Offered', 'Hired'];
+const INTERVIEW_STAGES = ['Interview', 'Offer', 'Hired'];
 // Managers want all of a candidate's rounds held inside a tight window so the
 // panel compares people while they're fresh (manager-meeting decision).
 const INTERVIEW_WINDOW_HOURS = 72;
