@@ -24,6 +24,7 @@ import { computeEppScans, buildRoleFitNotes } from './eppScans.js';
 import { screenResumeRequirements } from './ai.js';
 import { dispatchStageEmail } from './email.js';
 import { logDecision } from './decisionLog.js';
+import { startPhoneScreenScheduling } from './phoneScreen.js';
 
 // Both EPP match and company-values match must be at or above this to advance.
 export const MATCH_PASS_THRESHOLD = 70;
@@ -120,6 +121,12 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
   if (eppMatch < MATCH_PASS_THRESHOLD) shortfalls.push(`EPP match ${eppMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
   if (valuesMatch < MATCH_PASS_THRESHOLD) shortfalls.push(`role-values match ${valuesMatch}% (below ${MATCH_PASS_THRESHOLD}%)`);
   const metBar = shortfalls.length === 0;
+  // Auto-advance to Phone Screen when the two gates that matter for that step clear:
+  // role-fit (EPP) match >= threshold AND resume requirements met. Company-values fit
+  // is assessed later (interview scorecard), so it does NOT gate here — matching the
+  // assessmentDecision path. When ready, the candidate skips the human hold in
+  // Candidate Review and goes straight to Phone Screen.
+  const phoneScreenReady = eppMatch >= MATCH_PASS_THRESHOLD && !resumeFailed;
 
   // Always move to Candidate Review (the human review stage). Never auto-reject.
   await db.update(candidates)
@@ -156,12 +163,39 @@ export async function runPostAssessmentReview(db: any, candidateId: string): Pro
       : `Advanced for human review: below the bar (${shortfalls.join('; ')}) — not auto-rejected.`,
   });
 
-  // Candidate "moving forward" email only when they cleared the bar automatically.
-  // Below-bar candidates wait for a human decision in the Review queue.
-  if (metBar) {
+  // Candidate "moving forward" email only when they cleared the bar automatically
+  // AND aren't being auto-advanced past Candidate Review (the Phone Screen advance
+  // below drives its own comms). Below-bar candidates wait for a human decision.
+  if (metBar && !phoneScreenReady) {
     void dispatchStageEmail('Candidate Review', fromStage, {
       firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle,
     }).catch((err) => console.error('[PostReview] Candidate Review email failed:', err));
+  }
+
+  // Auto-advance straight to Phone Screen when both automated gates cleared.
+  if (phoneScreenReady) {
+    await db.update(candidates)
+      .set({ currentStage: 'Phone Screen', screenRecommendation: 'advance', updatedAt: new Date() })
+      .where(eq(candidates.id, candidateId));
+    await db.insert(candidateStageHistory).values({
+      candidateId, fromStage: 'Candidate Review', toStage: 'Phone Screen', changedBy: null,
+      reason: `Auto-advanced: role-fit match ${eppMatch}% (>= ${MATCH_PASS_THRESHOLD}%) and resume requirements met.`,
+    });
+    await logDecision(db, {
+      candidateId,
+      decisionType: 'post_assessment_review',
+      outcome: 'passed',
+      score: eppMatch,
+      decidedByType: 'deterministic',
+      reason: `Both automated gates cleared (role-fit ${eppMatch}% and resume requirements met) — auto-advanced to Phone Screen.`,
+      inputs: { eppMatch, threshold: MATCH_PASS_THRESHOLD, resumeMet: true },
+    });
+    // Recruiter-first scheduling: email the recruiter to submit availability (the
+    // candidate is emailed the window once the recruiter submits).
+    await startPhoneScreenScheduling(db, candidateId)
+      .catch((err: unknown) => console.error('[PostReview] phone-screen scheduling failed:', err));
+    console.log(`[PostReview] ${candidate.email} auto-advanced to Phone Screen (role-fit ${eppMatch}%, resume met)`);
+    return { decision: 'passed', eppMatch, valuesMatch };
   }
 
   console.log(`[PostReview] ${candidate.email} ${metBar ? 'auto-advanced (met bar)' : 'advanced for human review (below bar)'} — EPP ${eppMatch}% / values ${valuesMatch}%`);
