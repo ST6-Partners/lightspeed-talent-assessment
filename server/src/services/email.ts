@@ -310,6 +310,57 @@ export async function emailInterviewSchedulingInvite(data: {
   });
 }
 
+// All-rounds candidate invite: one email, one link, from which the candidate
+// picks a time for EVERY interview round (each round drawing from its own
+// interviewer's submitted availability). See scheduling.getInterviewBookingContext
+// + confirmInterviewBooking.
+export async function emailInterviewSchedulingInviteAll(data: {
+  email: string;
+  firstName: string;
+  jobTitle?: string;
+  roundCount: number;
+  schedulingUrl: string;
+}) {
+  const rounds = data.roundCount > 1 ? `${data.roundCount} interview rounds` : 'interview';
+  await sendEmail({
+    to: data.email,
+    templateId: 'interview_scheduling_invite_all',
+    subject: `Schedule your interviews — ${data.jobTitle ?? 'Lightspeed Systems'}`,
+    html: wrap(`
+      ${h1("Let's find times for your interviews")}
+      ${p(`Hi ${esc(data.firstName)},`)}
+      ${p(`You're moving forward for <strong>${esc(data.jobTitle ?? 'the position')}</strong>. Your process has <strong>${rounds}</strong>${data.roundCount > 1 ? ', each with its own interviewer' : ''}.`)}
+      ${p('Open the link below and pick a time for each round from the times we have available. You can do them all in one place.')}
+      ${button('Schedule your interviews', data.schedulingUrl)}
+      ${p("If you don't see a time that works for a round, reply to this email and we'll find another option.")}
+    `),
+  });
+}
+
+// All-rounds candidate confirmation: lists every round the candidate just booked
+// with its chosen time. Sent once after confirmInterviewBooking.
+export async function emailInterviewsBookedCandidate(data: {
+  email: string;
+  firstName: string;
+  jobTitle?: string;
+  rounds: { roundName: string; interviewerName?: string | null; when: string }[];
+}) {
+  const rows = data.rounds.map((r) =>
+    `<li style="margin: 0 0 8px; font-size: 15px; line-height: 1.5;"><strong>${esc(r.roundName)}</strong> — ${esc(r.when)}${r.interviewerName ? ` with ${esc(r.interviewerName)}` : ''}</li>`
+  ).join('');
+  await sendEmail({
+    to: data.email,
+    templateId: 'interviews_booked_candidate',
+    subject: `Your interviews are confirmed — ${data.jobTitle ?? 'Lightspeed Systems'}`,
+    html: wrap(`
+      ${h1("You're all set")}
+      ${p(`Hi ${esc(data.firstName)}, thanks for scheduling. Here are your confirmed interview times${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}:`)}
+      <ul style="margin: 0 0 20px; padding-left: 20px;">${rows}</ul>
+      ${p('Calendar invites are on their way. If you need to change any time, just reply to this email.')}
+    `),
+  });
+}
+
 // 5. Interview scheduled
 export async function emailInterviewScheduled(data: CandidateEmailData) {
   await sendEmail({

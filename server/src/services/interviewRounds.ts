@@ -266,10 +266,13 @@ export async function seedRoundsFromPlan(candidateId: string) {
     .where(eq(interviewPlan.reqId, targetReq.id))
     .orderBy(asc(interviewPlan.sortOrder));
 
-  let toInsert: Array<{ candidateId: string; roundName: string; interviewerName?: string | null; sortOrder: number }>;
+  let toInsert: Array<{ candidateId: string; roundName: string; interviewerName?: string | null; interviewerEmail?: string | null; sortOrder: number }>;
   if (plan.length) {
-    // Named rounds defined on that opening's intake.
-    toInsert = plan.map((r, i) => ({ candidateId, roundName: r.roundName, interviewerName: (r as any).interviewer ?? null, sortOrder: r.sortOrder ?? i }));
+    // Named rounds defined on that opening's intake. Carry the plan's
+    // interviewer EMAIL through too — it's the key the candidate scheduler uses
+    // to look up each round's availability, so without it rounds 2..N would show
+    // no times to pick from.
+    toInsert = plan.map((r, i) => ({ candidateId, roundName: r.roundName, interviewerName: (r as any).interviewer ?? null, interviewerEmail: (r as any).interviewerEmail ?? null, sortOrder: r.sortOrder ?? i }));
   } else {
     // No named rounds — fall back to that opening's round COUNT (generic "Round 1..N").
     const n = Math.max(1, Math.min(5, ((targetReq as any)?.interviewRounds ?? 1)));

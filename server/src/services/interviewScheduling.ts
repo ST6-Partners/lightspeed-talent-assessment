@@ -17,7 +17,7 @@ import { eq, and, asc } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { candidates, jobDescriptions } from '../db/schema/hiring.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
-import { emailInterviewSchedulingInvite } from './email.js';
+import { emailInterviewSchedulingInviteAll } from './email.js';
 
 function appBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -27,25 +27,33 @@ function appBaseUrl(): string {
   return '';
 }
 
-// Kick off scheduling for the candidate's first not-yet-scheduled round: mint a
-// booking token (idempotent — reuses an existing one) and email the candidate the
-// link. No-op if there's no round yet (seedRoundsFromPlan should run first) or the
-// round is already scheduled/completed.
+// Kick off ALL-ROUNDS scheduling for the candidate: mint a single booking token
+// (the entry token, stored on the candidate's first round — idempotent) and email
+// the candidate ONE link from which they pick a time for every round. The link
+// resolves the candidate from the token, then loads all their rounds (see
+// scheduling.getInterviewBookingContext / confirmInterviewBooking). No-op if there
+// are no rounds yet (seedRoundsFromPlan should run first).
 export async function startInterviewRoundScheduling(db: any, candidateId: string): Promise<void> {
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
   if (!candidate) return;
 
-  const round = await db.query.candidateInterviews.findFirst({
-    where: and(eq(candidateInterviews.candidateId, candidateId), eq(candidateInterviews.status, 'planned')),
-    orderBy: (t: any) => [asc(t.sortOrder)],
-  });
-  if (!round) return; // rounds not seeded yet, or every round is already past 'planned'
+  const rounds = await db.select().from(candidateInterviews)
+    .where(eq(candidateInterviews.candidateId, candidateId))
+    .orderBy(asc(candidateInterviews.sortOrder));
+  if (!rounds.length) return; // rounds not seeded yet
 
-  const token = (round as any).bookingToken ?? randomUUID();
-  if (!(round as any).bookingToken) {
+  // Only invite if there's at least one round still to schedule.
+  const unscheduled = rounds.filter((r: any) => !r.scheduledAt);
+  if (!unscheduled.length) return;
+
+  // The entry token lives on the first round; any round's token resolves the
+  // candidate, so one token covers the whole set.
+  const entry = rounds[0];
+  const token = (entry as any).bookingToken ?? randomUUID();
+  if (!(entry as any).bookingToken) {
     await db.update(candidateInterviews)
       .set({ bookingToken: token, updatedAt: new Date() })
-      .where(eq(candidateInterviews.id, round.id));
+      .where(eq(candidateInterviews.id, entry.id));
   }
 
   const jd = candidate.jdId
@@ -54,14 +62,13 @@ export async function startInterviewRoundScheduling(db: any, candidateId: string
   const jobTitle: string | undefined = (jd as any)?.jobTitle ?? undefined;
   const schedulingUrl = `${appBaseUrl()}/schedule-interview/${token}`;
 
-  await emailInterviewSchedulingInvite({
+  await emailInterviewSchedulingInviteAll({
     email: candidate.email,
     firstName: candidate.firstName,
     jobTitle,
-    roundName: round.roundName,
-    interviewerName: (round as any).interviewerName ?? undefined,
+    roundCount: rounds.length,
     schedulingUrl,
   }).catch((err) => console.error('[interviewScheduling] scheduling invite email failed:', err));
 
-  console.log(`[interviewScheduling] scheduling invite sent to ${candidate.email} for round "${round.roundName}"`);
+  console.log(`[interviewScheduling] all-rounds scheduling invite sent to ${candidate.email} (${rounds.length} round(s))`);
 }
