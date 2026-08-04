@@ -631,15 +631,23 @@ export const candidatesRouter = router({
       // token minted now (pending the future "request a reference" email flow);
       // status defaults to 'pending'.
       if (refInput && refInput.length) {
-        await ctx.db.insert(candidateReferences).values(
-          refInput.map((r) => ({
-            candidateId: candidate.id,
-            name: r.name.trim(),
-            email: r.email.trim(),
-            relationship: r.relationship?.trim() || null,
-            token: randomUUID(),
-          })),
-        );
+        // Never let saving references block creating the candidate. If the
+        // candidate_references table is missing on this environment (a skipped
+        // historical migration — see migration 0102), the candidate is still
+        // created; the references just aren't persisted until the DB is migrated.
+        try {
+          await ctx.db.insert(candidateReferences).values(
+            refInput.map((r) => ({
+              candidateId: candidate.id,
+              name: r.name.trim(),
+              email: r.email.trim(),
+              relationship: r.relationship?.trim() || null,
+              token: randomUUID(),
+            })),
+          );
+        } catch (err) {
+          console.error('[create] saving references failed (candidate created without them):', err);
+        }
       }
 
       const jobTitle = await getJobTitle(ctx.db, candidateData.jdId);
