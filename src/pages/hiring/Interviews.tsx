@@ -366,7 +366,6 @@ export default function Interviews() {
   const [newRound, setNewRound] = useState('');
   const [addOpen, setAddOpen] = useState(false);
   const [autoSeeded, setAutoSeeded] = useState<Record<string, boolean>>({});
-  const [showQuestions, setShowQuestions] = useState(false);
 
   const { data: candidates, refetch } = trpc.candidates.list.useQuery(undefined);
   const { data: jobDescriptions } = trpc.jobDescriptions.list.useQuery();
@@ -557,26 +556,6 @@ export default function Interviews() {
 
           {/* Candidate self-scheduling (Calendly) — collapsed */}
           <SchedulingSection key={`sched-${selected.id}`} candidate={selected} onChanged={refetch} />
-
-          {/* Auto-generated questions — single quiet line */}
-          <div className="border border-gray-200 rounded-xl px-4 py-3">
-            <button onClick={() => setShowQuestions((v) => !v)} className="flex items-center justify-between w-full text-left">
-              <span className="text-xs text-gray-600">Interview questions are auto-generated for every round</span>
-              <span className="text-xs text-ls-primary">{showQuestions ? 'Hide' : 'View set'}</span>
-            </button>
-            {showQuestions && (
-              <div className="mt-2 space-y-2">
-                {selected.interviewQuestions
-                  ? (selected.interviewQuestions as any[]).map((q: any, i: number) => (
-                      <div key={i} className="bg-gray-50 rounded p-2 text-xs">
-                        <div className="font-medium text-gray-700">{q.category}</div>
-                        <div className="text-gray-600 mt-0.5">{q.question}</div>
-                      </div>
-                    ))
-                  : <div className="text-xs text-gray-400">Questions are generated automatically once the candidate reaches the interview stage.</div>}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
