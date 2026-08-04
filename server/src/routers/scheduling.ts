@@ -559,6 +559,8 @@ export const schedulingRouter = router({
       }).where(eq(candidates.id, input.candidateId));
       await auditChange(ctx.db, ctx.user.id, input.candidateId, 'candidates', 'update');
       return { ok: true as const, label };
+    }),
+
   // ── PUBLIC: candidate opens their interview-round scheduling link ─────────
   // Shows the assigned interviewer's already-submitted availability (collected at
   // intake — see submitInterviewerAvailability) as discrete slots to pick from.
