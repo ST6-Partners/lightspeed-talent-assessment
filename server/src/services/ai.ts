@@ -57,25 +57,45 @@ export interface ClaudeCallMeta {
   outputTokens: number | null;
 }
 
+// Single POST to the Anthropic Messages API with a hard timeout. Without this a
+// slow/hung generation ran until the platform's gateway cut the HTTP request and
+// returned a non-JSON error page, which the tRPC client reported as the opaque
+// "Unable to transform response from server." A timeout turns that into a clean,
+// bounded error the caller can surface properly.
+const ANTHROPIC_TIMEOUT_MS = 90_000;
+async function anthropicFetch(body: Record<string, unknown>): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ANTHROPIC_TIMEOUT_MS);
+  try {
+    return await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+  } catch (e: any) {
+    if (e?.name === 'AbortError') throw new Error(`Anthropic request timed out after ${Math.round(ANTHROPIC_TIMEOUT_MS / 1000)}s`);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function callClaudeMeta(
   systemPrompt: string,
   userPrompt: string,
   model: string = MODEL,
   maxTokens: number = 2048,
 ): Promise<ClaudeCallMeta> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
-    }),
+  const response = await anthropicFetch({
+    model,
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
   });
 
   if (!response.ok) {
@@ -137,19 +157,11 @@ async function callClaudeVision(
   }
   content.push({ type: 'text', text: instruction });
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: 'user', content }],
-    }),
+  const response = await anthropicFetch({
+    model,
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages: [{ role: 'user', content }],
   });
 
   if (!response.ok) {

@@ -155,9 +155,13 @@ async function main() {
   }));
 
   // Skip JSON body parsing for file upload routes (handled by express.raw inline)
+  // Body limit raised to 5mb: tRPC payloads can carry a pasted interview transcript,
+  // which routinely exceeds the 100kb express.json default and 413'd with a non-JSON
+  // body — surfacing on the client as "Unable to transform response from server."
+  const jsonParser = express.json({ limit: '5mb' });
   app.use((req, res, next) => {
     if (req.path === '/api/upload/video' || req.path === '/api/webhooks/zoom' || req.path === '/api/webhooks/calendly') return next();
-    express.json()(req, res, next);
+    jsonParser(req, res, next);
   });
 
   // ── Auth — email/password + Postgres-backed sessions ──
