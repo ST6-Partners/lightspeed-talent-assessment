@@ -25,7 +25,7 @@ import { candidateInterviews } from '../db/schema/interviews.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { interviewPlan, hiringTeam } from '../db/schema/intake.js';
 import { INTERVIEW_WINDOW_HOURS, businessHoursBetween } from './interviews.js';
-import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate, emailPhoneScreenReachOutCandidate, emailPhoneScreenReachOutRecruiter, emailInterviewBookedCandidate, emailInterviewsBookedCandidate, emailInterviewRoundCandidateProposed, emailInterviewRoundReachOutCandidate } from '../services/email.js';
+import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate, emailInterviewBookedCandidate, emailInterviewsBookedCandidate, emailInterviewRoundCandidateProposed, emailInterviewRoundReachOutCandidate } from '../services/email.js';
 import { sendFirstRoundPrep, sendRoundPrep, sendInterviewScheduledTeamEmail } from '../services/interviewRounds.js';
 import { prepInterviewQuestions } from '../services/interviewPrep.js';
 
@@ -617,26 +617,18 @@ export const schedulingRouter = router({
     }),
 
   // ── PUBLIC: recruiter can't make the candidate's counter-proposed times either —
-  // stop the back-and-forth and reach out directly. Notifies the candidate and
-  // returns their contact info so the recruiter can email/call them.
+  // stop the back-and-forth and handle it manually. Sends no email; returns the
+  // candidate's contact so the recruiter can reach out from their own inbox.
   phoneScreenReachOutDirect: publicProcedure
     .input(z.object({ token: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenRecruiterToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
-      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
-      await emailPhoneScreenReachOutCandidate({
-        email: candidate.email, firstName: candidate.firstName, jobTitle,
-      }).catch((err) => console.error('[scheduling.phoneScreenReachOutDirect] candidate email failed:', err));
-      // Companion email to the recruiter with a durable "log the agreed time" button.
-      // ?direct=1 makes the recruiter page open straight to the log form whenever they
-      // return (the reach-out state is otherwise only in the original browser session).
-      const recruiterLogUrl = `${appBaseUrl()}/phone-screen-availability/${input.token}?direct=1`;
-      await emailPhoneScreenReachOutRecruiter({
-        candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle,
-        candidateEmail: candidate.email, candidatePhone: (candidate as any).phone ?? null,
-        logUrl: recruiterLogUrl,
-      }).catch((err) => console.error('[scheduling.phoneScreenReachOutDirect] recruiter email failed:', err));
+      // No app email is sent. The recruiter reaches out from their own inbox so the
+      // candidate's reply lands with them (a reply to an app email would go to the
+      // send-only address and vanish). The candidate is already flagged for action
+      // — they proposed times and nothing was booked — so this just returns their
+      // contact for the recruiter page's manual-scheduling panel.
       return { firstName: candidate.firstName, email: candidate.email, phone: (candidate as any).phone ?? null };
     }),
 

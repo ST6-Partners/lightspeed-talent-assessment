@@ -50,6 +50,7 @@ export default function PhoneScreenAvailability() {
   const [logDate, setLogDate] = useState('');
   const [logStart, setLogStart] = useState('');
   const [logEnd, setLogEnd] = useState('');
+  const [copied, setCopied] = useState(false);
   const logDirect = trpc.scheduling.logPhoneScreenDirectTime.useMutation({ onSuccess: () => refetch() });
 
   if (isLoading) return <Card><p className="text-sm text-gray-400">Loading…</p></Card>;
@@ -88,19 +89,18 @@ export default function PhoneScreenAvailability() {
     return (
       <Card>
         <PhoneCall className="mb-3 text-ls-primary" size={26} />
-        <h1 className="text-xl font-bold text-gray-900">Reach out to {contact.firstName} directly</h1>
+        <h1 className="text-xl font-bold text-gray-900">Marked for review — schedule directly</h1>
         <p className="text-gray-500 text-sm mt-1 mb-4">
-          The scheduling options didn't line up. Contact {contact.firstName} directly to find a time — we've emailed them to expect your message.
+          The scheduling options didn't line up, so {contact.firstName} is flagged for action. Email them from your own inbox to agree on a time — their reply comes straight back to you — then log the time below to clear the flag. The app sends them nothing.
         </p>
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm">
-          <div className="mb-1"><span className="text-gray-500">Email:</span> <a href={`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(contact.email)}`} target="_blank" rel="noreferrer" className="text-ls-primary hover:underline">{contact.email}</a></div>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="text-gray-500">Email:</span> <span className="font-medium text-gray-800">{contact.email}</span>
+            <button type="button" onClick={() => { navigator.clipboard?.writeText(contact.email); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+              className="text-ls-primary hover:underline text-xs">{copied ? 'Copied' : 'Copy'}</button>
+          </div>
           {contact.phone && <div><span className="text-gray-500">Phone:</span> {contact.phone}</div>}
         </div>
-        <a href={`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(contact.email)}&subject=${encodeURIComponent('Scheduling your phone screen')}`}
-          target="_blank" rel="noreferrer"
-          className="mt-4 inline-block w-full text-center py-2.5 rounded-lg bg-ls-primary text-white font-semibold text-sm hover:bg-ls-primary-600">
-          Email {contact.firstName} in Outlook
-        </a>
         <div className="mt-5 pt-4 border-t border-gray-100">
           <div className="text-xs font-semibold text-gray-600 mb-2">Agreed on a time? Log it so the phone screen is on the record.</div>
           <div className="flex items-center gap-2">
@@ -157,7 +157,7 @@ export default function PhoneScreenAvailability() {
         <button onClick={() => reachOut.mutate({ token })}
           disabled={reachOut.isLoading || pick.isLoading}
           className="w-full mt-2 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-semibold text-sm hover:bg-gray-50 disabled:opacity-50">
-          {reachOut.isLoading ? 'One sec…' : 'None of these work either — I’ll reach out directly'}
+          {reachOut.isLoading ? 'One sec…' : 'None of these work — mark for review & schedule directly'}
         </button>
       </Card>
     );
