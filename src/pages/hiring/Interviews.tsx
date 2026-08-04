@@ -17,7 +17,9 @@ const STATUS_STYLE: Record<string, string> = {
   planned: 'bg-gray-100 text-gray-600',
   scheduled: 'bg-blue-100 text-blue-700',
   completed: 'bg-green-100 text-green-700',
+  candidate_proposed: 'bg-amber-100 text-amber-700',
 };
+const STATUS_LABEL: Record<string, string> = { candidate_proposed: 'needs outreach' };
 const FOLLOW_LABEL: Record<string, string> = { avoided: 'Avoided', half_answered: 'Half-answered', suggested: 'Suggested' };
 // Interviews tab only surfaces candidates at the interview stage or beyond.
 const INTERVIEW_STAGES = ['Interview', 'Offer', 'Hired'];
@@ -52,7 +54,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, questions, standardQuestions }: { round: any; defaultOpen: boolean; onChanged: () => void; reviews: any[]; valueName: Record<string, string>; questions: any[]; standardQuestions: any[] }) {
+function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, questions, standardQuestions, candidateEmail, candidatePhone }: { round: any; defaultOpen: boolean; onChanged: () => void; reviews: any[]; valueName: Record<string, string>; questions: any[]; standardQuestions: any[]; candidateEmail?: string; candidatePhone?: string | null }) {
   const [open, setOpen] = useState(defaultOpen);
   const [showBriefing, setShowBriefing] = useState(false);
   const [briefOpen, setBriefOpen] = useState<Record<string, boolean>>({});
@@ -89,7 +91,7 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
       >
         {open ? <ChevronDown size={15} className="text-gray-400 shrink-0" /> : <ChevronRight size={15} className="text-gray-400 shrink-0" />}
         <span className="text-sm font-semibold text-gray-800 truncate">{round.roundName}</span>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${STATUS_STYLE[round.status] ?? STATUS_STYLE.planned}`}>{round.status}</span>
+        <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${STATUS_STYLE[round.status] ?? STATUS_STYLE.planned}`}>{STATUS_LABEL[round.status] ?? round.status}</span>
         {!open && round.interviewerName && <span className="text-xs text-gray-500 truncate">{round.interviewerName}</span>}
         <span className="ml-auto text-xs text-gray-500 shrink-0">{round.score != null ? `score ${round.score}` : (round.prepSentAt ? 'prep emailed' : '')}</span>
       </button>
@@ -116,11 +118,29 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
               <div className="text-[11px] text-gray-500 mb-1">Scheduled time</div>
               <input type="datetime-local"
                 defaultValue={round.scheduledAt ? new Date(round.scheduledAt).toISOString().slice(0, 16) : ''}
-                onBlur={(e) => update.mutate({ id: round.id, scheduledAt: e.target.value ? new Date(e.target.value).toISOString() : null, status: e.target.value && round.status === 'planned' ? 'scheduled' : undefined })}
+                onBlur={(e) => update.mutate({ id: round.id, scheduledAt: e.target.value ? new Date(e.target.value).toISOString() : null, status: e.target.value && (round.status === 'planned' || round.status === 'candidate_proposed') ? 'scheduled' : undefined })}
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs" />
             </div>
             <button onClick={() => remove.mutate({ id: round.id })} className="p-2 text-gray-400 hover:text-red-600" title="Remove round"><Trash2 size={14} /></button>
           </div>
+
+          {/* Stuck: candidate proposed times that didn't line up — reach out and set the time above. */}
+          {round.status === 'candidate_proposed' && !round.scheduledAt && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs">
+              <div className="font-semibold text-amber-800">Reach out to schedule this round</div>
+              <p className="text-amber-700 mt-0.5">The candidate proposed times that didn't line up. Reach out from your own inbox to agree on a time, then set the Scheduled time above to book it and clear the flag. The app sends them nothing.</p>
+              <div className="mt-1.5 text-amber-800 flex flex-wrap gap-x-3 gap-y-1">
+                {candidateEmail && <span><span className="text-amber-600">Email:</span> {candidateEmail}</span>}
+                {candidatePhone && <span><span className="text-amber-600">Phone:</span> {candidatePhone}</span>}
+              </div>
+              {Array.isArray(round.candidateProposedSlots) && round.candidateProposedSlots.length > 0 && (
+                <div className="mt-1.5">
+                  <div className="font-medium text-amber-700">Times the candidate suggested:</div>
+                  <ul className="list-disc ml-4 text-amber-700">{round.candidateProposedSlots.map((sl: any, i: number) => <li key={i}>{typeof sl === 'string' ? sl : sl.label}</li>)}</ul>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Generate transcript — testing stand-in for the Zoom transcript webhook. */}
           <div>
@@ -548,7 +568,7 @@ export default function Interviews() {
             <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">Rounds</div>
             <div className="space-y-2">
               {list.map((r) => (
-                <RoundCard key={r.id} round={r} defaultOpen={r.id === firstIncompleteId} onChanged={refreshAll} reviews={reviewsQuery.data ?? []} valueName={valueName} questions={(selected as any).interviewQuestions ?? []} standardQuestions={stdQ.data?.questions ?? []} />
+                <RoundCard key={r.id} round={r} defaultOpen={r.id === firstIncompleteId} onChanged={refreshAll} reviews={reviewsQuery.data ?? []} valueName={valueName} questions={(selected as any).interviewQuestions ?? []} standardQuestions={stdQ.data?.questions ?? []} candidateEmail={(selected as any).email} candidatePhone={(selected as any).phone} />
               ))}
               {list.length === 0 && <div className="text-xs text-gray-400 pb-1">No rounds yet. They appear automatically from the role plan when a candidate reaches the interview stage, or add one below.</div>}
             </div>

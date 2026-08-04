@@ -1000,17 +1000,10 @@ export const schedulingRouter = router({
       if (!round) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, round.candidateId) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
-      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
-
-      await emailInterviewRoundReachOutCandidate({
-        email: candidate.email,
-        firstName: candidate.firstName,
-        jobTitle: jobTitle ?? undefined,
-        roundName: round.roundName,
-        interviewerName: (round as any).interviewerName ?? null,
-      }).catch((err) => console.error('[scheduling.interviewerReachOutInterviewRound] candidate email failed:', err));
-
-      return { ok: true as const, firstName: candidate.firstName, email: candidate.email };
+      // No app email — the interviewer/recruiter reaches out from their own inbox so
+      // the candidate's reply lands with them, and the candidate is left flagged for
+      // action (their proposed times aren't booked). Mirrors phoneScreenReachOutDirect.
+      return { ok: true as const, firstName: candidate.firstName, email: candidate.email, phone: (candidate as any).phone ?? null };
     }),
 
   // ── PUBLIC: candidate confirms a time for EVERY round in one submission ────

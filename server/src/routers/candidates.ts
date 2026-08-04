@@ -5,7 +5,8 @@ import { ensureWalkthroughRound } from '../services/workSampleWalkthrough.js';
 // ============================================================
 
 import { z } from 'zod';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, isNull, isNotNull } from 'drizzle-orm';
+import { candidateInterviews } from '../db/schema/interviews.js';
 import { TRPCError } from '@trpc/server';
 import { randomUUID } from 'node:crypto';
 import { eeoResponses } from '../db/schema/eeo.js';
@@ -571,7 +572,18 @@ export const candidatesRouter = router({
       let result = rows;
       if (input?.jdId) result = result.filter((c) => c.jdId === input.jdId);
       if (input?.stage) result = result.filter((c) => c.currentStage === input.stage);
-      return result;
+      // Interview "needs outreach" flag: any round where the candidate proposed
+      // times that aren't booked yet (mirror of the phone-screen needsOutreach so a
+      // stuck interview candidate surfaces under Needs action).
+      const openRounds = await ctx.db.select({
+        candidateId: candidateInterviews.candidateId,
+        slots: candidateInterviews.candidateProposedSlots,
+      }).from(candidateInterviews)
+        .where(and(isNull(candidateInterviews.scheduledAt), isNotNull(candidateInterviews.candidateProposedSlots)));
+      const interviewNeedIds = new Set(
+        openRounds.filter((r) => Array.isArray(r.slots) && (r.slots as any[]).length > 0).map((r) => r.candidateId),
+      );
+      return result.map((c) => ({ ...c, interviewNeedsOutreach: interviewNeedIds.has(c.id) }));
     }),
 
   getById: protectedProcedure

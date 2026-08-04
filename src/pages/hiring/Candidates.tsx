@@ -249,6 +249,7 @@ export default function Candidates() {
   const needsAction = (c: any): boolean => {
     switch (c.currentStage) {
       case 'Reference Check': return true;
+      case 'Interview': return !!c.interviewNeedsOutreach;
       case 'Work Sample': return !!(c.workSampleSubmittedAt || c.workSampleScore != null);
       case 'Phone Screen': {
         // Needs action until the CANDIDATE confirms a time (phoneScreenScheduledAt).
@@ -266,6 +267,9 @@ export default function Candidates() {
     }
   };
   const needsActionReason = (c: any): string => {
+    if (c.currentStage === 'Interview' && c.interviewNeedsOutreach) {
+      return 'No common interview availability — reach out to the candidate and set the round time';
+    }
     if (c.currentStage === 'Phone Screen' && !c.phoneScreenScheduledAt) {
       if (Array.isArray(c.phoneScreenCandidateSlots) && c.phoneScreenCandidateSlots.length > 0) {
         return 'No common availability — reach out to the candidate to set a time, then log it';

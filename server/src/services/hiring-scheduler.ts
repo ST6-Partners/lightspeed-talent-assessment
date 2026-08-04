@@ -700,6 +700,45 @@ async function runPhoneScreenOutreachReminderBell(): Promise<JobResult> {
   return { affected: notified, details: notified ? `Bell-reminded the hiring team on ${notified} candidate(s) needing outreach.` : 'No candidates needing outreach.' };
 }
 
+// ── Job: interview "reach out for availability" reminder (bell) ──
+// Interview twin of runPhoneScreenOutreachReminderBell. While a candidate at the
+// interview stage has a round where they proposed times that were never booked,
+// drop a daily bell on the hiring team to reach out directly and set the round
+// time. Repeats daily until the round is scheduled. Bell only, no email.
+async function runInterviewOutreachReminderBell(): Promise<JobResult> {
+  const team = await hiringTeamUsers();
+  if (!team.length) return { affected: 0, details: 'No hiring-team users to notify.' };
+  const openRounds = await db.select().from(candidateInterviews)
+    .where(and(isNull(candidateInterviews.scheduledAt), isNotNull(candidateInterviews.candidateProposedSlots)));
+  const stuck = (openRounds as any[]).filter((r) => Array.isArray(r.candidateProposedSlots) && r.candidateProposedSlots.length > 0);
+  const candidateIds = new Set(stuck.map((r) => r.candidateId as string));
+  const dedupeSince = new Date(Date.now() - 20 * 60 * 60 * 1000); // once a day, not a flood
+  let notified = 0;
+  for (const candId of candidateIds) {
+    const c = await db.query.candidates.findFirst({ where: eq(candidates.id, candId) });
+    if (!c || c.currentStage !== 'Interview') continue;
+    const recent = (await db.select().from(notifications).where(and(
+      eq(notifications.type, 'interview_outreach'),
+      eq(notifications.referenceId, c.id),
+      gte(notifications.createdAt, dedupeSince),
+    )).limit(1))[0];
+    if (recent) continue;
+    const jd = c.jdId ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;
+    const jobTitle = jd?.jobTitle ?? 'the role';
+    try {
+      await db.insert(notifications).values((team as any[]).map((u) => ({
+        userId: u.id,
+        type: 'interview_outreach',
+        message: `Reach out to ${c.firstName} ${c.lastName} to set an interview round time (${jobTitle}) — they proposed times that weren't booked. Set the round time once you agree.`,
+        referenceId: c.id,
+        referenceType: 'candidate',
+      })));
+      notified++;
+    } catch (err) { console.error('[interview-outreach-reminder] notify failed for', c.id, err); }
+  }
+  return { affected: notified, details: notified ? `Bell-reminded the hiring team on ${notified} interview candidate(s) needing outreach.` : 'No interview candidates needing outreach.' };
+}
+
 // ── Job: work-sample walkthrough decision reminder ─────────
 // ~30 min after a completed work-sample walkthrough round, if the candidate is
 // still in Work Sample, nudge the interviewer who ran it (and the hiring team)
@@ -1002,6 +1041,15 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '25 9 * * *',  // 9:25 AM daily
     handler:        runPhoneScreenOutreachReminderBell,
+  });
+  registerJob({
+    name:           'interview-outreach-reminder',
+    label:          'Interview Outreach Reminder',
+    description:    'Daily bell reminder to the hiring team to reach out and set an interview round time when the candidate proposed times that were never booked. Repeats until the round is scheduled.',
+    color:          '#f59e0b',
+    jobType:        'cron',
+    cronExpression: '30 9 * * *',  // 9:30 AM daily
+    handler:        runInterviewOutreachReminderBell,
   });
   registerJob({
     name:           'interview-day-before-reminder',
