@@ -966,12 +966,15 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
                   <span className="text-[11px] text-gray-500">{r.interviewerName ?? ''}</span>
                   {r.scheduledAt ? (
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">✓ {new Date(r.scheduledAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  ) : r.status === 'candidate_proposed' ? (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Needs outreach</span>
                   ) : (
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Awaiting time</span>
                   )}
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${r.feedbackHr ? 'bg-ls-primary/10 text-ls-primary' : 'bg-gray-100 text-gray-400'}`}>{r.feedbackHr ? 'Scorecard ✓' : 'No scorecard'}</span>
                 </summary>
                 <div className="px-3 pb-3 space-y-2">
+                  {!r.scheduledAt && r.status === 'candidate_proposed' && <InterviewRoundReachOut round={r} candidate={c} onChanged={onChanged} />}
                   <div><div className="font-semibold text-gray-700 uppercase text-[10px] tracking-wide mb-0.5">Briefing that was sent in</div><div className="text-gray-500">{i === 0 ? 'Resume + assessment context (first round).' : (priorFu.length ? `Compiled from ${prev.roundName}: ${priorFu.map((f: any) => f.text).join('; ')}` : `Compiled from ${prev.roundName}.`)}</div></div>
                   <div><div className="font-semibold text-gray-700 uppercase text-[10px] tracking-wide mb-0.5">Feedback received</div><div className="whitespace-pre-wrap">{r.feedbackHr ? r.feedbackHr : <span className="text-gray-400 italic">No written feedback yet.</span>}</div></div>
                   <div><div className="font-semibold text-gray-700 uppercase text-[10px] tracking-wide mb-0.5">Briefing crafted for next round</div>{fu.length ? <ul className="list-disc ml-4">{fu.map((f: any, k: number) => <li key={k}>{f.text}</li>)}</ul> : <div className="text-gray-400 italic">No follow-ups.</div>}</div>
@@ -2053,6 +2056,41 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
         </div>
       )}
     </Section>
+  );
+}
+
+// Reach-out + log control for an interview round where the candidate proposed
+// times that didn't line up (mirrors the phone-screen reach-out panel). Shown in
+// the candidate-detail rounds summary so a stuck round can be resolved here too.
+function InterviewRoundReachOut({ round, candidate, onChanged }: { round: any; candidate: any; onChanged?: () => void }) {
+  const [when, setWhen] = useState('');
+  const log = trpc.interviews.updateRound.useMutation({ onSuccess: () => onChanged?.() });
+  const proposed: any[] = Array.isArray(round.candidateProposedSlots) ? round.candidateProposedSlots : [];
+  return (
+    <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5">
+      <div className="text-xs font-semibold text-amber-800">Reach out to schedule this round</div>
+      <p className="text-[11px] text-amber-700 mt-0.5">The candidate proposed times that didn't line up. Reach out from your own inbox to agree on a time, then log it here. They stay flagged for action until you do. The app sends them nothing.</p>
+      <div className="text-[11px] text-amber-800 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+        {candidate.email && <span><span className="text-amber-600">Email:</span> {candidate.email}</span>}
+        {candidate.phone && <span><span className="text-amber-600">Phone:</span> {candidate.phone}</span>}
+      </div>
+      {proposed.length > 0 && (
+        <div className="text-[11px] text-amber-700 mt-1">
+          <span className="font-medium">Times the candidate suggested:</span>
+          <ul className="list-disc ml-4">{proposed.map((s: any, i: number) => <li key={i}>{typeof s === 'string' ? s : s.label}</li>)}</ul>
+        </div>
+      )}
+      <div className="flex items-center gap-2 mt-2">
+        <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
+          className="px-2 py-1 border border-amber-300 rounded text-[11px] focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+        <button onClick={() => when && log.mutate({ id: round.id, scheduledAt: new Date(when).toISOString(), status: 'scheduled' })}
+          disabled={!when || log.isLoading}
+          className="text-[11px] px-3 py-1 rounded bg-ls-primary text-white font-semibold hover:bg-ls-primary-600 disabled:opacity-50">
+          {log.isLoading ? 'Saving…' : 'Log the agreed time'}
+        </button>
+      </div>
+      {log.error && <p className="text-[11px] text-red-600 mt-1">{log.error.message}</p>}
+    </div>
   );
 }
 
