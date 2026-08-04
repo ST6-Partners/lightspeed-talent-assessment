@@ -1130,8 +1130,14 @@ export const schedulingRouter = router({
       // Enforce the progressive interview window (based on everyone who submitted
       // before this person; excludes their own prior row so a re-submit isn't self-blocked).
       const win = await computeAvailabilityWindow(ctx.db, dec.reqId, dec.email);
-      const ws = win.start.getTime();
-      const we = win.end.getTime();
+      // Compare at DAY granularity. The form shows and enforces the window as whole
+      // days ("Aug 25 – Sep 1") and its date picker only lets you choose a date, so a
+      // slot on a valid day must not be rejected for its time-of-day. Widen the bounds
+      // to the start of the first day and the end of the last day of the window.
+      const wsDay = new Date(win.start); wsDay.setHours(0, 0, 0, 0);
+      const weDay = new Date(win.end); weDay.setHours(23, 59, 59, 999);
+      const ws = wsDay.getTime();
+      const we = weDay.getTime();
       const outOfWindow = input.windows.some((w) => {
         const st = Date.parse(`${w.date}T${w.start || '00:00'}`);
         const en = Date.parse(`${w.date}T${w.end || w.start || '23:59'}`);
