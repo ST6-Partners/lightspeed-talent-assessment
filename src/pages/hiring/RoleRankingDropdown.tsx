@@ -29,8 +29,11 @@ export default function RoleRankingDropdown({ jdId }: { jdId: string }) {
   }, [run?.criteriaText]);
 
   const doReject = (candidateId: string, name: string) => {
-    if (window.confirm(`Reject ${name}? This is a manual decision, logged as yours.`)) {
-      rejectMutation.mutate({ id: candidateId, reason: 'Not advanced after ranking review' });
+    // Ask for the reason on every reject (no canned text), so a manual rejection
+    // from the ranking view is tracked the same as one from the pipeline.
+    const reason = window.prompt(`Why are you rejecting ${name}? This is a manual decision, logged as yours.`, '');
+    if (reason && reason.trim()) {
+      rejectMutation.mutate({ id: candidateId, reason: reason.trim() });
     }
   };
 

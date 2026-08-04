@@ -168,7 +168,12 @@ export default function Candidates() {
     onSuccess: () => { refetch(); setSelectedId(null); },
   });
   const doDelete = (id: string) => {
-    deleteMutation.mutate({ id });
+    // Hard delete removes the candidate entirely with no rejection record. Always
+    // confirm, and steer toward Reject (reason + tracked + lands in Closed) as the
+    // normal way to take a candidate out of the pipeline.
+    if (window.confirm('Permanently delete this candidate? This cannot be undone and leaves no rejection record. To reject with a reason instead, cancel and use Reject.')) {
+      deleteMutation.mutate({ id });
+    }
   };
 
   const toggleSelected = (id: string) => {
@@ -354,14 +359,15 @@ export default function Candidates() {
                 <ChevronRight size={16} />
               </button>
             )}
-            {c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && c.currentStage !== 'Not Selected' && (
-              <button onClick={() => setRejectingId(c.id)} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Reject">
+            {c.currentStage !== 'Rejected' && c.currentStage !== 'Hired' && c.currentStage !== 'Not Selected' ? (
+              <button onClick={() => setRejectingId(c.id)} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Reject — asks for a reason">
                 <Ban size={15} />
               </button>
+            ) : (
+              <button onClick={() => doDelete(c.id)} disabled={deleteMutation.isLoading} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Delete permanently (no rejection record)">
+                <Trash2 size={15} />
+              </button>
             )}
-            <button onClick={() => doDelete(c.id)} disabled={deleteMutation.isLoading} className="p-1 text-gray-400 hover:text-red-600 transition-colors" title="Delete (build tool)">
-              <Trash2 size={15} />
-            </button>
           </div>
         </td>
       </tr>
