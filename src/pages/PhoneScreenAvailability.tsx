@@ -179,6 +179,8 @@ export default function PhoneScreenAvailability() {
   const filled = rows.filter((r) => r.date && r.start && r.end);
   const canSubmit = filled.length > 0 && !submit.isLoading;
   const todayStr = new Date().toISOString().slice(0, 10);
+  const weekEndStr = (() => { const d = new Date(); d.setDate(d.getDate() + 7); return d.toISOString().slice(0, 10); })();
+  const fmtWin = (s: string) => new Date(s + 'T00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
   return (
     <Card>
@@ -189,10 +191,14 @@ export default function PhoneScreenAvailability() {
         They’re emailed these windows to pick one — and are not contacted until you submit.
       </p>
 
+      <div className="mb-4 px-3 py-2 rounded-lg bg-cyan-50 border border-cyan-200 text-xs text-gray-600">
+        Offer times within the next week — between <strong>{fmtWin(todayStr)}</strong> and <strong>{fmtWin(weekEndStr)}</strong>.
+      </div>
+
       <div className="space-y-2">
         {rows.map((r, i) => (
           <div key={i} className="flex items-center gap-2">
-            <input type="date" value={r.date} min={todayStr} onChange={(e) => setRow(i, { date: e.target.value })}
+            <input type="date" value={r.date} min={todayStr} max={weekEndStr} onChange={(e) => setRow(i, { date: e.target.value })}
               className="flex-1 px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
             <input type="time" value={r.start} onChange={(e) => setRow(i, { start: e.target.value })}
               className="px-2 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />

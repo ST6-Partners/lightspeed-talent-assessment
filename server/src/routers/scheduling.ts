@@ -408,6 +408,19 @@ export const schedulingRouter = router({
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.phoneScreenRecruiterToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
+      // Constrain recruiter-offered phone-screen times to a one-week window starting
+      // today (mirrors interview scheduling). ±1 day of grace absorbs timezone skew
+      // between the recruiter's browser and the server clock.
+      {
+        const ymd = (d: Date) => d.toISOString().slice(0, 10);
+        const lo = new Date(); lo.setUTCDate(lo.getUTCDate() - 1);
+        const hi = new Date(); hi.setUTCDate(hi.getUTCDate() + 8);
+        const loStr = ymd(lo);
+        const hiStr = ymd(hi);
+        if (input.windows.some((w) => w.date < loStr || w.date > hiStr)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Phone-screen times must fall within the next week. Please pick dates within 7 days of today.' });
+        }
+      }
       // Keep the raw date/start/end alongside the formatted label so confirmPhoneScreen
       // can parse the real call start/end once the candidate picks a slot — not just
       // display text.
