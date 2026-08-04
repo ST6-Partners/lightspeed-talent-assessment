@@ -858,17 +858,99 @@ export async function emailPhoneScreenCandidateWindow(data: { email: string; fir
   });
 }
 
-export async function emailPhoneScreenConfirmedRecruiter(data: { candidateName: string; jobTitle?: string; slot?: string | null }) {
+// ── Calendar invite (.ics) — inline, no dependencies ───────────────────────
+// Builds a METHOD:REQUEST VCALENDAR so the recruiter's mail client shows Accept
+// and adds the call to their calendar. Times are emitted as FLOATING local time
+// (no "Z"/TZID) from the Date's local components, preserving the exact clock time
+// entered without timezone drift (fine for a single-timezone recruiting team).
+function icsPad(n: number): string { return String(n).padStart(2, '0'); }
+function icsFloating(d: Date): string {
+  return d.getFullYear().toString() + icsPad(d.getMonth() + 1) + icsPad(d.getDate()) +
+    'T' + icsPad(d.getHours()) + icsPad(d.getMinutes()) + icsPad(d.getSeconds());
+}
+function icsUtc(d: Date): string {
+  return d.getUTCFullYear().toString() + icsPad(d.getUTCMonth() + 1) + icsPad(d.getUTCDate()) +
+    'T' + icsPad(d.getUTCHours()) + icsPad(d.getUTCMinutes()) + icsPad(d.getUTCSeconds()) + 'Z';
+}
+function icsEsc(s: string): string {
+  return String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+}
+function icsFold(line: string): string {
+  if (line.length <= 75) return line;
+  const out: string[] = [line.slice(0, 75)];
+  let i = 75;
+  while (i < line.length) { out.push(' ' + line.slice(i, i + 74)); i += 74; }
+  return out.join('\r\n');
+}
+function buildPhoneScreenIcsBase64(inv: {
+  uid: string; start: Date; end?: Date | null; summary: string; description?: string;
+  organizerEmail: string; organizerName?: string; attendeeEmail: string;
+}): string {
+  const end = inv.end ?? new Date(inv.start.getTime() + 30 * 60 * 1000);
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Lightspeed Talent Assessment//Phone Screen//EN',
+    'CALSCALE:GREGORIAN', 'METHOD:REQUEST', 'BEGIN:VEVENT',
+    `UID:${inv.uid}`, `DTSTAMP:${icsUtc(new Date())}`,
+    `DTSTART:${icsFloating(inv.start)}`, `DTEND:${icsFloating(end)}`,
+    `SUMMARY:${icsEsc(inv.summary)}`,
+    inv.description ? `DESCRIPTION:${icsEsc(inv.description)}` : '',
+    `ORGANIZER${inv.organizerName ? `;CN=${icsEsc(inv.organizerName)}` : ''}:mailto:${inv.organizerEmail}`,
+    `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${inv.attendeeEmail}`,
+    'SEQUENCE:0', 'STATUS:CONFIRMED', 'TRANSP:OPAQUE', 'END:VEVENT', 'END:VCALENDAR',
+  ].filter((l) => l !== '');
+  return Buffer.from(lines.map(icsFold).join('\r\n') + '\r\n', 'utf8').toString('base64');
+}
+
+export async function emailPhoneScreenConfirmedRecruiter(data: {
+  candidateName: string;
+  jobTitle?: string;
+  slot?: string | null;
+  /** Real call start/end — when present, a calendar invite (.ics) is attached. */
+  startAt?: Date | null;
+  endAt?: Date | null;
+  /** Used to build a stable invite UID so a reschedule updates rather than duplicates. */
+  candidateId?: string;
+  candidatePhone?: string | null;
+  /** True when the recruiter logged the time themselves (vs the candidate confirming). */
+  arrangedDirectly?: boolean;
+}) {
+  const heading = data.arrangedDirectly
+    ? 'Phone screen scheduled'
+    : 'The candidate confirmed a phone-screen time';
+  const lead = data.arrangedDirectly
+    ? `You arranged a phone screen with <strong>${esc(data.candidateName)}</strong>${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}:`
+    : `<strong>${esc(data.candidateName)}</strong> picked one of your offered times${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}:`;
+
+  let attachments: EmailAttachment[] | undefined;
+  if (data.startAt) {
+    const uidKey = data.candidateId ?? data.candidateName.replace(/\s+/g, '-').toLowerCase();
+    const callLine = data.candidatePhone ? `Call ${data.candidatePhone}.` : 'Call the number on file.';
+    const ics = buildPhoneScreenIcsBase64({
+      uid: `phone-screen-${uidKey}@lightspeed-talent-assessment`,
+      start: data.startAt,
+      end: data.endAt ?? null,
+      summary: `Phone screen: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+      description: `Phone screen with ${data.candidateName}${data.jobTitle ? ` for ${data.jobTitle}` : ''}. ${callLine}`,
+      organizerEmail: FROM_ADDRESS,
+      organizerName: FROM_NAME,
+      attendeeEmail: HR_EMAIL,
+    });
+    attachments = [{ content: ics, filename: 'phone-screen.ics', type: 'text/calendar' }];
+  }
+
   await sendEmail({
     to: HR_EMAIL,
     templateId: 'phone_screen_confirmed_recruiter',
     subject: `Phone screen confirmed: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
     html: wrap(`
-      ${h1('The candidate confirmed a phone-screen time')}
-      ${p(`<strong>${esc(data.candidateName)}</strong> picked one of your offered times${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}:`)}
+      ${h1(heading)}
+      ${p(lead)}
       ${data.slot ? `<div style="margin:8px 0 16px;padding:12px 14px;background:#eef7f0;border:1px solid #cfe8d6;border-radius:8px;font-size:15px;font-weight:600;color:#1f7a3d;">${esc(data.slot)}</div>` : ''}
-      ${p('Please send the calendar invite for that time and call the number on file.')}
+      ${p(data.startAt
+        ? 'A calendar invite is attached — accept it to add the call to your calendar, then call the number on file at that time.'
+        : 'Please send the calendar invite for that time and call the number on file.')}
     `),
+    attachments,
   });
 }
 

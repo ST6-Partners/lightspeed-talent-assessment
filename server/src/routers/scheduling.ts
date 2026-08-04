@@ -441,6 +441,7 @@ export const schedulingRouter = router({
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
       await emailPhoneScreenConfirmedRecruiter({
         candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle, slot: input.slot,
+        startAt, endAt, candidateId: candidate.id, candidatePhone: (candidate as any).phone ?? null,
       }).catch((err) => console.error('[scheduling.confirmPhoneScreen] recruiter email failed:', err));
       return { ok: true as const };
     }),
@@ -506,6 +507,12 @@ export const schedulingRouter = router({
       await emailPhoneScreenConfirmedCandidate({
         email: candidate.email, firstName: candidate.firstName, jobTitle, slot: input.slot,
       }).catch((err) => console.error('[scheduling.confirmCandidateSlot] candidate email failed:', err));
+      // The recruiter locked this in themselves — still send them the calendar invite.
+      await emailPhoneScreenConfirmedRecruiter({
+        candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle, slot: input.slot,
+        startAt, endAt, candidateId: candidate.id, candidatePhone: (candidate as any).phone ?? null,
+        arrangedDirectly: true,
+      }).catch((err) => console.error('[scheduling.confirmCandidateSlot] recruiter invite failed:', err));
       return { ok: true as const };
     }),
 
@@ -539,6 +546,12 @@ export const schedulingRouter = router({
         phoneScreenSelectedSlot: `${label} · arranged directly`,
         updatedAt: new Date(),
       }).where(eq(candidates.id, candidate.id));
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      await emailPhoneScreenConfirmedRecruiter({
+        candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle, slot: label,
+        startAt, endAt, candidateId: candidate.id, candidatePhone: (candidate as any).phone ?? null,
+        arrangedDirectly: true,
+      }).catch((err) => console.error('[scheduling.logPhoneScreenDirectTime] recruiter invite failed:', err));
       return { ok: true as const, label };
     }),
 
@@ -558,6 +571,12 @@ export const schedulingRouter = router({
         updatedAt: new Date(),
       }).where(eq(candidates.id, input.candidateId));
       await auditChange(ctx.db, ctx.user.id, input.candidateId, 'candidates', 'update');
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      await emailPhoneScreenConfirmedRecruiter({
+        candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle, slot: label,
+        startAt, endAt, candidateId: candidate.id, candidatePhone: (candidate as any).phone ?? null,
+        arrangedDirectly: true,
+      }).catch((err) => console.error('[scheduling.logPhoneScreenScheduled] recruiter invite failed:', err));
       return { ok: true as const, label };
     }),
 
