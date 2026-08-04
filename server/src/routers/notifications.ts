@@ -85,6 +85,37 @@ export const notificationsRouter = router({
       return { success: true };
     }),
 
+  // Delete a single notification the user has already read. The UI only
+  // surfaces the trash affordance on read rows; this enforces the same rule
+  // server-side (ownership + read-only) so an unread item can't be dropped
+  // out from under its unread count.
+  delete: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const notification = await ctx.db.query.notifications.findFirst({
+        where: eq(notifications.id, input.id),
+      });
+
+      if (!notification || notification.userId !== ctx.user.id) {
+        throw new TRPCError({ code: 'NOT_FOUND' });
+      }
+
+      if (!notification.readAt) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Mark the notification as read before deleting it' });
+      }
+
+      await ctx.db
+        .delete(notifications)
+        .where(and(
+          eq(notifications.id, input.id),
+          eq(notifications.userId, ctx.user.id),
+        ));
+
+      return { success: true };
+    }),
+
   create: protectedProcedure
     .use(requireAdmin)
     .input(z.object({

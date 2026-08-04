@@ -4,7 +4,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, Trash2 } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
 const TYPE_ICONS: Record<string, string> = {
@@ -99,6 +99,25 @@ export default function NotificationBell() {
     },
   });
 
+  // Delete a read notification — optimistically drop it from the list. Only
+  // read rows expose the trash control, so the unread count is unaffected.
+  const deleteMutation = trpc.notifications.delete.useMutation({
+    onMutate: async ({ id }) => {
+      await utils.notifications.list.cancel();
+      const prevList = utils.notifications.list.getData();
+      utils.notifications.list.setData(undefined, (old: any) =>
+        old?.filter((n: any) => n.id !== id)
+      );
+      return { prevList };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prevList) utils.notifications.list.setData(undefined, context.prevList);
+    },
+    onSettled: () => {
+      utils.notifications.list.invalidate();
+    },
+  });
+
   const unreadCount = unreadData ?? 0;
 
   // Close on outside click
@@ -155,7 +174,7 @@ export default function NotificationBell() {
                     onClick={() => {
                       if (!n.readAt) markReadMutation.mutate({ id: n.id });
                     }}
-                    className={`px-4 py-3 border-b border-gray-50 cursor-pointer transition-colors ${
+                    className={`group px-4 py-3 border-b border-gray-50 cursor-pointer transition-colors ${
                       n.readAt ? 'bg-white hover:bg-gray-50' : 'bg-blue-50 hover:bg-blue-100'
                     }`}
                   >
@@ -173,6 +192,21 @@ export default function NotificationBell() {
                           {n.type && ` · ${n.type.replace(/_/g, ' ')}`}
                         </div>
                       </div>
+                      {/* Trash affordance — only on read rows (unread items are cleared by reading first) */}
+                      {n.readAt && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteMutation.mutate({ id: n.id });
+                          }}
+                          disabled={deleteMutation.isLoading}
+                          className="flex-shrink-0 self-center p-1 -mr-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                          title="Delete notification"
+                          aria-label="Delete notification"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
