@@ -64,6 +64,9 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
   const update = trpc.interviews.updateRound.useMutation({ onSuccess: onChanged, onError: (err) => { alert(err.message); onChanged?.(); } });
   const remove = trpc.interviews.removeRound.useMutation({ onSuccess: onChanged });
   const saveFb = trpc.interviews.updateFeedback.useMutation({ onSuccess: () => { setFbEdit(false); onChanged(); } });
+  // Test-only stand-in for the Zoom transcript webhook (not wired up yet): synthesizes
+  // a transcript for THIS round and analyzes it into the round's score + feedback.
+  const genTranscript = trpc.interviews.recordFeedback.useMutation({ onSuccess: onChanged });
 
   const startEditFb = () => {
     setDraftRead(round.feedbackHr ?? '');
@@ -117,6 +120,21 @@ function RoundCard({ round, defaultOpen, onChanged, reviews, valueName, question
                 className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs" />
             </div>
             <button onClick={() => remove.mutate({ id: round.id })} className="p-2 text-gray-400 hover:text-red-600" title="Remove round"><Trash2 size={14} /></button>
+          </div>
+
+          {/* Generate transcript — testing stand-in for the Zoom transcript webhook. */}
+          <div>
+            <button
+              type="button"
+              onClick={() => genTranscript.mutate({ id: round.id })}
+              disabled={genTranscript.isLoading}
+              className="text-xs px-3 py-1.5 border border-ls-primary text-ls-primary rounded font-medium hover:bg-ls-primary/5 disabled:opacity-50"
+            >
+              {genTranscript.isLoading ? 'Generating…' : (round.score != null ? 'Regenerate transcript' : 'Generate transcript')}
+            </button>
+            <span className="ml-2 text-[11px] text-gray-400">Testing: stands in for the Zoom transcript — creates a sample transcript, score, and feedback for this round.</span>
+            {genTranscript.error && <div className="text-[11px] text-red-600 mt-1">{genTranscript.error.message}</div>}
+            {genTranscript.data && <div className="text-[11px] text-green-600 mt-1">Transcript generated — score {genTranscript.data.feedback.interviewScore}/100. Scroll down for the feedback and briefing.</div>}
           </div>
 
           {/* Actions */}
