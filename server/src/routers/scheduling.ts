@@ -8,7 +8,7 @@
 //   2. That page embeds Calendly, prefilled with the candidate's name/email and
 //      our booking token as utm_content so the webhook can match the booking.
 //   3. Calendly fires invitee.created to /api/webhooks/calendly, which records
-//      the time + join URL and advances the candidate to 'Interview Scheduled'.
+//      the time + join URL and advances the candidate to 'Interview'.
 //
 // Public (tokenized): getBookingContext. Protected: open, statusFor.
 // ============================================================

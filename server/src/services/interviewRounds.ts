@@ -156,7 +156,7 @@ export async function sendNextRoundPrep(candidateId: string, afterSortOrder: num
 // Anyone already further along (Work Sample, Reference Check, Offered,
 // Rejected, ...) is left alone -- this only fires once, for whoever is still
 // sitting in the interview phase when the last round completes.
-const INTERVIEW_PHASE_STAGES = ['Interview Scheduled', 'Interviewed'];
+const INTERVIEW_PHASE_STAGES = ['Interview'];
 
 /**
  * Called after ANY round's status flips to 'completed' (AI feedback or a

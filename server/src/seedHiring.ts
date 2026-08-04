@@ -111,8 +111,7 @@ const DISTRIBUTION: Array<{ stage: Stage | 'Rejected'; n: number; rejectedFrom?:
   { stage: 'Assessment', n: 6 },
   { stage: 'Work Sample', n: 5 },
   { stage: 'Candidate Review', n: 4 },
-  { stage: 'Interview Scheduled', n: 3 },
-  { stage: 'Interviewed', n: 3 },
+  { stage: 'Interview', n: 3 },
   { stage: 'Offered', n: 2 },
   { stage: 'Hired', n: 2 },
   // Rejected, varied by where they dropped:
@@ -120,7 +119,7 @@ const DISTRIBUTION: Array<{ stage: Stage | 'Rejected'; n: number; rejectedFrom?:
   { stage: 'Rejected', n: 6, rejectedFrom: 'Assessment' },
   { stage: 'Rejected', n: 4, rejectedFrom: 'Work Sample' },
   { stage: 'Rejected', n: 2, rejectedFrom: 'Candidate Review' },
-  { stage: 'Rejected', n: 2, rejectedFrom: 'Interviewed' },
+  { stage: 'Rejected', n: 2, rejectedFrom: 'Interview' },
 ];
 
 const REJECTION_REASON: Record<string, string> = {
@@ -128,7 +127,7 @@ const REJECTION_REASON: Record<string, string> = {
   Assessment: 'CCAT score below threshold',
   'Work Sample': 'Work sample did not meet the bar',
   'Candidate Review': 'Values match below threshold',
-  Interviewed: 'Not the right fit after interview',
+  'Interview': 'Not the right fit after interview',
 };
 
 function eppProfile(quality: 'low' | 'mid' | 'high') {
@@ -224,13 +223,13 @@ export async function seedHiring() {
         eppProf = eppProfile(drop ? 'low' : passed ? 'high' : 'mid');
         eppValuesMatchScore = drop ? rint(45, 68) : rint(72, 95);
       }
-      if (reached('Interviewed')) {
-        if (isRejected && bucket.rejectedFrom === 'Interviewed') interviewScore = rint(40, 62);
+      if (reached('Interview')) {
+        if (isRejected && bucket.rejectedFrom === 'Interview') interviewScore = rint(40, 62);
         else interviewScore = rint(72, 93);
       }
 
       const currentStage = (isRejected ? 'Rejected' : finalStage) as any;
-      const interviewing = reached('Interview Scheduled');
+      const interviewing = reached('Interview');
 
       const [cand] = await db.insert(candidates).values({
         jdId,

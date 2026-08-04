@@ -339,7 +339,7 @@ async function notifyOfferApprover(
 
 // Advance a candidate from the Review queue to the NEXT funnel stage (and clear
 // the review flag). Mirrors the forward-move side effects of advanceStage (work-
-// sample link on entering Work Sample, interview seeding on Interview Scheduled,
+// sample link on entering Work Sample, interview seeding on Interview,
 // stage email, auto-close-on-fill). If there is no real next stage, it just clears
 // the flag. Clearing the flag never blocks a later gate from re-flagging.
 const REVIEW_TERMINAL_STAGES = TERMINAL_STAGES;
@@ -405,7 +405,7 @@ async function advanceFromReview(db: any, userId: string | null, existing: any, 
     if (toStage === 'Phone Screen') {
       // Recruiter-first phone-screen scheduling instead of an immediate candidate email.
       await startPhoneScreenScheduling(db, existing.id).catch((err: any) => console.warn('[phoneScreen] start scheduling failed (non-blocking):', err));
-    } else if (toStage === 'Interview Scheduled') {
+    } else if (toStage === 'Interview') {
       // Interview-round scheduling: candidate picks a time from the assigned
       // interviewer's slots — not an immediate "you're scheduled" email (there's no
       // real time yet). seedRoundsFromPlan must finish first so there's a round to
@@ -420,7 +420,7 @@ async function advanceFromReview(db: any, userId: string | null, existing: any, 
       workSampleInstructions, workSampleUrl, assessmentLink,
       interviewerName: existing.interviewerName, interviewerEmail: existing.interviewerEmail,
     }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
-    if (toStage === 'Interviewed') {
+    if (toStage === 'Interview') {
       autofillSampleRounds(existing.id).catch((err: any) => console.error('[review-advance] autofill sample rounds failed:', err));
     }
     if (toStage === 'Hired' && existing.jdId) {
@@ -541,10 +541,10 @@ async function bulkMoveStageCore(db: any, userId: string, id: string, toStage: s
   if (toStage === 'Phone Screen') {
     await startPhoneScreenScheduling(db, id).catch((err) => console.warn('[phoneScreen] bulk start scheduling failed (non-blocking):', err));
   }
-  // Same reasoning for Interview Scheduled — a bulk move must still seed the round(s)
+  // Same reasoning for Interview — a bulk move must still seed the round(s)
   // and send the candidate a real scheduling link, not leave them in a stage with no
   // rounds and no way to book.
-  if (toStage === 'Interview Scheduled') {
+  if (toStage === 'Interview') {
     await seedRoundsFromPlan(id).catch((err) => console.error('[bulk-move] seed rounds failed:', err));
     await startInterviewRoundScheduling(db, id).catch((err) => console.warn('[interviewScheduling] bulk start scheduling failed (non-blocking):', err));
   }
@@ -886,11 +886,11 @@ export const candidatesRouter = router({
         await startPhoneScreenScheduling(ctx.db, input.id)
           .catch((err) => console.warn('[phoneScreen] start scheduling failed (non-blocking):', err));
       }
-      // Interview Scheduled: candidate picks a time from the assigned interviewer's
+      // Interview: candidate picks a time from the assigned interviewer's
       // slots — not an immediate "you're scheduled" email, since no real time exists
       // yet. seedRoundsFromPlan is awaited (not fire-and-forget) so the round this
       // scheduling link attaches to actually exists first.
-      if (input.toStage === 'Interview Scheduled') {
+      if (input.toStage === 'Interview') {
         skipStageEmail = true;
         await seedRoundsFromPlan(input.id).catch((err) => console.error('[advance] auto-seed interview rounds failed:', err));
         await startInterviewRoundScheduling(ctx.db, input.id)
@@ -908,18 +908,18 @@ export const candidatesRouter = router({
         interviewerEmail: (existing as any).interviewerEmail,
       }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
 
-      // When advancing to Interview Scheduled:
+      // When advancing to Interview:
       // 1. Generate tailored interview questions (AI)
       // 2. Email questions to the interviewer
-      // Testing helper: when a candidate reaches Interviewed, auto-populate sample
+      // Testing helper: when a candidate reaches Interview, auto-populate sample
       // interview transcripts + feedback so the app can be exercised without pasting
       // a transcript per candidate. No-op once real AI (ANTHROPIC_API_KEY) is set.
-      if (input.toStage === 'Interviewed') {
+      if (input.toStage === 'Interview') {
         autofillSampleRounds(input.id).catch((err) => console.error('[advance] autofill sample rounds failed:', err));
       }
 
       // The interviewer's tailored-questions briefing is intentionally NOT sent on
-      // entering Interview Scheduled — it's sent when the candidate confirms a time
+      // entering Interview — it's sent when the candidate confirms a time
       // (scheduling confirm procedures / Calendly booking), so it never goes out for
       // an interview with no agreed time yet.
 
@@ -2290,8 +2290,8 @@ export const candidatesRouter = router({
         `,
       });
 
-      // Candidate feedback email (if in Interviewed stage)
-      if (candidate.currentStage === 'Interviewed') {
+      // Candidate feedback email (if in Interview stage)
+      if (candidate.currentStage === 'Interview') {
         const candSubject = `Your interview feedback — ${jd?.jobTitle ?? 'Lightspeed Systems'}`;
         await sendEmail({
           to: candidate.email,

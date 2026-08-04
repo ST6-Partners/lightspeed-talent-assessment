@@ -28,8 +28,7 @@ export const candidateStageEnum = pgEnum('candidate_stage', [
   'Work Sample',
   // Human recruiter phone screen (logistics + fit) before the interview loop.
   'Phone Screen',
-  'Interview Scheduled',
-  'Interviewed',
+  'Interview',
   // Reference Check follows the (optional, per-role) Work Sample, before an offer.
   'Reference Check',
   'Offered',

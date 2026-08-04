@@ -687,6 +687,13 @@
       "when": 1960000068000,
       "tag": "0097_interview_round_reminder_notified",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1960000069000,
+      "tag": "0098_collapse_interview_stages",
+      "breakpoints": true
     }
   ]
 }

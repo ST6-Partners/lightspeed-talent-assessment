@@ -4,7 +4,7 @@
 // company values) and emails them to the interviewer.
 //
 // Runs ONCE the interview is scheduled — called from both paths
-// that reach the "Interview Scheduled" stage: the manual advance
+// that reach the "Interview" stage: the manual advance
 // (candidates.advanceStage) and the Calendly booking webhook
 // (services/calendly.ts). Moved here out of the Candidate Review
 // auto-review (services/postAssessmentReview.ts) per product.

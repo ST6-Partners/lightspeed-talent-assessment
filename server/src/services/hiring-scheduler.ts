@@ -261,7 +261,7 @@ async function runInterviewBookingReminder({ force = false }: { force?: boolean 
   for (const candidate of rows) {
     const openedAt = candidate.interviewBookingOpenedAt as Date | null;
     if (!openedAt) { continue; }
-    if (['Rejected', 'Hired', 'Not Selected', 'Phone Screen', 'Interview Scheduled', 'Interviewed', 'Offered'].includes(candidate.currentStage)) {
+    if (['Rejected', 'Hired', 'Not Selected', 'Phone Screen', 'Interview', 'Offered'].includes(candidate.currentStage)) {
       skipped.push(`${candidate.email} (stage ${candidate.currentStage})`); continue;
     }
 
@@ -756,7 +756,7 @@ async function runWalkthroughDecisionReminder(): Promise<JobResult> {
 // etc. — any candidate_interviews row that isn't the work-sample walkthrough,
 // which already has its own reminder above), nudge that round's interviewer
 // via bell notification to record their read and advance or reject, so
-// candidates don't sit forgotten in Interviewed. Same 30-minute cadence as
+// candidates don't sit forgotten in Interview. Same 30-minute cadence as
 // the phone-screen and walkthrough reminders above; deduped against the
 // notifications table itself, keyed by round id (a candidate can have
 // several rounds, so dedupe can't be per-candidate like the other two jobs).
@@ -772,7 +772,7 @@ async function runInterviewRoundDecisionReminder(): Promise<JobResult> {
     if (now < ref + DECISION_REMINDER_AFTER_MS) continue; // not yet 30 min since the round wrapped
 
     const c = await db.query.candidates.findFirst({ where: eq(candidates.id, r.candidateId) });
-    if (!c || c.currentStage !== 'Interviewed') continue; // already moved on -> nothing to nudge
+    if (!c || c.currentStage !== 'Interview') continue; // already moved on -> nothing to nudge
 
     // Dedupe per round, not per candidate — a candidate can have multiple rounds.
     const already = (await db.select().from(notifications).where(and(
@@ -1078,7 +1078,7 @@ export function registerHiringJobs(): void {
   registerJob({
     name:           'interview-round-decision-reminder',
     label:          'Interview Round Decision Reminder',
-    description:    'Every 15 min, ~30 min after a completed interview round, nudge that round\'s interviewer (once) to record their read and advance or reject if the candidate is still in Interviewed.',
+    description:    'Every 15 min, ~30 min after a completed interview round, nudge that round\'s interviewer (once) to record their read and advance or reject if the candidate is still in Interview.',
     color:          '#f59e0b',
     jobType:        'cron',
     cronExpression: '*/15 * * * *',   // every 15 minutes

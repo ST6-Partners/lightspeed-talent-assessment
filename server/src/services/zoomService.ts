@@ -199,22 +199,10 @@ export async function handleZoomRecordingReady(payload: ZoomWebhookPayload): Pro
     .set({ interviewTranscript: transcript, updatedAt: new Date() })
     .where(eq(candidates.id, candidate.id));
 
-  // Advance stage to Interviewed if still at Interview Scheduled
-  if (candidate.currentStage === 'Interview Scheduled') {
-    await db.update(candidates)
-      .set({ currentStage: 'Interviewed', updatedAt: new Date() })
-      .where(eq(candidates.id, candidate.id));
-
-    await db.insert(candidateStageHistory).values({
-      candidateId: candidate.id,
-      fromStage: 'Interview Scheduled',
-      toStage: 'Interviewed',
-      changedBy: null,
-      reason: 'Zoom recording received — auto-advanced',
-    });
-
-    console.log(`[Zoom] Advanced ${candidate.firstName} ${candidate.lastName} → Interviewed`);
-  }
+  // No stage change on transcript arrival. A candidate stays in the single
+  // 'Interview' stage through every round; progression to Work Sample /
+  // Reference Check happens only when the last round's scorecard is submitted
+  // (maybeAdvanceOnAllRoundsComplete). The transcript just feeds this round's feedback.
 
   // Trigger AI feedback (non-blocking — errors logged, don't fail the webhook)
   runAiFeedback(candidate, transcript).catch((err) => {

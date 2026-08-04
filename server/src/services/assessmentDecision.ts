@@ -110,7 +110,7 @@ export async function applyAssessmentDecision(
   // ── PASS: advance to Work Sample ─────────────────────────
   if (score >= ASSESSMENT_PASS_THRESHOLD) {
     // Deeper auto-review: EPP + company-values (+ prior resume screen) gate.
-    // Reject if it fails; on pass it moves to Interview Scheduled and emails
+    // Reject if it fails; on pass it moves to Interview and emails
     // the interviewer a summary report + tailored questions. If the candidate
     // has no EPP results, it returns 'skipped' and we fall back to the legacy
     // Work Sample advance below.

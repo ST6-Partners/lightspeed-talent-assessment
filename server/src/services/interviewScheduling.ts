@@ -1,7 +1,7 @@
 // ============================================================
 // INTERVIEW-ROUND SCHEDULING (candidate picks from the interviewer's slots)
 //
-// When a candidate reaches Interview Scheduled we do NOT claim the interview is
+// When a candidate reaches Interview we do NOT claim the interview is
 // already booked (it isn't yet). Instead we mint a booking token on the first
 // not-yet-scheduled round and email the CANDIDATE a "Schedule your interview"
 // link. That link (see scheduling.getInterviewRoundBookingContext /

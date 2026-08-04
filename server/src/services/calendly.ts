@@ -5,7 +5,7 @@
 // the interviewer's real calendar and can auto-create the Zoom meeting).
 // Calendly then POSTs a webhook to /api/webhooks/calendly:
 //   • invitee.created  → record the booked time + join URL, advance the
-//                        candidate to 'Interview Scheduled', email confirmation.
+//                        candidate to 'Interview', email confirmation.
 //   • invitee.canceled → clear the booking and flag HR.
 //
 // Matching: we pass our booking token as utm_content on the scheduling link,
@@ -172,16 +172,16 @@ export async function applyCalendlyEvent(event: string, payload: any): Promise<{
       calendlyEventUri: inv.eventUri ?? null,
       calendlyCancelUrl: inv.cancelUrl ?? null,
       ...(zoomMeetingId ? { zoomMeetingId } : {}),
-      ...(candidate.currentStage !== 'Interview Scheduled' ? { currentStage: 'Interview Scheduled' as const } : {}),
+      ...(candidate.currentStage !== 'Interview' ? { currentStage: 'Interview' as const } : {}),
       updatedAt: new Date(),
     }).where(eq(candidates.id, candidate.id));
     if (zoomMeetingId) console.log(`[Calendly] captured Zoom meeting ID ${zoomMeetingId} for ${candidate.email}`);
 
-    if (candidate.currentStage !== 'Interview Scheduled') {
+    if (candidate.currentStage !== 'Interview') {
       await db.insert(candidateStageHistory).values({
         candidateId: candidate.id,
         fromStage: candidate.currentStage,
-        toStage: 'Interview Scheduled',
+        toStage: 'Interview',
         changedBy: null,
         reason: `Candidate booked via Calendly${start ? ` for ${start.toISOString()}` : ''}`,
       });
@@ -205,7 +205,7 @@ export async function applyCalendlyEvent(event: string, payload: any): Promise<{
       joinUrl: inv.joinUrl,
     }).catch((err) => console.error('[Calendly] confirmation email failed:', err));
 
-    console.log(`[Calendly] ${candidate.email} booked -> Interview Scheduled`);
+    console.log(`[Calendly] ${candidate.email} booked -> Interview`);
     return { handled: true, detail: `booked ${candidate.email}` };
   }
 

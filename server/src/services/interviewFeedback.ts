@@ -84,19 +84,9 @@ export async function processInterviewFeedback(input: ProcessInterviewInput): Pr
     .set({ interviewTranscript: transcript, updatedAt: new Date() })
     .where(eq(candidates.id, candidate.id));
 
-  // Advance Interview Scheduled → Interviewed (only if needed).
-  if (candidate.currentStage === 'Interview Scheduled') {
-    await db.update(candidates)
-      .set({ currentStage: 'Interviewed', updatedAt: new Date() })
-      .where(eq(candidates.id, candidate.id));
-    await db.insert(candidateStageHistory).values({
-      candidateId: candidate.id,
-      fromStage: 'Interview Scheduled',
-      toStage: 'Interviewed',
-      changedBy: input.changedBy ?? null,
-      reason: 'Interview transcript processed — auto-advanced',
-    });
-  }
+  // No stage change on transcript processing. The candidate stays in 'Interview'
+  // through every round; the stage only advances when the last round's scorecard
+  // is submitted (maybeAdvanceOnAllRoundsComplete). This just stores the round feedback.
 
   // ── Run the AI analysis ───────────────────────────────────
   const feedback = await analyzeInterviewTranscript({

@@ -14,8 +14,7 @@ const STAGE_COLORS: Record<string, string> = {
   'Work Sample': 'bg-indigo-100 text-indigo-700',
   'Candidate Review': 'bg-cyan-100 text-cyan-700',
   'Phone Screen': 'bg-teal-100 text-teal-700',
-  'Interview Scheduled': 'bg-yellow-100 text-yellow-700',
-  Interviewed: 'bg-orange-100 text-orange-700',
+  'Interview': 'bg-yellow-100 text-yellow-700',
   'Reference Check': 'bg-rose-100 text-rose-700',
   Offered: 'bg-emerald-100 text-emerald-700',
   Hired: 'bg-green-100 text-green-700',
@@ -29,7 +28,7 @@ type Stage = typeof STAGES[number];
 // (and every candidate's currentStage) is unchanged — this only relabels a few
 // stages to match the agreed pipeline wording. Stages not listed render as-is.
 const STAGE_LABEL: Record<string, string> = {
-  'Interview Scheduled': 'Scheduled Interview',
+  'Interview': 'Scheduled Interview',
 };
 const stageLabel = (s: string): string => STAGE_LABEL[s] ?? s;
 
@@ -907,26 +906,8 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
       );
     case 'Phone Screen':
       return <PhoneScreenSchedulingSection candidate={c} onChanged={onChanged} defaultOpen />;
-    case 'Interview Scheduled': {
+    case 'Interview': {
       if (!rounds.length) return <div className="text-gray-400 italic">No interview rounds for this req yet.</div>;
-      return (
-        <div className="space-y-1.5">
-          {rounds.map((r: any) => (
-            <div key={r.id} className="flex items-center gap-3 border border-gray-200 rounded-md bg-white px-3 py-2">
-              <span className="font-semibold text-gray-900 flex-1 min-w-0">{r.roundName}</span>
-              <span className="text-gray-500 w-32 shrink-0 truncate">{r.interviewerName ?? 'Unassigned'}</span>
-              {r.scheduledAt ? (
-                <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">✓ {new Date(r.scheduledAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-              ) : (
-                <span className="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Awaiting availability</span>
-              )}
-            </div>
-          ))}
-        </div>
-      );
-    }
-    case 'Interviewed': {
-      if (!rounds.length) return <div className="text-gray-400 italic">Not reached yet.</div>;
       return (
         <div className="space-y-2">
           {rounds.map((r: any, i: number) => {
@@ -938,6 +919,11 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
                 <summary className="cursor-pointer px-3 py-2 flex items-center gap-2">
                   <span className="font-semibold text-gray-900 flex-1">{r.roundName}</span>
                   <span className="text-[11px] text-gray-500">{r.interviewerName ?? ''}</span>
+                  {r.scheduledAt ? (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">✓ {new Date(r.scheduledAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                  ) : (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">Awaiting time</span>
+                  )}
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${r.feedbackHr ? 'bg-ls-primary/10 text-ls-primary' : 'bg-gray-100 text-gray-400'}`}>{r.feedbackHr ? 'Scorecard ✓' : 'No scorecard'}</span>
                 </summary>
                 <div className="px-3 pb-3 space-y-2">
