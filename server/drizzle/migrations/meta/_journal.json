@@ -708,6 +708,13 @@
       "when": 1960000071000,
       "tag": "0101_rename_offered_stage",
       "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1960000072000,
+      "tag": "0102_ensure_candidate_references",
+      "breakpoints": true
     }
   ]
 }
