@@ -25,7 +25,7 @@ import { candidateInterviews } from '../db/schema/interviews.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { interviewPlan, hiringTeam } from '../db/schema/intake.js';
 import { INTERVIEW_WINDOW_HOURS, businessHoursBetween } from './interviews.js';
-import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate, emailPhoneScreenReachOutCandidate, emailInterviewBookedCandidate, emailInterviewsBookedCandidate, emailInterviewRoundCandidateProposed, emailInterviewRoundReachOutCandidate } from '../services/email.js';
+import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate, emailPhoneScreenReachOutCandidate, emailPhoneScreenReachOutRecruiter, emailInterviewBookedCandidate, emailInterviewsBookedCandidate, emailInterviewRoundCandidateProposed, emailInterviewRoundReachOutCandidate } from '../services/email.js';
 import { sendFirstRoundPrep, sendInterviewScheduledTeamEmail } from '../services/interviewRounds.js';
 import { prepInterviewQuestions } from '../services/interviewPrep.js';
 
@@ -383,6 +383,9 @@ export const schedulingRouter = router({
       const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
       return {
         candidateName: `${candidate.firstName} ${candidate.lastName}`,
+        candidateFirstName: candidate.firstName,
+        candidateEmail: candidate.email,
+        candidatePhone: (candidate as any).phone ?? null,
         jobTitle: jobTitle ?? null,
         availability: (candidate as any).phoneScreenAvailability ?? null,
         submitted: !!candidate.phoneScreenBookingOpenedAt,
@@ -572,6 +575,15 @@ export const schedulingRouter = router({
       await emailPhoneScreenReachOutCandidate({
         email: candidate.email, firstName: candidate.firstName, jobTitle,
       }).catch((err) => console.error('[scheduling.phoneScreenReachOutDirect] candidate email failed:', err));
+      // Companion email to the recruiter with a durable "log the agreed time" button.
+      // ?direct=1 makes the recruiter page open straight to the log form whenever they
+      // return (the reach-out state is otherwise only in the original browser session).
+      const recruiterLogUrl = `${appBaseUrl()}/phone-screen-availability/${input.token}?direct=1`;
+      await emailPhoneScreenReachOutRecruiter({
+        candidateName: `${candidate.firstName} ${candidate.lastName}`, jobTitle,
+        candidateEmail: candidate.email, candidatePhone: (candidate as any).phone ?? null,
+        logUrl: recruiterLogUrl,
+      }).catch((err) => console.error('[scheduling.phoneScreenReachOutDirect] recruiter email failed:', err));
       return { firstName: candidate.firstName, email: candidate.email, phone: (candidate as any).phone ?? null };
     }),
 

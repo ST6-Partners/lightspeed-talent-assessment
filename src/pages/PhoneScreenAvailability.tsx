@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, CalendarClock, PhoneCall } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
@@ -30,6 +30,8 @@ const Card = ({ children }: { children: React.ReactNode }) => (
 
 export default function PhoneScreenAvailability() {
   const { token = '' } = useParams();
+  const [searchParams] = useSearchParams();
+  const forceLog = searchParams.get('direct') === '1';
   const [rows, setRows] = useState<Win[]>([{ ...EMPTY_ROW }, { ...EMPTY_ROW }, { ...EMPTY_ROW }]);
   const [note, setNote] = useState('');
   const [done, setDone] = useState(false);
@@ -77,22 +79,27 @@ export default function PhoneScreenAvailability() {
     );
   }
 
-  if (reachedOut) {
+  if (reachedOut || forceLog) {
+    const contact = reachedOut ?? {
+      firstName: (data as any).candidateFirstName ?? (data.candidateName ? data.candidateName.split(' ')[0] : 'the candidate'),
+      email: ((data as any).candidateEmail ?? '') as string,
+      phone: ((data as any).candidatePhone ?? null) as string | null,
+    };
     return (
       <Card>
         <PhoneCall className="mb-3 text-ls-primary" size={26} />
-        <h1 className="text-xl font-bold text-gray-900">Reach out to {reachedOut.firstName} directly</h1>
+        <h1 className="text-xl font-bold text-gray-900">Reach out to {contact.firstName} directly</h1>
         <p className="text-gray-500 text-sm mt-1 mb-4">
-          The scheduling options didn't line up. Contact {reachedOut.firstName} directly to find a time — we've emailed them to expect your message.
+          The scheduling options didn't line up. Contact {contact.firstName} directly to find a time — we've emailed them to expect your message.
         </p>
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm">
-          <div className="mb-1"><span className="text-gray-500">Email:</span> <a href={`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(reachedOut.email)}`} target="_blank" rel="noreferrer" className="text-ls-primary hover:underline">{reachedOut.email}</a></div>
-          {reachedOut.phone && <div><span className="text-gray-500">Phone:</span> {reachedOut.phone}</div>}
+          <div className="mb-1"><span className="text-gray-500">Email:</span> <a href={`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(contact.email)}`} target="_blank" rel="noreferrer" className="text-ls-primary hover:underline">{contact.email}</a></div>
+          {contact.phone && <div><span className="text-gray-500">Phone:</span> {contact.phone}</div>}
         </div>
-        <a href={`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(reachedOut.email)}&subject=${encodeURIComponent('Scheduling your phone screen')}`}
+        <a href={`https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(contact.email)}&subject=${encodeURIComponent('Scheduling your phone screen')}`}
           target="_blank" rel="noreferrer"
           className="mt-4 inline-block w-full text-center py-2.5 rounded-lg bg-ls-primary text-white font-semibold text-sm hover:bg-ls-primary-600">
-          Email {reachedOut.firstName} in Outlook
+          Email {contact.firstName} in Outlook
         </a>
         <div className="mt-5 pt-4 border-t border-gray-100">
           <div className="text-xs font-semibold text-gray-600 mb-2">Agreed on a time? Log it so the phone screen is on the record.</div>

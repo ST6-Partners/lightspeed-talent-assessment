@@ -1097,6 +1097,35 @@ export async function emailPhoneScreenReachOutCandidate(data: { email: string; f
   });
 }
 
+// Sent to the recruiter the moment they choose to arrange a phone screen directly
+// (availability never lined up). Carries the candidate's contact info and a durable
+// "Log the agreed time" button — it lands in the recruiter's inbox alongside the
+// candidate's direct replies, so once they settle on a time they can log it whenever.
+export async function emailPhoneScreenReachOutRecruiter(data: {
+  candidateName: string;
+  jobTitle?: string;
+  candidateEmail?: string | null;
+  candidatePhone?: string | null;
+  logUrl: string;
+}) {
+  const contact =
+    (data.candidateEmail ? p(`<strong>Email:</strong> <a href="mailto:${esc(data.candidateEmail)}">${esc(data.candidateEmail)}</a>`) : '')
+    + (data.candidatePhone ? p(`<strong>Phone:</strong> ${esc(data.candidatePhone)}`) : '');
+  await sendEmail({
+    to: HR_EMAIL,
+    templateId: 'phone_screen_reach_out_recruiter',
+    subject: `Reach out directly: ${data.candidateName}${data.jobTitle ? ` — ${data.jobTitle}` : ''}`,
+    html: wrap(`
+      ${h1('Arrange this phone screen directly')}
+      ${p(`The scheduling options didn't line up with <strong>${esc(data.candidateName)}</strong>${data.jobTitle ? ` for <strong>${esc(data.jobTitle)}</strong>` : ''}, so you're arranging the phone screen with them directly. We've let them know to expect your message.`)}
+      ${contact}
+      ${p('Once the two of you agree on a time, log it so the phone screen is on the record and a calendar invite goes out. Keep this email — the button below keeps working through the whole back-and-forth, so you can log the time the moment it lands.')}
+      ${button('Log the agreed time', data.logUrl)}
+      ${p(`<span style="font-size:12px;color:#888;">If the button doesn't work, paste this link: ${data.logUrl}</span>`)}
+    `),
+  });
+}
+
 export async function emailPhoneScreenConfirmedCandidate(data: { email: string; firstName: string; jobTitle?: string; slot: string }) {
   await sendEmail({
     to: data.email,
