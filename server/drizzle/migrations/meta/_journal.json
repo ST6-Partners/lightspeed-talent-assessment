@@ -666,6 +666,13 @@
       "when": 1960000065000,
       "tag": "0094_interview_round_booking_token",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1960000066000,
+      "tag": "0095_rejection_email_delay",
+      "breakpoints": true
     }
   ]
 }

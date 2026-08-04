@@ -107,6 +107,23 @@ export default function Candidates() {
       setUploadingResume(false);
     }
   };
+  // Undo window after a manual reject: the rejection email is delayed 2 minutes
+  // server-side, so we surface a countdown + Undo so the recruiter can stop it.
+  const REJECT_UNDO_WINDOW_MS = 2 * 60 * 1000;
+  const [rejectNotice, setRejectNotice] = useState<{ ids: string[]; expiresAt: number } | null>(null);
+  const [, setNoticeTick] = useState(0);
+  useEffect(() => {
+    if (!rejectNotice) return;
+    const t = setInterval(() => {
+      if (Date.now() >= rejectNotice.expiresAt) setRejectNotice(null);
+      else setNoticeTick((n) => n + 1);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [rejectNotice]);
+  const rejectCountdown = (expiresAt: number) => {
+    const s = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+    return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  };
   const createMutation = trpc.candidates.create.useMutation({
     onSuccess: () => { refetch(); setShowForm(false); resetForm(); },
   });
@@ -114,14 +131,19 @@ export default function Candidates() {
     onSuccess: () => refetch(),
   });
   const rejectMutation = trpc.candidates.reject.useMutation({
-    onSuccess: () => { refetch(); setRejectingId(null); setRejectReason(''); },
+    onSuccess: (_data: any, vars: any) => { refetch(); setRejectingId(null); setRejectReason(''); setRejectNotice({ ids: [vars.id], expiresAt: Date.now() + REJECT_UNDO_WINDOW_MS }); },
   });
   const unrejectMutation = trpc.candidates.unreject.useMutation({
     onSuccess: () => refetch(),
   });
   const bulkRejectMutation = trpc.candidates.bulkReject.useMutation({
-    onSuccess: () => { refetch(); setSelectedIds(new Set()); setRejectingId(null); setRejectReason(''); },
+    onSuccess: (_data: any, vars: any) => { refetch(); setSelectedIds(new Set()); setRejectingId(null); setRejectReason(''); setRejectNotice({ ids: vars.ids, expiresAt: Date.now() + REJECT_UNDO_WINDOW_MS }); },
   });
+  const undoReject = () => {
+    if (!rejectNotice) return;
+    rejectNotice.ids.forEach((id) => unrejectMutation.mutate({ id }));
+    setRejectNotice(null);
+  };
   const bulkAdvanceMutation = trpc.candidates.bulkAdvanceStage.useMutation({
     onSuccess: () => { refetch(); setSelectedIds(new Set()); setBulkMoveTarget(''); },
   });
@@ -615,6 +637,35 @@ export default function Candidates() {
                   {(rejectMutation.isLoading || bulkRejectMutation.isLoading) ? 'Rejecting...' : 'Reject'}
                 </button>
                 <button onClick={() => { setRejectingId(null); setRejectReason(''); }} className="px-4 py-2 text-gray-600 text-sm">Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reject undo window — the rejection email is delayed 2 min server-side;
+            Undo here (unreject) cancels it before it sends. */}
+        {rejectNotice && (
+          <div className="fixed bottom-4 right-4 z-[60] w-80 bg-white border border-gray-200 shadow-xl rounded-lg p-4">
+            <div className="flex items-start gap-2">
+              <Ban size={16} className="text-red-600 mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <div className="text-sm font-semibold text-gray-800">
+                  {rejectNotice.ids.length > 1 ? `${rejectNotice.ids.length} candidates rejected` : 'Candidate rejected'}
+                </div>
+                <div className="text-xs text-gray-600 mt-0.5">
+                  Rejection {rejectNotice.ids.length > 1 ? 'emails send' : 'email sends'} in{' '}
+                  <span className="font-semibold tabular-nums text-gray-800">{rejectCountdown(rejectNotice.expiresAt)}</span>. Undo now to stop {rejectNotice.ids.length > 1 ? 'them' : 'it'} going out.
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={undoReject}
+                    disabled={unrejectMutation.isLoading}
+                    className="px-3 py-1.5 bg-ls-primary text-white rounded-md text-xs font-medium hover:bg-ls-primary-600 disabled:opacity-50"
+                  >
+                    Undo{rejectNotice.ids.length > 1 ? ' all' : ''}
+                  </button>
+                  <button onClick={() => setRejectNotice(null)} className="px-3 py-1.5 text-gray-500 text-xs hover:text-gray-700">Dismiss</button>
+                </div>
               </div>
             </div>
           </div>

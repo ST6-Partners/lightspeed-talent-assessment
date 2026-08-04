@@ -430,9 +430,15 @@ async function advanceFromReview(db: any, userId: string | null, existing: any, 
   return candidate;
 }
 
+// Undo window before the manual rejection email actually leaves. On reject we
+// stamp rejectionEmailSendAfter to now + this; the every-minute
+// `send-due-rejection-emails` job sends it once due (and only if still Rejected),
+// so an unreject inside the window cancels it. 2 minutes.
+const REJECTION_EMAIL_DELAY_MS = 2 * 60 * 1000;
+
 // Shared reject logic — used by both the single `reject` mutation and
 // `bulkReject` so bulk actions behave identically to a one-off reject
-// (same stage history, decision log, and rejection email).
+// (same stage history, decision log, and delayed rejection email).
 async function rejectCandidateCore(db: any, userId: string, id: string, reason: string): Promise<any> {
   const existing = await db.query.candidates.findFirst({ where: eq(candidates.id, id) });
   if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
@@ -449,6 +455,10 @@ async function rejectCandidateCore(db: any, userId: string, id: string, reason: 
     .set({
       currentStage: 'Rejected',
       rejectionReason: reason,
+      // Open the 2-minute undo window instead of emailing now. The
+      // send-due-rejection-emails job picks it up once due; unreject clears it.
+      rejectionEmailSendAfter: new Date(Date.now() + REJECTION_EMAIL_DELAY_MS),
+      rejectionEmailFromStage: existing.currentStage,
       ...(clearReviewFlag ? { screenRecommendation: 'rejected' } : {}),
       updatedAt: new Date(),
     })
@@ -473,13 +483,10 @@ async function rejectCandidateCore(db: any, userId: string, id: string, reason: 
     inputs: { fromStage: existing.currentStage, toStage: 'Rejected' },
   });
 
-  const jobTitle = await getJobTitle(db, existing.jdId);
-  dispatchStageEmail('Rejected', existing.currentStage, {
-    firstName: existing.firstName,
-    lastName: existing.lastName,
-    email: existing.email,
-    jobTitle,
-  }).catch((err: unknown) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
+  // NOTE: the rejection email is intentionally NOT sent here. rejectCandidateCore
+  // only opens the undo window (rejectionEmailSendAfter above); the every-minute
+  // send-due-rejection-emails job sends it once the window closes and the candidate
+  // is still Rejected. Unreject within the window clears the stamp and cancels it.
 
   await auditChange(db, userId, id, 'candidates', 'update');
   trackActivity(db, userId, 'reject_candidate', 'candidates', { candidateId: id }).catch((err: unknown) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
@@ -1047,7 +1054,9 @@ export const candidatesRouter = router({
       const restoredStage = (lastRejection?.toStage === 'Rejected' ? lastRejection.fromStage : null) ?? 'Applied';
 
       const [candidate] = await ctx.db.update(candidates)
-        .set({ currentStage: restoredStage, rejectionReason: null, updatedAt: new Date() })
+        // Clearing rejectionEmailSendAfter cancels a still-pending rejection email
+        // (the undo window from rejectCandidateCore) so it never goes out.
+        .set({ currentStage: restoredStage, rejectionReason: null, rejectionEmailSendAfter: null, rejectionEmailFromStage: null, updatedAt: new Date() })
         .where(eq(candidates.id, input.id))
         .returning();
 

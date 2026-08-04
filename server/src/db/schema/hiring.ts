@@ -165,6 +165,12 @@ export const candidates = pgTable('candidates', {
   source: varchar('source', { length: 100 }),
   currentStage: candidateStageEnum('current_stage').notNull().default('Applied'),
   rejectionReason: text('rejection_reason'),
+  // Delayed-send "undo window" for the manual rejection email. On a manual reject
+  // we stamp this to now + 2 min instead of emailing immediately; the every-minute
+  // `send-due-rejection-emails` job sends once it is due (and the candidate is still
+  // Rejected), then clears it. Unreject clears it too, cancelling the email.
+  rejectionEmailSendAfter: timestamp('rejection_email_send_after', { withTimezone: true }),
+  rejectionEmailFromStage: varchar('rejection_email_from_stage', { length: 50 }),
   // Hard cutoff: Criteria Corp flagged this CCAT/EPP submission as an invalid
   // result (validity/consistency check failure -- shows as a red "Warning:
   // Invalid Result" banner on the Criteria score report). Overrides the score

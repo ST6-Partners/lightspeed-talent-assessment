@@ -16,7 +16,7 @@ import { approvals } from '../db/schema/intake.js';
 import { registerJob, rescheduleCronJob, type JobResult } from './job-runner.js';
 import { rankNewApplicants } from './candidateRanking.js';
 import { inboundEmails } from '../db/schema/email.js';
-import { sendEmail, emailBookingReminderCandidate, emailBookingStalledHR } from './email.js';
+import { sendEmail, emailBookingReminderCandidate, emailBookingStalledHR, dispatchStageEmail } from './email.js';
 import { computeHiringAlerts, renderAlertDigest } from './hiring-alerts.js';
 import { approverEmail, emailApprovalReminder, emailInterviewReminderCandidate, emailInterviewReminderInterviewer, emailPostingOpenedExternal, HIRING_TEAM_INBOX } from './email.js';
 import { getPostingWindows, writeExternalOpenMarker } from './posting.js';
@@ -808,7 +808,53 @@ export async function applyReportSchedules(): Promise<void> {
   }
 }
 
+// ── Job: send due rejection emails (the 2-minute manual-reject undo window) ──
+// rejectCandidateCore stamps candidates.rejectionEmailSendAfter = now + 2 min instead
+// of emailing immediately. This job sends the candidate rejection email for anyone
+// whose window has closed and who is STILL Rejected, then clears the stamp so it never
+// resends. Unreject clears the stamp first, so a reversed rejection is simply not found
+// here — that is the cancel path. dispatchStageEmail is fire-and-forget (never throws),
+// so a delivery hiccup still clears the stamp rather than looping forever.
+async function runDueRejectionEmails(): Promise<JobResult> {
+  const now = new Date();
+  const due = await db.query.candidates.findMany({
+    where: and(
+      eq(candidates.currentStage, 'Rejected'),
+      isNotNull(candidates.rejectionEmailSendAfter),
+      lte(candidates.rejectionEmailSendAfter, now),
+    ),
+  });
+  let sent = 0;
+  for (const c of due) {
+    try {
+      const jd = c.jdId ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;
+      await dispatchStageEmail('Rejected', c.rejectionEmailFromStage ?? undefined, {
+        firstName: c.firstName,
+        lastName: c.lastName,
+        email: c.email,
+        jobTitle: jd?.jobTitle ?? undefined,
+      });
+      await db.update(candidates)
+        .set({ rejectionEmailSendAfter: null, rejectionEmailFromStage: null, updatedAt: new Date() })
+        .where(eq(candidates.id, c.id));
+      sent++;
+    } catch (err) {
+      console.warn(`[hiring-scheduler] rejection email failed for candidate ${c.id} (retries next run):`, err);
+    }
+  }
+  return { affected: sent, details: sent ? `Sent ${sent} due rejection email(s).` : 'No rejection emails due.' };
+}
+
 export function registerHiringJobs(): void {
+  registerJob({
+    name:           'send-due-rejection-emails',
+    label:          'Send Due Rejection Emails',
+    description:    'Sends the candidate rejection email once the 2-minute manual-reject undo window closes (candidate still Rejected). Unreject inside the window cancels it.',
+    color:          '#ef4444',
+    jobType:        'cron',
+    cronExpression: '* * * * *',   // every minute
+    handler:        runDueRejectionEmails,
+  });
   registerJob({
     name:           'rank-new-applicants',
     label:          'Rank New Applicants',
