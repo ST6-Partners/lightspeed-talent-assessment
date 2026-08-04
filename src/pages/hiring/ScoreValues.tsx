@@ -40,6 +40,10 @@ export default function ScoreValues() {
   const [capSuggest, setCapSuggest] = useState<Record<string, { score: number; rationale: string }>>({});
   const [capRecMode, setCapRecMode] = useState<'ai' | 'placeholder' | null>(null);
   const [capRecError, setCapRecError] = useState<string | null>(null);
+  // Transcript-based value suggestions (score + rationale), from THIS round's
+  // interview transcript — distinct from the EPP-derived `suggestions` fallback.
+  const [valueSuggest, setValueSuggest] = useState<Record<string, { score: number; rationale: string }>>({});
+  const [valueAiShown, setValueAiShown] = useState(false);
   const [aiShown, setAiShown] = useState(false); // AI scorecard shown (filled) vs cleared
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
@@ -105,24 +109,39 @@ export default function ScoreValues() {
   // Values from the EPP mapping, Capability from the AI service.
   const anyRecShown = aiShown || capAiShown;
   const applyRecommendations = async () => {
-    if (aiShown || capAiShown) {
+    if (aiShown || capAiShown || valueAiShown) {
       setScores({}); setAiShown(false); setNaValues({}); setNaCaps({});
       setCapScores({}); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setCapAiShown(false);
+      setValueSuggest({}); setValueAiShown(false);
       return;
     }
+    // Fill Values from the EPP mapping first, so the section fills instantly and
+    // still has a sensible suggestion if there's no transcript for this round.
     const m: Record<string, number> = {};
     (values ?? []).forEach((v: any) => { if (suggestions[v.id]) m[v.id] = suggestions[v.id].score; });
     setScores(m); setAiShown(true);
     if (candidateId) {
       setCapRecError(null);
       try {
-        const res: any = await capRecMutation.mutateAsync({ candidateId });
+        // One call scores Capability AND Values from the SAME source — the
+        // transcript of the selected round (interviewId).
+        const res: any = await capRecMutation.mutateAsync({ candidateId, interviewId: interviewId || undefined });
+        // Capability
         const sc: Record<string, number> = {};
         const sg: Record<string, { score: number; rationale: string }> = {};
         (res?.items ?? []).forEach((it: any) => { sc[it.capabilityItemId] = it.score; sg[it.capabilityItemId] = { score: it.score, rationale: it.rationale }; });
         if (Object.keys(sc).length) { setCapScores((prev) => ({ ...prev, ...sc })); setCapSuggest(sg); setCapRecMode(res?.mode ?? null); setCapAiShown(true); }
+        // Values from the transcript — upgrade over the EPP fill. Only when the
+        // model actually ran (placeholder keeps the EPP suggestion visible).
+        if (res?.valuesMode === 'ai' && Array.isArray(res?.valueItems) && res.valueItems.length) {
+          const vs: Record<string, number> = {};
+          const vg: Record<string, { score: number; rationale: string }> = {};
+          res.valueItems.forEach((it: any) => { vs[it.valueId] = it.score; vg[it.valueId] = { score: it.score, rationale: it.rationale }; });
+          setScores((prev) => ({ ...prev, ...vs }));
+          setValueSuggest(vg); setValueAiShown(true);
+        }
       } catch (err: any) {
-        setCapRecError(err?.message ? `Couldn't generate the capability suggestion: ${err.message}` : "Couldn't generate the capability suggestion. Try again.");
+        setCapRecError(err?.message ? `Couldn't generate the AI suggestion: ${err.message}` : "Couldn't generate the AI suggestion. Try again.");
       }
     }
   };
@@ -132,15 +151,15 @@ export default function ScoreValues() {
     const cid = params.get('id');
     const rid = params.get('round');
     if (cid) {
-      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setAiShown(false); setNaValues({}); setNaCaps({});
+      setCandidateId(cid); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setAiShown(false); setNaValues({}); setNaCaps({}); setValueSuggest({}); setValueAiShown(false);
       setInterviewId(rid ?? ''); setBaseline(snap('', today(), rid ?? '', {}));
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectCandidate = (id: string) => {
-    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setInterviewId(''); setAiShown(false); setNaValues({}); setNaCaps({}); setBaseline(snap('', today(), '', {}));
+    setCandidateId(id); setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setInterviewId(''); setAiShown(false); setNaValues({}); setNaCaps({}); setValueSuggest({}); setValueAiShown(false); setBaseline(snap('', today(), '', {}));
   };
-  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setAiShown(false); setNaValues({}); setNaCaps({}); setBaseline(snap('', today(), interviewId, {})); };
+  const startNew = () => { setCurrentReviewId(null); setReviewerId(''); setReviewedAt(today()); setScores({}); setCapScores({}); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setAiShown(false); setNaValues({}); setNaCaps({}); setValueSuggest({}); setValueAiShown(false); setBaseline(snap('', today(), interviewId, {})); };
   const loadReview = (r: any) => {
     setCurrentReviewId(r.id);
     setReviewerId(r.reviewerId ?? '');
@@ -151,7 +170,7 @@ export default function ScoreValues() {
     setScores(m);
     const cm: Record<string, number> = {};
     (r.capabilityScores ?? []).forEach((s: any) => { cm[s.capabilityItemId] = s.score; });
-    setCapScores(cm); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setNaValues({}); setNaCaps({});
+    setCapScores(cm); setCapAiShown(false); setCapSuggest({}); setCapRecMode(null); setCapRecError(null); setNaValues({}); setNaCaps({}); setValueSuggest({}); setValueAiShown(false);
     setBaseline(snap(r.reviewerId ?? '', new Date(r.reviewedAt).toISOString().slice(0, 10), r.interviewId ?? '', m, cm));
   };
 
@@ -353,9 +372,12 @@ export default function ScoreValues() {
                 <span className="text-xs text-ls-ink-3">avg <b className="text-ls-ink">{pillarAvg(pillar) ?? '—'}</b></span>
               </div>
               {(byPillar[pillar] ?? []).map((v: any) => {
+                // Transcript-based suggestion (this round) wins; EPP is the fallback.
+                const aiSug = valueAiShown ? valueSuggest[v.id] : undefined;
                 const sug = aiShown ? suggestions[v.id] : undefined;
                 const cur = scores[v.id];
-                const adjusted = sug && cur != null && cur !== sug.score;
+                const sugScore = aiSug?.score ?? sug?.score;
+                const adjusted = sugScore != null && cur != null && cur !== sugScore;
                 const dims: string[] = Array.isArray(v.eppDimensions) ? v.eppDimensions : [];
                 const isOpen = !!expanded[v.id];
                 return (
@@ -368,7 +390,7 @@ export default function ScoreValues() {
                       <div className="flex gap-1.5 flex-none">
                         {[1, 2, 3, 4, 5].map((n) => {
                           const on = cur === n;
-                          const isSug = sug && sug.score === n && !on;
+                          const isSug = sugScore != null && sugScore === n && !on;
                           return (
                             <button key={n} onClick={() => setScore(v.id, n)} aria-pressed={on} aria-label={`${v.name} score ${n}`}
                               className={`w-8 h-8 rounded-lg border text-[13px] font-semibold flex items-center justify-center transition-colors ${
@@ -387,7 +409,16 @@ export default function ScoreValues() {
                         </button>
                       </div>
                     </div>
-                    {sug && (
+                    {aiSug && (
+                      <div className="mt-1.5 text-[11px] text-ls-ink-3 flex items-start gap-1">
+                        <Sparkles size={11} className="text-ls-primary mt-0.5 flex-none" />
+                        <span>
+                          <b className="text-ls-primary">Suggests {aiSug.score}</b> — {aiSug.rationale}
+                          {adjusted && <span className="text-ls-watch font-medium ml-1">· adjusted</span>}
+                        </span>
+                      </div>
+                    )}
+                    {!aiSug && sug && (
                       <button onClick={() => toggleExpand(v.id)}
                         className="mt-1.5 text-[11px] inline-flex items-center gap-1 text-ls-primary hover:underline">
                         {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -396,7 +427,7 @@ export default function ScoreValues() {
                         {adjusted && <span className="text-ls-watch font-medium ml-1">· adjusted</span>}
                       </button>
                     )}
-                    {sug && isOpen && (
+                    {!aiSug && sug && isOpen && (
                       <div className="mt-2 ml-4 rounded-lg bg-ls-bg-2 border border-ls-line p-3">
                         <div className="text-[11px] text-ls-ink-3 mb-1.5">EPP traits mapped to this value</div>
                         <div className="space-y-1">

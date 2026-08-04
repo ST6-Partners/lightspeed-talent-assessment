@@ -1360,6 +1360,88 @@ ${input.interviewFeedback || '(no interview feedback on file yet)'}`;
   }
 }
 
+// ── Company-values scorecard recommendation ────────────────
+// Suggests a 1-5 score per COMPANY VALUE from ONE interview round's transcript
+// (falling back to that round's processed read). Mirrors
+// recommendCapabilityScores so the scorecard's single "AI Recommendation"
+// action can fill Values and Capability together, both grounded in the same
+// round. Sandbox-safe: returns a labelled placeholder when no ANTHROPIC_API_KEY.
+
+export interface ValueRecInput {
+  firstName: string;
+  lastName: string;
+  jobTitle?: string;
+  values: Array<{ id: string; name: string; pillar: string; description?: string | null }>;
+  interviewFeedback: string;
+}
+export interface ValueRecItem { valueId: string; score: number; rationale: string; }
+export interface ValueRecResult { mode: 'ai' | 'placeholder'; items: ValueRecItem[]; }
+
+function placeholderValueRec(input: ValueRecInput): ValueRecResult {
+  return {
+    mode: 'placeholder',
+    items: input.values.map((v) => ({
+      valueId: v.id,
+      score: 3,
+      rationale: `Sandbox draft (no scoring model connected). Connect a model to score "${v.name}" from this round's interview transcript.`,
+    })),
+  };
+}
+
+export async function recommendValueScores(input: ValueRecInput): Promise<ValueRecResult> {
+  if (!input.values.length) return { mode: 'placeholder', items: [] };
+
+  if (SANDBOX) {
+    console.log('[AI SANDBOX] recommendValueScores | placeholder draft (no ANTHROPIC_API_KEY)');
+    return placeholderValueRec(input);
+  }
+
+  const system = `You are helping a hiring team at Lightspeed Systems (K-12 edtech) suggest a 1-5 score for each COMPANY VALUE on a candidate scorecard, based ONLY on the interview transcript/feedback provided (a single interview round).
+Scale: 1 = major concern, 2 = below the bar, 3 = meets the bar, 4 = strong, 5 = outstanding.
+Each value belongs to a pillar (Mission-Driven / Customer-Obsessed / Results-Focused). Score how well THIS interview evidenced the value.
+Cite the transcript for each score. Do NOT invent evidence and do NOT speculate about protected characteristics.
+If the transcript says little about a value, suggest 3 and note that the evidence is thin.
+This is an AI draft to inform a human reviewer — never a final decision.
+Return ONLY JSON: { "items": [ { "id": "<the exact id given>", "score": 1-5, "rationale": "one line citing the transcript" } ] }`;
+
+  const valueList = input.values
+    .map((v) => `- id=${v.id} | ${v.name} [${v.pillar}]${v.description ? ` — ${v.description}` : ''}`)
+    .join('\n');
+
+  const user = `Candidate: ${input.firstName} ${input.lastName}
+Role: ${input.jobTitle ?? 'Unknown'}
+
+--- COMPANY VALUES (score each) ---
+${valueList}
+
+--- INTERVIEW TRANSCRIPT / FEEDBACK (this round) ---
+${input.interviewFeedback || '(no interview transcript on file for this round yet)'}`;
+
+  try {
+    const raw = await callClaude(system, user);
+    const fenced = raw.replace(/```json|```/g, '');
+    const parsed = JSON.parse(fenced.slice(fenced.indexOf('{'), fenced.lastIndexOf('}') + 1));
+    const clamp = (n: any) => Math.max(1, Math.min(5, Math.round(Number(n) || 3)));
+    const byId: Record<string, { score: number; rationale: string }> = {};
+    if (Array.isArray(parsed.items)) {
+      parsed.items.forEach((r: any) => {
+        if (r && typeof r.id === 'string') byId[r.id] = { score: clamp(r.score), rationale: String(r.rationale ?? '') };
+      });
+    }
+    return {
+      mode: 'ai',
+      items: input.values.map((v) => ({
+        valueId: v.id,
+        score: byId[v.id]?.score ?? 3,
+        rationale: byId[v.id]?.rationale ?? 'No specific evidence in the transcript — suggested a neutral 3.',
+      })),
+    };
+  } catch (err) {
+    console.error('[AI] recommendValueScores failed — returning placeholder:', err);
+    return placeholderValueRec(input);
+  }
+}
+
 // ============================================================
 // CANDIDATE RANKING (advisory) — order the pool against a role.
 // Never a decision, never an exclusion. Personality/EPP is deliberately

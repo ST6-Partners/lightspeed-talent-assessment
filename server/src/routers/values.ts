@@ -10,7 +10,7 @@ import { companyValues, candidateValueScores, valueReviews } from '../db/schema/
 import { capabilityItems, candidateCapabilityScores } from '../db/schema/capability.js';
 import { candidates, jobDescriptions } from '../db/schema/hiring.js';
 import { candidateInterviews } from '../db/schema/interviews.js';
-import { recommendCapabilityScores } from '../services/ai.js';
+import { recommendCapabilityScores, recommendValueScores } from '../services/ai.js';
 import { sendNextRoundPrep, maybeAdvanceOnAllRoundsComplete, sendInterviewCompletedTeamEmail } from '../services/interviewRounds.js';
 import { candidateEppScores } from '../db/schema/epp.js';
 import { employees } from '../db/schema/employees.js';
@@ -181,30 +181,71 @@ export const valuesRouter = router({
     }),
 
   // ── AI recommendation for the Capability section ──
-  // Suggests a 1-5 per capability item from the candidate's interview feedback.
-  // Sandbox-safe: returns a labelled placeholder when no ANTHROPIC_API_KEY is set.
+  // One "AI Recommendation" action for a scorecard: suggests a 1-5 for BOTH the
+  // Capability categories AND the company Values, grounded in the SAME source —
+  // the transcript of the specific interview round the scorecard is tied to
+  // (falling back to that round's processed read). When no round is passed it
+  // falls back to the aggregate of every round's read (legacy behavior).
+  // Sandbox-safe: returns labelled placeholders when no ANTHROPIC_API_KEY is set.
   capabilityRecommendation: protectedProcedure
-    .input(z.object({ candidateId: z.string().uuid() }))
+    .input(z.object({
+      candidateId: z.string().uuid(),
+      interviewId: z.string().uuid().optional(), // the round this scorecard is tied to
+    }))
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
       const jd = candidate.jdId
         ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
         : null;
+
       const items = (await ctx.db.query.capabilityItems.findMany({ orderBy: [asc(capabilityItems.sortOrder)] }))
         .filter((i: any) => i.active);
+      const valuesList = (await ctx.db.query.companyValues.findMany({
+        orderBy: [asc(companyValues.pillar), asc(companyValues.sortOrder)],
+      })).filter((v: any) => v.active);
+
       const rounds = await ctx.db.select().from(candidateInterviews)
         .where(eq(candidateInterviews.candidateId, input.candidateId))
         .orderBy(asc(candidateInterviews.sortOrder));
-      const parts: string[] = [];
-      rounds.forEach((r: any) => { if (r.feedbackHr) parts.push(`[${r.roundName}]\n${r.feedbackHr}`); });
-      if (!parts.length && (candidate as any).interviewFeedbackHr) parts.push((candidate as any).interviewFeedbackHr);
-      return recommendCapabilityScores({
+
+      // Source text for the AI. Round-scoped: score from THIS round's transcript
+      // (preferred) or its processed read — not an aggregate of prior rounds.
+      let interviewFeedback = '';
+      if (input.interviewId) {
+        const r: any = rounds.find((x: any) => x.id === input.interviewId);
+        const transcript = typeof r?.transcript === 'string' ? r.transcript.trim() : '';
+        interviewFeedback = transcript || (r?.feedbackHr ?? '');
+      } else {
+        const parts: string[] = [];
+        rounds.forEach((r: any) => { if (r.feedbackHr) parts.push(`[${r.roundName}]\n${r.feedbackHr}`); });
+        if (!parts.length && (candidate as any).interviewFeedbackHr) parts.push((candidate as any).interviewFeedbackHr);
+        interviewFeedback = parts.join('\n\n');
+      }
+
+      const common = {
         firstName: candidate.firstName,
         lastName: candidate.lastName,
         jobTitle: jd?.jobTitle,
-        items: items.map((i: any) => ({ id: i.id, name: i.name, teachability: i.teachability, description: i.description })),
-        interviewFeedback: parts.join('\n\n'),
-      });
+        interviewFeedback,
+      };
+
+      const [capRec, valRec] = await Promise.all([
+        recommendCapabilityScores({
+          ...common,
+          items: items.map((i: any) => ({ id: i.id, name: i.name, teachability: i.teachability, description: i.description })),
+        }),
+        recommendValueScores({
+          ...common,
+          values: valuesList.map((v: any) => ({ id: v.id, name: v.name, pillar: v.pillar, description: v.description })),
+        }),
+      ]);
+
+      return {
+        mode: capRec.mode,          // capability mode (kept for backward compat)
+        items: capRec.items,        // capability suggestions
+        valuesMode: valRec.mode,    // values mode
+        valueItems: valRec.items,   // value suggestions (score + rationale)
+      };
     }),
 });
