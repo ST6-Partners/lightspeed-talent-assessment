@@ -74,6 +74,15 @@ function buildSendGridBody(payload: EmailPayload) {
       disposition: a.disposition ?? 'attachment',
     }));
   }
+  // These are personal, transactional emails — not marketing. Turn off SendGrid's
+  // click/link rewriting and the open-tracking pixel so the real links stay intact
+  // and the message reads as a 1:1 email. This keeps candidate mail out of Gmail's
+  // Promotions tab / Outlook's "Other" and improves inbox (vs spam) placement.
+  body.tracking_settings = {
+    click_tracking: { enable: false, enable_text: false },
+    open_tracking: { enable: false },
+    subscription_tracking: { enable: false },
+  };
   return body;
 }
 
