@@ -233,7 +233,10 @@ export default function Candidates() {
     updateMutation.mutate({ id, [field]: value });
   };
 
-  const FUNNEL_STAGES: readonly string[] = PIPELINE_STAGES;
+  // "Applied" is hidden from the funnel: candidates pass through it into Assessment
+  // instantly (placeholder mode), so the column is always empty. Still a real stage
+  // in the data model — just not shown here.
+  const FUNNEL_STAGES: readonly string[] = PIPELINE_STAGES.filter((s) => s !== 'Applied');
   // Roles start collapsed by default; the toggle reads the same `?? true` default so the first click expands.
   const toggleRole = (jdId: string) => setCollapsedRoles((m) => ({ ...m, [jdId]: !(m[jdId] ?? true) }));
 

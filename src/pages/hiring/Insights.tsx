@@ -28,7 +28,9 @@ function readableInk(i: number, n: number) {
 }
 const SOURCE_COLORS = ['#2E89B8', '#4EABD2', '#14b8a6', '#6FBCE0', '#8A969E', '#c4b5fd', '#f59e0b'];
 // Pipeline stages shown in the funnel (closed/rejected stages excluded).
-const FUNNEL_STAGES = ['Applied', 'Assessment', 'Candidate Review', 'Phone Screen', 'Interview', 'Work Sample', 'Reference Check', 'Offer', 'Hired'];
+// "Applied" is omitted: candidates pass through it into Assessment instantly, so it's
+// always empty. It remains a real stage in the data model, just not shown in the funnel.
+const FUNNEL_STAGES = ['Assessment', 'Candidate Review', 'Phone Screen', 'Interview', 'Work Sample', 'Reference Check', 'Offer', 'Hired'];
 
 // ── Small building blocks ──────────────────────────────────
 function Card({ title, children, className = '' }: { title?: string; children: any; className?: string }) {
@@ -66,7 +68,7 @@ function ConversionFunnel({ funnel }: { funnel: { stage: string; count: number }
   funnel.forEach((f) => { byStage[f.stage] = f.count; });
   const steps = FUNNEL_STAGES
     .map((s) => ({ stage: s, count: byStage[s] ?? 0 }))
-    .filter((s, i) => i === 0 || s.count > 0); // always keep Applied; drop empty trailing stages
+    .filter((s, i) => i === 0 || s.count > 0); // always keep the first stage (Assessment); drop empty trailing stages
   const n = steps.length;
   if (steps.every((s) => s.count === 0)) {
     return <div className="text-sm text-gray-400 py-6 text-center">No pipeline data yet.</div>;
