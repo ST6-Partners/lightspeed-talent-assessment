@@ -27,6 +27,7 @@ import { interviewPlan, hiringTeam } from '../db/schema/intake.js';
 import { INTERVIEW_WINDOW_HOURS } from './interviews.js';
 import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate, emailPhoneScreenReachOutCandidate, emailInterviewBookedCandidate, emailInterviewsBookedCandidate, emailInterviewRoundCandidateProposed, emailInterviewRoundReachOutCandidate } from '../services/email.js';
 import { sendFirstRoundPrep, sendInterviewScheduledTeamEmail } from '../services/interviewRounds.js';
+import { prepInterviewQuestions } from '../services/interviewPrep.js';
 
 // Capability tokens for the interviewer "can't interview for this role" link that
 // ships in the intake-approval availability email. reqId is a random UUID, so the
@@ -697,6 +698,7 @@ export const schedulingRouter = router({
 
       // Same interviewer-prep + hiring-team notification the Calendly self-book path
       // sends once a real time exists.
+      void prepInterviewQuestions(ctx.db, candidate.id).catch((err) => console.error('[scheduling.confirmInterviewRoundSlot] interviewer question briefing failed:', err));
       void sendFirstRoundPrep(candidate.id).catch((err) => console.error('[scheduling.confirmInterviewRoundSlot] round-1 prep send failed:', err));
       void sendInterviewScheduledTeamEmail(candidate.id).catch((err) => console.error('[scheduling.confirmInterviewRoundSlot] team email failed:', err));
 
@@ -859,6 +861,7 @@ export const schedulingRouter = router({
         interviewDate, interviewerName: (round as any).interviewerName ?? undefined,
       }).catch((err) => console.error('[scheduling.confirmInterviewRoundProposedSlot] candidate confirmation email failed:', err));
 
+      void prepInterviewQuestions(ctx.db, candidate.id).catch((err) => console.error('[scheduling.confirmInterviewRoundProposedSlot] interviewer question briefing failed:', err));
       void sendInterviewScheduledTeamEmail(candidate.id).catch((err) => console.error('[scheduling.confirmInterviewRoundProposedSlot] team email failed:', err));
 
       return { ok: true as const };
@@ -960,6 +963,7 @@ export const schedulingRouter = router({
         rounds: planned.map(({ round, start }) => ({ roundName: round.roundName, interviewerName: round.interviewerName ?? null, when: fmt(start) })),
       }).catch((err) => console.error('[scheduling.confirmInterviewBooking] candidate confirmation email failed:', err));
 
+      void prepInterviewQuestions(ctx.db, candidate.id).catch((err) => console.error('[scheduling.confirmInterviewBooking] interviewer question briefing failed:', err));
       void sendFirstRoundPrep(candidate.id).catch((err) => console.error('[scheduling.confirmInterviewBooking] round-1 prep send failed:', err));
       void sendInterviewScheduledTeamEmail(candidate.id).catch((err) => console.error('[scheduling.confirmInterviewBooking] team email failed:', err));
 

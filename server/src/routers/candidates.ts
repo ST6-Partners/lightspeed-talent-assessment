@@ -42,7 +42,6 @@ import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, S
 import { createOfferAgreement } from '../services/adobeSign.js';
 import { getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
-import { prepInterviewQuestions } from '../services/interviewPrep.js';
 import { seedCandidateResume, seedAssessmentResults, simulateUpstreamScores } from '../services/postAssessmentReview.js';
 import { startPhoneScreenScheduling } from '../services/phoneScreen.js';
 import { startInterviewRoundScheduling } from '../services/interviewScheduling.js';
@@ -410,10 +409,12 @@ async function advanceFromReview(db: any, userId: string | null, existing: any, 
       // Interview-round scheduling: candidate picks a time from the assigned
       // interviewer's slots — not an immediate "you're scheduled" email (there's no
       // real time yet). seedRoundsFromPlan must finish first so there's a round to
-      // attach a booking token to.
+      // attach a booking token to. The interviewer's tailored-questions briefing is
+      // NOT sent here — it fires when the candidate confirms a time (see the confirm
+      // procedures in scheduling.ts / the Calendly booking path), so the interviewer
+      // isn't briefed for an interview that has no agreed time yet.
       await seedRoundsFromPlan(existing.id).catch((err: any) => console.error('[review-advance] seed rounds failed:', err));
       await startInterviewRoundScheduling(db, existing.id).catch((err: any) => console.warn('[interviewScheduling] start scheduling failed (non-blocking):', err));
-      prepInterviewQuestions(db, existing.id).catch((err: any) => console.error('[review-advance] question prep failed:', err));
     } else if (!skipStageEmail) dispatchStageEmail(toStage, existing.currentStage, {
       firstName: existing.firstName, lastName: existing.lastName, email: existing.email, jobTitle,
       workSampleInstructions, workSampleUrl, assessmentLink,
@@ -917,10 +918,10 @@ export const candidatesRouter = router({
         autofillSampleRounds(input.id).catch((err) => console.error('[advance] autofill sample rounds failed:', err));
       }
 
-      if (input.toStage === 'Interview Scheduled') {
-        // Rounds are already seeded (awaited above, before the scheduling email).
-        prepInterviewQuestions(ctx.db, input.id).catch((err) => console.error('[advance] interview question prep failed:', err));
-      }
+      // The interviewer's tailored-questions briefing is intentionally NOT sent on
+      // entering Interview Scheduled — it's sent when the candidate confirms a time
+      // (scheduling confirm procedures / Calendly booking), so it never goes out for
+      // an interview with no agreed time yet.
 
       } // end forward-only side effects
 
