@@ -18,7 +18,7 @@ import { rankNewApplicants } from './candidateRanking.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { sendEmail, emailBookingReminderCandidate, emailBookingStalledHR, dispatchStageEmail } from './email.js';
 import { computeHiringAlerts, renderAlertDigest } from './hiring-alerts.js';
-import { approverEmail, emailApprovalReminder, emailInterviewReminderCandidate, emailInterviewReminderInterviewer, emailPostingOpenedExternal, HIRING_TEAM_INBOX } from './email.js';
+import { approverEmail, emailApprovalReminder, emailInterviewReminderCandidate, emailPostingOpenedExternal, HIRING_TEAM_INBOX } from './email.js';
 import { getPostingWindows, writeExternalOpenMarker } from './posting.js';
 import { emailMetricsReport } from './email.js';
 import { buildPeriodMetrics } from './reportMetrics.js';
@@ -415,14 +415,60 @@ async function runInterviewDayBeforeReminder({ force = false }: { force?: boolea
       await logEmail(c.id, c.email, 'interview_reminder_candidate', 'Reminder: your interview tomorrow', 'failed', err?.message);
     }
 
-    if (c.interviewerEmail) {
-      try {
-        await emailInterviewReminderInterviewer({ interviewerEmail: c.interviewerEmail, interviewerName: c.interviewerName, candidateName: `${c.firstName} ${c.lastName}`, jobTitle, whenText });
-        intSent++;
-      } catch (err) { console.error('[interview-reminder] interviewer send failed:', err); }
-    }
+    // Interviewer day-before reminder is now a per-round BELL notification
+    // (runInterviewRoundReminderBell), not an email — so this candidate-level
+    // email leg only covers the candidate.
   }
-  return { affected: candSent + intSent, details: `Reminded ${candSent} candidate(s) + ${intSent} interviewer(s).${skipped.length ? ` Skipped ${skipped.length}.` : ''}` };
+  return { affected: candSent, details: `Reminded ${candSent} candidate(s).${skipped.length ? ` Skipped ${skipped.length}.` : ''}` };
+}
+
+// ── Job: day-before interview reminder for the INTERVIEWER (bell notification) ──
+// Per round: ~a day before each scheduled round, drop a bell notification on the
+// round's interviewer (resolved to their user account) so the prep they were emailed
+// at confirmation is fresh in mind. Once per round via reminder_notified_at.
+async function runInterviewRoundReminderBell({ force = false }: { force?: boolean } = {}): Promise<JobResult> {
+  const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() + 1); // start of tomorrow
+  const end = new Date(start); end.setDate(end.getDate() + 1);                                // start of day after
+
+  const rounds = await db.select().from(candidateInterviews)
+    .where(and(
+      eq(candidateInterviews.status, 'scheduled'),
+      isNotNull(candidateInterviews.scheduledAt),
+      gte(candidateInterviews.scheduledAt, start),
+      lt(candidateInterviews.scheduledAt, end),
+      ...(force ? [] : [isNull(candidateInterviews.reminderNotifiedAt)]),
+    ));
+
+  let notified = 0;
+  const skipped: string[] = [];
+  for (const r of rounds as any[]) {
+    const c = await db.query.candidates.findFirst({ where: eq(candidates.id, r.candidateId) });
+    if (!c || ['Rejected', 'Hired', 'Not Selected'].includes(c.currentStage)) { skipped.push(`round ${r.id} (candidate gone/closed)`); continue; }
+    const email = r.interviewerEmail as string | null;
+    const user = email ? await db.query.users.findFirst({ where: eq(users.email, email) }) : null;
+    const whenText = new Date(r.scheduledAt).toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    if (user) {
+      try {
+        await db.insert(notifications).values({
+          userId: user.id,
+          type: 'interview_reminder',
+          message: `Reminder: your ${r.roundName} with ${c.firstName} ${c.lastName} is tomorrow at ${whenText}.`,
+          referenceId: c.id,
+          referenceType: 'candidate',
+        });
+        notified++;
+      } catch (err) { console.error('[interview-round-reminder-bell] notify failed for round', r.id, err); }
+    } else {
+      skipped.push(`round ${r.id} (${email ?? 'no interviewer email'} — not an app user)`);
+    }
+    // Stamp regardless so we don't reprocess this round every morning (a
+    // non-user interviewer would otherwise be retried forever).
+    try {
+      await db.update(candidateInterviews).set({ reminderNotifiedAt: new Date(), updatedAt: new Date() })
+        .where(eq(candidateInterviews.id, r.id));
+    } catch (err) { console.warn('[interview-round-reminder-bell] guard stamp failed for round', r.id, err); }
+  }
+  return { affected: notified, details: `Bell-reminded ${notified} interviewer(s).${skipped.length ? ` Skipped ${skipped.length}.` : ''}` };
 }
 
 // ── Job: posting window flip (internal-first -> external) ──
@@ -913,11 +959,20 @@ export function registerHiringJobs(): void {
   registerJob({
     name:           'interview-day-before-reminder',
     label:          'Interview Day-Before Reminder',
-    description:    'Remind the candidate and the interviewer the day before a scheduled interview.',
+    description:    'Email the candidate the day before a scheduled interview.',
     color:          '#14b8a6',
     jobType:        'cron',
     cronExpression: '0 8 * * *',   // 8:00 AM daily (morning before)
     handler:        runInterviewDayBeforeReminder,
+  });
+  registerJob({
+    name:           'interview-round-reminder-bell',
+    label:          'Interview Round Reminder (Bell)',
+    description:    'Drop a bell notification on each round\'s interviewer the day before that round, so their prep is fresh.',
+    color:          '#0ea5e9',
+    jobType:        'cron',
+    cronExpression: '0 8 * * *',   // 8:00 AM daily (morning before), per round
+    handler:        runInterviewRoundReminderBell,
   });
   registerJob({
     name:           'posting-window-flip',

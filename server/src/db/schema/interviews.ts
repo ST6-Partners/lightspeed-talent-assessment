@@ -46,6 +46,9 @@ export const candidateInterviews = pgTable('candidate_interviews', {
   feedbackInterviewer: text('feedback_interviewer'),
   followUps: jsonb('follow_ups').default([]).notNull(),
   prepSentAt: timestamp('prep_sent_at', { withTimezone: true }),
+  // Set when the day-before bell reminder for this round has been created, so the
+  // scheduler notifies the interviewer exactly once per round.
+  reminderNotifiedAt: timestamp('reminder_notified_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
