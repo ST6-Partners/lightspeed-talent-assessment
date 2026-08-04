@@ -28,6 +28,10 @@ export const candidateInterviews = pgTable('candidate_interviews', {
   interviewerName: varchar('interviewer_name', { length: 200 }),
   interviewerEmail: varchar('interviewer_email', { length: 300 }),
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+  // Tokenized link for the candidate to pick a time from the assigned interviewer's
+  // submitted availability (interviewerAvailability, collected at intake). Minted the
+  // first time this round's scheduling is opened (see startInterviewRoundScheduling).
+  bookingToken: varchar('booking_token', { length: 64 }),
   transcript: text('transcript'),
   score: integer('score'),
   feedbackHr: text('feedback_hr'),

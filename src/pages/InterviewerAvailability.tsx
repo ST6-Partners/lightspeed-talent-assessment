@@ -21,7 +21,7 @@ const Card = ({ children }: { children: React.ReactNode }) => (
 
 export default function InterviewerAvailability() {
   const { token = '' } = useParams();
-  const [rows, setRows] = useState<Win[]>([{ ...EMPTY_ROW }]);
+  const [rows, setRows] = useState<Win[]>([{ ...EMPTY_ROW }, { ...EMPTY_ROW }, { ...EMPTY_ROW }]);
   const [note, setNote] = useState('');
 
   const ctx = trpc.scheduling.getInterviewerAvailabilityContext.useQuery({ token }, { enabled: !!token, retry: false });
@@ -30,7 +30,13 @@ export default function InterviewerAvailability() {
   // Prefill from a prior submission, if any.
   useEffect(() => {
     const w = ctx.data?.windows as Win[] | null | undefined;
-    if (w && w.length) setRows(w.map((x) => ({ date: x.date ?? '', start: x.start ?? '', end: x.end ?? '' })));
+    if (w && w.length) {
+      // Prefill from a prior submission, padding back up to 3 rows (the minimum)
+      // if that earlier submission predates the 3-slot requirement.
+      const padded = w.map((x) => ({ date: x.date ?? '', start: x.start ?? '', end: x.end ?? '' }));
+      while (padded.length < 3) padded.push({ ...EMPTY_ROW });
+      setRows(padded);
+    }
     if (ctx.data?.note) setNote(ctx.data.note);
   }, [ctx.data]);
 
@@ -60,7 +66,7 @@ export default function InterviewerAvailability() {
   const removeRow = (i: number) => setRows((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
 
   const filled = rows.filter((r) => r.date && r.start && r.end);
-  const canSubmit = filled.length > 0 && !submit.isLoading;
+  const canSubmit = filled.length >= 3 && !submit.isLoading;
 
   const winStart = (ctx.data as any)?.windowStart ? (ctx.data as any).windowStart.slice(0, 10) : undefined;
   const winEnd = (ctx.data as any)?.windowEnd ? (ctx.data as any).windowEnd.slice(0, 10) : undefined;
@@ -69,7 +75,7 @@ export default function InterviewerAvailability() {
   return (
     <Card>
       <h1 className="text-lg font-bold text-ls-ink mb-1">Set your interview availability</h1>
-      <p className="text-sm text-ls-ink-2 mb-4">You’re on the interview team for <strong>{ctx.data!.role}</strong>. Add the dates and times you’re free and submit — no login needed.</p>
+      <p className="text-sm text-ls-ink-2 mb-4">You’re on the interview team for <strong>{ctx.data!.role}</strong>. Add <strong>at least 3 open times</strong> so scheduling has real options, and submit — no login needed.</p>
       {(ctx.data as any)!.windowStart && (
         <div className="mb-4 px-3 py-2 rounded-lg bg-cyan-50 border border-cyan-200 text-xs text-ls-ink-2">
           To keep this role’s interviews close together, please offer times between <strong>{fmtWin((ctx.data as any).windowStart)}</strong> and <strong>{fmtWin((ctx.data as any).windowEnd)}</strong>.
@@ -98,6 +104,7 @@ export default function InterviewerAvailability() {
         placeholder="e.g. prefer mornings, avoid the 14th"
         className="w-full px-3 py-2 border border-ls-line rounded-lg text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
 
+      {filled.length > 0 && filled.length < 3 && <p className="text-xs text-amber-600 mb-2">Please add at least 3 open times so scheduling has real options ({filled.length} added).</p>}
       {submit.error && <p className="text-sm text-red-600 mb-2">{submit.error.message}</p>}
       <button
         onClick={() => submit.mutate({ token, windows: filled, note: note.trim() || undefined })}

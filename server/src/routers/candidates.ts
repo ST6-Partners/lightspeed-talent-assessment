@@ -45,6 +45,7 @@ import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 import { prepInterviewQuestions } from '../services/interviewPrep.js';
 import { seedCandidateResume, seedAssessmentResults, simulateUpstreamScores } from '../services/postAssessmentReview.js';
 import { startPhoneScreenScheduling } from '../services/phoneScreen.js';
+import { startInterviewRoundScheduling } from '../services/interviewScheduling.js';
 import { rankOneCandidateIntoRole } from '../services/candidateRanking.js';
 import { maybeAutoCloseFilledReq } from '../services/requisitionClose.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
@@ -405,6 +406,14 @@ async function advanceFromReview(db: any, userId: string | null, existing: any, 
     if (toStage === 'Phone Screen') {
       // Recruiter-first phone-screen scheduling instead of an immediate candidate email.
       await startPhoneScreenScheduling(db, existing.id).catch((err: any) => console.warn('[phoneScreen] start scheduling failed (non-blocking):', err));
+    } else if (toStage === 'Interview Scheduled') {
+      // Interview-round scheduling: candidate picks a time from the assigned
+      // interviewer's slots — not an immediate "you're scheduled" email (there's no
+      // real time yet). seedRoundsFromPlan must finish first so there's a round to
+      // attach a booking token to.
+      await seedRoundsFromPlan(existing.id).catch((err: any) => console.error('[review-advance] seed rounds failed:', err));
+      await startInterviewRoundScheduling(db, existing.id).catch((err: any) => console.warn('[interviewScheduling] start scheduling failed (non-blocking):', err));
+      prepInterviewQuestions(db, existing.id).catch((err: any) => console.error('[review-advance] question prep failed:', err));
     } else if (!skipStageEmail) dispatchStageEmail(toStage, existing.currentStage, {
       firstName: existing.firstName, lastName: existing.lastName, email: existing.email, jobTitle,
       workSampleInstructions, workSampleUrl, assessmentLink,
@@ -412,10 +421,6 @@ async function advanceFromReview(db: any, userId: string | null, existing: any, 
     }).catch((err) => console.warn('[email] dispatchStageEmail failed (non-blocking):', err));
     if (toStage === 'Interviewed') {
       autofillSampleRounds(existing.id).catch((err: any) => console.error('[review-advance] autofill sample rounds failed:', err));
-    }
-    if (toStage === 'Interview Scheduled') {
-      seedRoundsFromPlan(existing.id).catch((err: any) => console.error('[review-advance] seed rounds failed:', err));
-      prepInterviewQuestions(db, existing.id).catch((err: any) => console.error('[review-advance] question prep failed:', err));
     }
     if (toStage === 'Hired' && existing.jdId) {
       try { await maybeAutoCloseFilledReq(db, existing.jdId, userId); }
@@ -527,6 +532,13 @@ async function bulkMoveStageCore(db: any, userId: string, id: string, toStage: s
   // must still email the recruiter their availability link (same as advanceStage).
   if (toStage === 'Phone Screen') {
     await startPhoneScreenScheduling(db, id).catch((err) => console.warn('[phoneScreen] bulk start scheduling failed (non-blocking):', err));
+  }
+  // Same reasoning for Interview Scheduled — a bulk move must still seed the round(s)
+  // and send the candidate a real scheduling link, not leave them in a stage with no
+  // rounds and no way to book.
+  if (toStage === 'Interview Scheduled') {
+    await seedRoundsFromPlan(id).catch((err) => console.error('[bulk-move] seed rounds failed:', err));
+    await startInterviewRoundScheduling(db, id).catch((err) => console.warn('[interviewScheduling] bulk start scheduling failed (non-blocking):', err));
   }
   return candidate;
 }
@@ -866,6 +878,16 @@ export const candidatesRouter = router({
         await startPhoneScreenScheduling(ctx.db, input.id)
           .catch((err) => console.warn('[phoneScreen] start scheduling failed (non-blocking):', err));
       }
+      // Interview Scheduled: candidate picks a time from the assigned interviewer's
+      // slots — not an immediate "you're scheduled" email, since no real time exists
+      // yet. seedRoundsFromPlan is awaited (not fire-and-forget) so the round this
+      // scheduling link attaches to actually exists first.
+      if (input.toStage === 'Interview Scheduled') {
+        skipStageEmail = true;
+        await seedRoundsFromPlan(input.id).catch((err) => console.error('[advance] auto-seed interview rounds failed:', err));
+        await startInterviewRoundScheduling(ctx.db, input.id)
+          .catch((err) => console.warn('[interviewScheduling] start scheduling failed (non-blocking):', err));
+      }
       if (!skipStageEmail) dispatchStageEmail(input.toStage, existing.currentStage, {
         firstName: existing.firstName,
         lastName: existing.lastName,
@@ -889,9 +911,7 @@ export const candidatesRouter = router({
       }
 
       if (input.toStage === 'Interview Scheduled') {
-        // Auto-create the per-round interview records from the role's plan
-        // (idempotent — no-op if rounds already exist or no plan is defined).
-        seedRoundsFromPlan(input.id).catch((err) => console.error('[advance] auto-seed interview rounds failed:', err));
+        // Rounds are already seeded (awaited above, before the scheduling email).
         prepInterviewQuestions(ctx.db, input.id).catch((err) => console.error('[advance] interview question prep failed:', err));
       }
 

@@ -659,6 +659,13 @@
       "when": 1960000064000,
       "tag": "0093_phone_screen_end_at",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1960000065000,
+      "tag": "0094_interview_round_booking_token",
+      "breakpoints": true
     }
   ]
 }

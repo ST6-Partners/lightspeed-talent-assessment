@@ -281,6 +281,35 @@ export async function emailAdvancingToCandidateReview(data: CandidateEmailData) 
   });
 }
 
+// 5. Interview scheduling invite — sent when a candidate reaches Interview
+// Scheduled. Does NOT claim a time is already booked (emailInterviewScheduled
+// below did, incorrectly, when no real booking had happened yet) — instead it
+// links to a page where the candidate picks a specific slot from the assigned
+// interviewer's already-submitted availability. See interviewScheduling.ts /
+// scheduling.getInterviewRoundBookingContext + confirmInterviewRoundSlot.
+export async function emailInterviewSchedulingInvite(data: {
+  email: string;
+  firstName: string;
+  jobTitle?: string;
+  roundName?: string;
+  interviewerName?: string;
+  schedulingUrl: string;
+}) {
+  await sendEmail({
+    to: data.email,
+    templateId: 'interview_scheduling_invite',
+    subject: `Schedule your interview — ${data.jobTitle ?? 'Lightspeed Systems'}`,
+    html: wrap(`
+      ${h1("Let's find a time for your interview")}
+      ${p(`Hi ${esc(data.firstName)},`)}
+      ${p(`You're moving forward for <strong>${esc(data.jobTitle ?? 'the position')}</strong>${data.roundName ? ` — next up is your <strong>${esc(data.roundName)}</strong>` : ''}${data.interviewerName ? ` with ${esc(data.interviewerName)}` : ''}.`)}
+      ${p('Pick a time below that works for you from the times we have available.')}
+      ${button('Schedule your interview', data.schedulingUrl)}
+      ${p("If you don't see a time that works, reply to this email and we'll find another option.")}
+    `),
+  });
+}
+
 // 5. Interview scheduled
 export async function emailInterviewScheduled(data: CandidateEmailData) {
   await sendEmail({

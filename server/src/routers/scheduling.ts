@@ -21,10 +21,12 @@ import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { candidates, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
 import { employees } from '../db/schema/employees.js';
 import { interviewerAvailability } from '../db/schema/interviewerAvailability.js';
+import { candidateInterviews } from '../db/schema/interviews.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { interviewPlan, hiringTeam } from '../db/schema/intake.js';
 import { INTERVIEW_WINDOW_HOURS } from './interviews.js';
-import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate, emailPhoneScreenReachOutCandidate } from '../services/email.js';
+import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate, emailPhoneScreenReachOutCandidate, emailInterviewBookedCandidate } from '../services/email.js';
+import { sendFirstRoundPrep, sendInterviewScheduledTeamEmail } from '../services/interviewRounds.js';
 
 // Capability tokens for the interviewer "can't interview for this role" link that
 // ships in the intake-approval availability email. reqId is a random UUID, so the
@@ -557,6 +559,127 @@ export const schedulingRouter = router({
       }).where(eq(candidates.id, input.candidateId));
       await auditChange(ctx.db, ctx.user.id, input.candidateId, 'candidates', 'update');
       return { ok: true as const, label };
+  // ── PUBLIC: candidate opens their interview-round scheduling link ─────────
+  // Shows the assigned interviewer's already-submitted availability (collected at
+  // intake — see submitInterviewerAvailability) as discrete slots to pick from.
+  getInterviewRoundBookingContext: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const round = await ctx.db.query.candidateInterviews.findFirst({ where: eq(candidateInterviews.bookingToken, input.token) });
+      if (!round) throw new TRPCError({ code: 'NOT_FOUND', message: 'This scheduling link is invalid or has expired.' });
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, round.candidateId) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This scheduling link is invalid or has expired.' });
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+
+      if (round.scheduledAt) {
+        return {
+          firstName: candidate.firstName,
+          jobTitle: jobTitle ?? null,
+          roundName: round.roundName,
+          interviewerName: (round as any).interviewerName ?? null,
+          alreadyBooked: true as const,
+          scheduledAt: round.scheduledAt,
+          slots: [] as string[],
+        };
+      }
+
+      const jd = candidate.jdId ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) }) : null;
+      const reqId = (jd as any)?.reqId as string | undefined;
+      const interviewerEmail = (round as any).interviewerEmail as string | null;
+      let offeredWindows: { date: string; start: string; end: string }[] = [];
+      if (reqId && interviewerEmail) {
+        const avail = (await ctx.db.select().from(interviewerAvailability)
+          .where(and(eq(interviewerAvailability.reqId, reqId), eq(interviewerAvailability.email, interviewerEmail))).limit(1))[0];
+        offeredWindows = Array.isArray((avail as any)?.windows) ? (avail as any).windows : [];
+      }
+
+      // Filter out any window some OTHER candidate has already booked with this same
+      // interviewer (their exact start instant matches an already-scheduled round) —
+      // a lightweight guard against double-booking a shared interviewer's slots.
+      let takenStarts = new Set<number>();
+      if (interviewerEmail) {
+        const bookedRounds = await ctx.db.select().from(candidateInterviews)
+          .where(and(eq(candidateInterviews.interviewerEmail, interviewerEmail), eq(candidateInterviews.status, 'scheduled')));
+        takenStarts = new Set((bookedRounds as any[]).filter((r) => r.scheduledAt).map((r) => new Date(r.scheduledAt).getTime()));
+      }
+      const slots = offeredWindows
+        .filter((w) => {
+          const st = new Date(`${w.date}T${w.start}:00`).getTime();
+          return !Number.isNaN(st) && !takenStarts.has(st);
+        })
+        .map((w) => fmtAvailabilityWindow(w));
+
+      return {
+        firstName: candidate.firstName,
+        jobTitle: jobTitle ?? null,
+        roundName: round.roundName,
+        interviewerName: (round as any).interviewerName ?? null,
+        alreadyBooked: false as const,
+        scheduledAt: null,
+        slots,
+      };
+    }),
+
+  // ── PUBLIC: candidate confirms one of the interviewer's offered slots ──────
+  confirmInterviewRoundSlot: publicProcedure
+    .input(z.object({ token: z.string().min(1), slot: z.string().min(1).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      const round = await ctx.db.query.candidateInterviews.findFirst({ where: eq(candidateInterviews.bookingToken, input.token) });
+      if (!round) throw new TRPCError({ code: 'NOT_FOUND', message: 'This scheduling link is invalid or has expired.' });
+      if (round.scheduledAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This interview is already scheduled.' });
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, round.candidateId) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This scheduling link is invalid or has expired.' });
+
+      const jd = candidate.jdId ? await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) }) : null;
+      const reqId = (jd as any)?.reqId as string | undefined;
+      const interviewerEmail = (round as any).interviewerEmail as string | null;
+      const avail = reqId && interviewerEmail
+        ? (await ctx.db.select().from(interviewerAvailability)
+            .where(and(eq(interviewerAvailability.reqId, reqId), eq(interviewerAvailability.email, interviewerEmail))).limit(1))[0]
+        : undefined;
+      const offeredWindows: { date: string; start: string; end: string }[] = Array.isArray((avail as any)?.windows) ? (avail as any).windows : [];
+      const matched = offeredWindows.find((w) => fmtAvailabilityWindow(w) === input.slot);
+      if (!matched) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That time is no longer offered. Please pick one of the listed times.' });
+      }
+      const start = new Date(`${matched.date}T${matched.start}:00`);
+      if (Number.isNaN(start.getTime())) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That time could not be parsed. Please pick another.' });
+      }
+
+      // Re-check it hasn't been claimed by another candidate between page-load and
+      // confirm (same guard as getInterviewRoundBookingContext's filter).
+      if (interviewerEmail) {
+        const clash = await ctx.db.select().from(candidateInterviews)
+          .where(and(eq(candidateInterviews.interviewerEmail, interviewerEmail), eq(candidateInterviews.status, 'scheduled')));
+        if ((clash as any[]).some((r) => r.scheduledAt && new Date(r.scheduledAt).getTime() === start.getTime())) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'That time was just taken by another candidate. Please pick another.' });
+        }
+      }
+
+      await ctx.db.update(candidateInterviews)
+        .set({ scheduledAt: start, status: 'scheduled', updatedAt: new Date() })
+        .where(eq(candidateInterviews.id, round.id));
+      // Mirror onto the candidate row so the existing day-before-reminder job and
+      // hiring-team round-briefing emails (which read candidates.interviewScheduledAt)
+      // keep working, same as the Calendly self-book webhook does.
+      await ctx.db.update(candidates)
+        .set({ interviewScheduledAt: start, updatedAt: new Date() })
+        .where(eq(candidates.id, candidate.id));
+
+      const jobTitle = jd?.jobTitle ?? undefined;
+      const interviewDate = start.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+      await emailInterviewBookedCandidate({
+        email: candidate.email, firstName: candidate.firstName, jobTitle,
+        interviewDate, interviewerName: (round as any).interviewerName ?? undefined,
+      }).catch((err) => console.error('[scheduling.confirmInterviewRoundSlot] candidate confirmation email failed:', err));
+
+      // Same interviewer-prep + hiring-team notification the Calendly self-book path
+      // sends once a real time exists.
+      void sendFirstRoundPrep(candidate.id).catch((err) => console.error('[scheduling.confirmInterviewRoundSlot] round-1 prep send failed:', err));
+      void sendInterviewScheduledTeamEmail(candidate.id).catch((err) => console.error('[scheduling.confirmInterviewRoundSlot] team email failed:', err));
+
+      return { ok: true as const };
     }),
 
   // ── PUBLIC: interviewer opens the "can't interview for this role" link from
@@ -704,7 +827,7 @@ export const schedulingRouter = router({
         date: z.string().min(1).max(20),
         start: z.string().min(1).max(10),
         end: z.string().min(1).max(10),
-      })).min(1, 'Add at least one time you are available.').max(30),
+      })).min(3, 'Add at least 3 times you are available so scheduling has real options.').max(30),
       note: z.string().max(2000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
