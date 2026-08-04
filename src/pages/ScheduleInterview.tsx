@@ -111,6 +111,12 @@ export default function ScheduleInterview() {
         Hi {data.firstName}, pick a time for each round below. If none of the offered times work for a round, you can suggest your own.
       </p>
 
+      {data.converged === false && rounds.filter((r: any) => !r.alreadyBooked && !r.proposed).length > 1 && (
+        <div className="mb-4 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-800">
+          We couldn't line up a set of times that keeps every round close together. Pick your best options below, and use "suggest your own times" for any round that doesn't fit — the hiring team will coordinate the rest.
+        </div>
+      )}
+
       <div className="space-y-5 mb-4">
         {rounds.map((r: any) => {
           const proposing = !!proposeRows[r.roundId];

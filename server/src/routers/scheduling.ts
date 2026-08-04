@@ -24,7 +24,7 @@ import { interviewerAvailability } from '../db/schema/interviewerAvailability.js
 import { candidateInterviews } from '../db/schema/interviews.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { interviewPlan, hiringTeam } from '../db/schema/intake.js';
-import { INTERVIEW_WINDOW_HOURS } from './interviews.js';
+import { INTERVIEW_WINDOW_HOURS, businessHoursBetween } from './interviews.js';
 import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate, emailPhoneScreenReachOutCandidate, emailInterviewBookedCandidate, emailInterviewsBookedCandidate, emailInterviewRoundCandidateProposed, emailInterviewRoundReachOutCandidate } from '../services/email.js';
 import { sendFirstRoundPrep, sendInterviewScheduledTeamEmail } from '../services/interviewRounds.js';
 import { prepInterviewQuestions } from '../services/interviewPrep.js';
@@ -149,27 +149,57 @@ async function computeAvailabilityWindow(db: any, reqId: string, excludeEmail?: 
     : req?.createdAt ? new Date(req.createdAt).getTime() : Date.now();
   const stage0 = (): AvailWindow => ({ start: new Date(base + 21 * DAY_MS), end: new Date(base + 28 * DAY_MS), stage: 0 });
 
-  const rounds = await db.select().from(interviewPlan).where(eq(interviewPlan.reqId, reqId));
-  const roundCount = rounds.length;
+  // Every interviewer gets the SAME broad role window (about a week, ~3–4 weeks out).
+  // We deliberately do NOT narrow it based on who submitted first: anchoring later
+  // interviewers to the first person's earliest slot was arbitrary and broke when that
+  // person offered spread-out days (Mon/Wed/Fri). Converging everyone into a tight
+  // 72-business-hour cluster is handled centrally at BOOKING time — see
+  // convergedRoundSlots (feasible-slot filtering) and confirmInterviewBooking's 72h
+  // guard — not by constraining what each interviewer can offer.
+  void excludeEmail; // retained for caller signature compatibility
+  return stage0();
+}
 
-  let subs = await db.select().from(interviewerAvailability)
-    .where(eq(interviewerAvailability.reqId, reqId)).orderBy(asc(interviewerAvailability.submittedAt));
-  if (excludeEmail) subs = subs.filter((r: any) => (r.email || '').toLowerCase() !== excludeEmail.toLowerCase());
-  if (subs.length === 0) return stage0();
+// ── Central 72-business-hour convergence for multi-round interview booking ──────
+// Given each round's candidate-selectable slot start times (ms) plus any already
+// FIXED times (already-scheduled rounds), find the slot times that can all live
+// inside a single 72-business-hour window. Any two moments inside a window spanning
+// 72 business hours are necessarily ≤72 business hours apart, so a "complete" window
+// (one covering ≥1 time for EVERY round) yields a valid, non-spreading booking.
+// Returns, per round, the subset of slot start-times that appear in at least one
+// complete window, and whether any complete window exists at all.
+type RoundSlots = { roundId: string; fixed: number | null; starts: number[] };
+function convergedRoundSlots(rounds: RoundSlots[]): { converged: boolean; feasibleByRound: Map<string, Set<number>> } {
+  const feasibleByRound = new Map<string, Set<number>>();
+  for (const r of rounds) feasibleByRound.set(r.roundId, new Set<number>());
+  if (rounds.length === 0) return { converged: false, feasibleByRound };
 
-  const t1 = earliestSlotMs(subs[0].windows);
-  if (t1 == null) return stage0();
-
-  if (subs.length >= 2 && roundCount > 2) {
-    const t2 = earliestSlotMs(subs[1].windows);
-    const b = t2 == null ? t1 : Math.min(t1, t2);
-    return { start: new Date(b), end: new Date(addBusinessHours(b, INTERVIEW_WINDOW_HOURS)), stage: 2 };
+  // Candidate window anchors: every slot start and every fixed time.
+  const anchors = new Set<number>();
+  for (const r of rounds) {
+    if (r.fixed != null) anchors.add(r.fixed);
+    for (const s of r.starts) anchors.add(s);
   }
-  return {
-    start: new Date(addBusinessHours(t1, -INTERVIEW_WINDOW_HOURS)),
-    end: new Date(addBusinessHours(t1, INTERVIEW_WINDOW_HOURS)),
-    stage: 1,
-  };
+  let converged = false;
+  for (const t of anchors) {
+    const end = addBusinessHours(t, INTERVIEW_WINDOW_HOURS);
+    const perRound: { roundId: string; hits: number[] }[] = [];
+    let complete = true;
+    for (const r of rounds) {
+      const hits = r.fixed != null
+        ? (r.fixed >= t && r.fixed <= end ? [r.fixed] : [])
+        : r.starts.filter((s) => s >= t && s <= end);
+      if (hits.length === 0) { complete = false; break; }
+      perRound.push({ roundId: r.roundId, hits });
+    }
+    if (!complete) continue;
+    converged = true;
+    for (const { roundId, hits } of perRound) {
+      const set = feasibleByRound.get(roundId)!;
+      for (const h of hits) set.add(h);
+    }
+  }
+  return { converged, feasibleByRound };
 }
 
 function fmtWindowRange(start: Date, end: Date): string {
@@ -723,18 +753,14 @@ export const schedulingRouter = router({
         .where(eq(candidateInterviews.candidateId, candidate.id))
         .orderBy(asc(candidateInterviews.sortOrder));
 
-      const out: Array<{ roundId: string; roundName: string; interviewerName: string | null; alreadyBooked: boolean; proposed: boolean; scheduledAt: Date | null; slots: string[] }> = [];
+      // First pass: gather each round's state and its candidate-selectable slots
+      // (start ms + display label), skipping times already taken on that interviewer.
+      type SlotOpt = { start: number; label: string };
+      type RoundInfo = { round: any; state: 'scheduled' | 'proposed' | 'open'; offered: SlotOpt[] };
+      const infos: RoundInfo[] = [];
       for (const round of rounds as any[]) {
-        if (round.scheduledAt) {
-          out.push({ roundId: round.id, roundName: round.roundName, interviewerName: round.interviewerName ?? null, alreadyBooked: true, proposed: false, scheduledAt: round.scheduledAt, slots: [] });
-          continue;
-        }
-        if (round.status === 'candidate_proposed') {
-          // Candidate already sent their own times — waiting on the interviewer to
-          // pick one or reach out. Don't offer the interviewer's slots again.
-          out.push({ roundId: round.id, roundName: round.roundName, interviewerName: round.interviewerName ?? null, alreadyBooked: false, proposed: true, scheduledAt: null, slots: [] });
-          continue;
-        }
+        if (round.scheduledAt) { infos.push({ round, state: 'scheduled', offered: [] }); continue; }
+        if (round.status === 'candidate_proposed') { infos.push({ round, state: 'proposed', offered: [] }); continue; }
         const interviewerEmail = round.interviewerEmail as string | null;
         let offeredWindows: { date: string; start: string; end: string }[] = [];
         if (reqId && interviewerEmail) {
@@ -748,13 +774,40 @@ export const schedulingRouter = router({
             .where(and(eq(candidateInterviews.interviewerEmail, interviewerEmail), eq(candidateInterviews.status, 'scheduled')));
           takenStarts = new Set((bookedRounds as any[]).filter((r) => r.scheduledAt).map((r) => new Date(r.scheduledAt).getTime()));
         }
-        const slots = offeredWindows
-          .filter((w) => { const st = new Date(`${w.date}T${w.start}:00`).getTime(); return !Number.isNaN(st) && !takenStarts.has(st); })
-          .map((w) => fmtAvailabilityWindow(w));
-        out.push({ roundId: round.id, roundName: round.roundName, interviewerName: round.interviewerName ?? null, alreadyBooked: false, proposed: false, scheduledAt: null, slots });
+        const offered: SlotOpt[] = offeredWindows
+          .map((w) => ({ start: new Date(`${w.date}T${w.start}:00`).getTime(), label: fmtAvailabilityWindow(w) }))
+          .filter((o) => !Number.isNaN(o.start) && !takenStarts.has(o.start));
+        infos.push({ round, state: 'open', offered });
       }
 
-      return { firstName: candidate.firstName, jobTitle: jobTitle ?? null, rounds: out };
+      // Central convergence: only offer slot combinations that all fit inside one
+      // 72-business-hour window. Already-scheduled rounds are FIXED anchors the new
+      // picks must cluster around; proposed rounds (awaiting the interviewer) are left
+      // out of the coverage requirement and coordinated separately.
+      const coverage: RoundSlots[] = infos
+        .filter((i) => i.state === 'scheduled' || i.state === 'open')
+        .map((i) => ({
+          roundId: i.round.id,
+          fixed: i.state === 'scheduled' ? new Date(i.round.scheduledAt).getTime() : null,
+          starts: i.state === 'open' ? i.offered.map((o) => o.start) : [],
+        }));
+      const { converged, feasibleByRound } = convergedRoundSlots(coverage);
+
+      const out = infos.map((i) => {
+        if (i.state === 'scheduled') return { roundId: i.round.id, roundName: i.round.roundName, interviewerName: i.round.interviewerName ?? null, alreadyBooked: true, proposed: false, scheduledAt: i.round.scheduledAt, slots: [] as string[] };
+        if (i.state === 'proposed') return { roundId: i.round.id, roundName: i.round.roundName, interviewerName: i.round.interviewerName ?? null, alreadyBooked: false, proposed: true, scheduledAt: null, slots: [] as string[] };
+        // Open round: when a common window exists, show only the slots that keep the
+        // whole loop within 72 business hours; otherwise fall back to all offered slots
+        // (the candidate can still book a valid combo or use "propose your own times",
+        // and the confirm step enforces the 72h rule as a backstop).
+        const feasible = feasibleByRound.get(i.round.id);
+        const slots = converged && feasible
+          ? i.offered.filter((o) => feasible.has(o.start)).map((o) => o.label)
+          : i.offered.map((o) => o.label);
+        return { roundId: i.round.id, roundName: i.round.roundName, interviewerName: i.round.interviewerName ?? null, alreadyBooked: false, proposed: false, scheduledAt: null, slots };
+      });
+
+      return { firstName: candidate.firstName, jobTitle: jobTitle ?? null, rounds: out, converged };
     }),
 
   // ── PUBLIC: candidate proposes their own times for ONE round when none of the
@@ -945,6 +998,28 @@ export const schedulingRouter = router({
       }
 
       if (!planned.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'No new times to confirm.' });
+
+      // Central 72-business-hour guarantee: the whole loop (these new picks plus any
+      // already-scheduled rounds) must fall within INTERVIEW_WINDOW_HOURS business
+      // hours of each other, unless this candidate has a scheduling exception. This
+      // is the real backstop — availability entry is unconstrained and getInterview-
+      // BookingContext only *guides* toward feasible slots. Mirrors interviews.updateRound.
+      const exempt = (candidate as any)?.interviewWindowException === true;
+      if (!exempt) {
+        const scheduledSiblings = (rounds as any[])
+          .filter((r) => r.scheduledAt && !planned.some((p) => p.round.id === r.id))
+          .map((r) => new Date(r.scheduledAt).getTime());
+        const allTimes = [...planned.map((p) => p.start.getTime()), ...scheduledSiblings];
+        if (allTimes.length > 1) {
+          const spreadH = businessHoursBetween(Math.min(...allTimes), Math.max(...allTimes));
+          if (spreadH > INTERVIEW_WINDOW_HOURS) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `These times would spread the interview across ${Math.round(spreadH)} business hours (weekends excluded). Please choose times within ${INTERVIEW_WINDOW_HOURS} business hours of each other.`,
+            });
+          }
+        }
+      }
 
       for (const { round, start } of planned) {
         await ctx.db.update(candidateInterviews)
