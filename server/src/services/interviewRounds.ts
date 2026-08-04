@@ -21,6 +21,7 @@ import { scoreWalkthroughFromTranscript } from './workSampleScoring.js';
 import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
 import { logDecision } from './decisionLog.js';
 import { emailInterviewRoundPrep, emailInterviewScheduledHR, emailInterviewCompletedHR } from './email.js';
+import { enterWorkSampleStage } from './workSampleEntry.js';
 import {
   analyzeInterviewTranscript,
   synthesizeInterviewTranscript,
@@ -165,9 +166,20 @@ const INTERVIEW_PHASE_STAGES = ['Interview Scheduled', 'Interviewed'];
 /**
  * Called after ANY round's status flips to 'completed' (AI feedback or a
  * manual status edit). If every round for this candidate is now completed,
- * marks the interview done and auto-advances the candidate straight to
- * Reference Check. No-op if there are no rounds yet, not all rounds are
- * done, or the candidate has already moved past the interview phase.
+ * marks the interview done and auto-advances the candidate to the next stage.
+ *
+ * Work Sample sits AFTER the interview and is OPT-IN per role via
+ * jd.workSampleRequired (the same flag the candidate-facing work-sample flow
+ * treats as authoritative). So:
+ *   • role uses a work sample -> advance to Work Sample AND run the same entry
+ *     side effects the manual advance does (mint the take-home /work-sample
+ *     link + invite email, or seed a live-walkthrough round). The candidate
+ *     then waits in Work Sample for human review, exactly like the manual path.
+ *   • role has no work sample -> skip straight to Reference Check (as before),
+ *     so no phantom Work Sample hop shows in the candidate's stage history.
+ *
+ * No-op if there are no rounds yet, not all rounds are done, or the candidate
+ * has already moved past the interview phase.
  */
 export async function maybeAdvanceOnAllRoundsComplete(
   candidateId: string,
@@ -181,17 +193,27 @@ export async function maybeAdvanceOnAllRoundsComplete(
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
   if (!candidate || !INTERVIEW_PHASE_STAGES.includes(candidate.currentStage)) return;
 
+  // Does this candidate's role use a work sample? Gate on the JD flag, the same
+  // signal workSample.infoForJd / the intake form use for `required`.
+  const jd = candidate.jdId
+    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+    : null;
+  const usesWorkSample = (jd as any)?.workSampleRequired === true;
+  const toStage = usesWorkSample ? 'Work Sample' : 'Reference Check';
+
   const fromStage = candidate.currentStage;
   await db.update(candidates)
-    .set({ currentStage: 'Reference Check', updatedAt: new Date() })
+    .set({ currentStage: toStage, updatedAt: new Date() })
     .where(eq(candidates.id, candidateId));
 
   await db.insert(candidateStageHistory).values({
     candidateId,
     fromStage,
-    toStage: 'Reference Check',
+    toStage,
     changedBy,
-    reason: `Interview marked complete — all ${rounds.length} round(s) done, auto-advanced to Reference Check`,
+    reason: usesWorkSample
+      ? `Interview marked complete — all ${rounds.length} round(s) done, auto-advanced to Work Sample`
+      : `Interview marked complete — all ${rounds.length} round(s) done, no work sample for this role, auto-advanced to Reference Check`,
   });
 
   await logDecision(db, {
@@ -200,9 +222,19 @@ export async function maybeAdvanceOnAllRoundsComplete(
     outcome: 'advanced',
     decidedByType: 'deterministic',
     decidedBy: changedBy,
-    reason: `All ${rounds.length} interview round(s) completed`,
-    inputs: { fromStage, toStage: 'Reference Check', roundCount: rounds.length },
+    reason: usesWorkSample
+      ? `All ${rounds.length} interview round(s) completed; role requires a work sample`
+      : `All ${rounds.length} interview round(s) completed; role has no work sample`,
+    inputs: { fromStage, toStage, roundCount: rounds.length, workSampleRequired: usesWorkSample },
   });
+
+  // Work Sample entry side effects (take-home link + invite email, or live
+  // walkthrough round) — mirrors the manual advance. Only when routing INTO
+  // Work Sample; Reference Check has no candidate-facing entry email.
+  if (usesWorkSample) {
+    await enterWorkSampleStage(db, candidateId, fromStage)
+      .catch((err) => console.error('[interview-rounds] work-sample entry side effects failed:', err));
+  }
 }
 
 export interface BriefingRound {
