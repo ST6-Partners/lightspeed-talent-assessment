@@ -10,7 +10,7 @@ import { TRPCError } from '@trpc/server';
 import { randomUUID } from 'node:crypto';
 import { eeoResponses } from '../db/schema/eeo.js';
 import { router, protectedProcedure, publicProcedure } from '../trpc.js';
-import { candidates, candidateStageHistory, jobDescriptions, jobRequisitions, emailLog } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, candidateReferences, jobDescriptions, jobRequisitions, emailLog } from '../db/schema/hiring.js';
 import { inboundEmails } from '../db/schema/email.js';
 import { offerApprovals } from '../db/schema/offerApprovals.js';
 import { candidateEppScores } from '../db/schema/epp.js';
@@ -594,9 +594,16 @@ export const candidatesRouter = router({
     }),
 
   create: protectedProcedure
-    .input(CandidateInput.extend({ needsSponsorship: z.boolean().optional() }))
+    .input(CandidateInput.extend({
+      needsSponsorship: z.boolean().optional(),
+      references: z.array(z.object({
+        name: z.string().min(1).max(200),
+        email: z.string().email().max(300),
+        relationship: z.string().max(200).optional(),
+      })).optional(),
+    }))
     .mutation(async ({ ctx, input }) => {
-      const { needsSponsorship, ...candidateData } = input;
+      const { needsSponsorship, references: refInput, ...candidateData } = input;
       const [candidate] = await ctx.db.insert(candidates).values(candidateData).returning();
 
       // Log initial stage to history
@@ -607,6 +614,21 @@ export const candidatesRouter = router({
         changedBy: ctx.user.id,
         reason: 'Application received',
       });
+
+      // Persist any references provided on the add-candidate form. Each gets a
+      // token minted now (pending the future "request a reference" email flow);
+      // status defaults to 'pending'.
+      if (refInput && refInput.length) {
+        await ctx.db.insert(candidateReferences).values(
+          refInput.map((r) => ({
+            candidateId: candidate.id,
+            name: r.name.trim(),
+            email: r.email.trim(),
+            relationship: r.relationship?.trim() || null,
+            token: randomUUID(),
+          })),
+        );
+      }
 
       const jobTitle = await getJobTitle(ctx.db, candidateData.jdId);
 
@@ -1039,6 +1061,17 @@ export const candidatesRouter = router({
       await auditChange(ctx.db, ctx.user.id, input.id, 'candidates', 'update');
       trackActivity(ctx.db, ctx.user.id, 'reference_outcome', 'candidates', { candidateId: input.id, outcome: 'cleared' }).catch((err: unknown) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
       return candidate;
+    }),
+
+  // List the references a candidate provided (shown on the Reference Check card).
+  references: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db
+        .select()
+        .from(candidateReferences)
+        .where(eq(candidateReferences.candidateId, input.id))
+        .orderBy(candidateReferences.createdAt);
     }),
 
   // Bulk-reject a set of candidates with one shared reason. Reuses the exact

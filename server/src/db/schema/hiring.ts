@@ -313,6 +313,29 @@ export const candidateStageHistory = pgTable('candidate_stage_history', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ── candidate_references ───────────────────────────────────
+// References a candidate provides (captured on the add-candidate form). The
+// table already exists in the DB (migration 0023); this models it. `token` +
+// `status`/`response`/`wouldRehire`/`requestedAt`/`respondedAt` pre-position a
+// future "email the reference for a response" flow — for now we capture the
+// reference (name/email/relationship) and default status to 'pending'.
+export const candidateReferences = pgTable('candidate_references', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  candidateId: uuid('candidate_id')
+    .references(() => candidates.id, { onDelete: 'cascade' })
+    .notNull(),
+  name: varchar('name', { length: 200 }).notNull(),
+  email: varchar('email', { length: 300 }).notNull(),
+  relationship: varchar('relationship', { length: 200 }),
+  token: varchar('token', { length: 64 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  requestedAt: timestamp('requested_at', { withTimezone: true }),
+  respondedAt: timestamp('responded_at', { withTimezone: true }),
+  response: text('response'),
+  wouldRehire: varchar('would_rehire', { length: 20 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ── email_log ──────────────────────────────────────────────
 
 export const emailLog = pgTable('email_log', {
