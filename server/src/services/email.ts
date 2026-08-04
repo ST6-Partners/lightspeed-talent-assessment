@@ -188,6 +188,16 @@ function button(text: string, url: string) {
   return `<a href="${url}" style="display: inline-block; background: #1a1a1a; color: #fff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500; margin: 8px 0 24px;">${text}</a>`;
 }
 
+// A subtle secondary link the recruiter can use at any point to record a
+// phone-screen time they arranged directly (outside the automated pick flow).
+// Opens the recruiter page straight to its log form via ?direct=1. Added to the
+// bottom of every recruiter-facing phone-screen email so the log action is always
+// one click away while they go back and forth with the candidate.
+function logDirectLink(recruiterUrl: string): string {
+  const url = `${recruiterUrl}${recruiterUrl.includes('?') ? '&' : '?'}direct=1`;
+  return `<p style="font-size:13px;margin:18px 0 0;color:#555;">Already agreed on a time directly? <a href="${url}" style="color:#0b6bcb;text-decoration:none;font-weight:600;">Log the agreed time &rarr;</a></p>`;
+}
+
 // Escape plain text for safe insertion into an HTML email body.
 function esc(t: string): string {
   return (t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -947,6 +957,7 @@ export async function emailPhoneScreenRecruiterAvailability(data: { candidateNam
       ${p('Add <strong>at least 3 time windows</strong> that work for you. Once you submit, the candidate is emailed those windows to pick one — they are not contacted until you do this.')}
       ${button('Set your availability', data.availabilityUrl)}
       ${p(`<span style="font-size:12px;color:#888;">If the button doesn't work, paste this link: ${data.availabilityUrl}</span>`)}
+      ${logDirectLink(data.availabilityUrl)}
     `),
   });
 }
@@ -1097,6 +1108,7 @@ export async function emailPhoneScreenNoAvailabilityRecruiter(data: { candidateN
       ${slotList}
       ${data.recruiterUrl ? p('Open the scheduler to pick one of their times and lock in the phone screen.') : p('Open the phone-screen scheduler to pick one of their times.')}
       ${data.recruiterUrl ? button('Pick one of their times', data.recruiterUrl) : ''}
+      ${data.recruiterUrl ? logDirectLink(data.recruiterUrl) : ''}
     `),
   });
 }
