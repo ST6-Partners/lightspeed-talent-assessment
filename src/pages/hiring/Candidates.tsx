@@ -1136,28 +1136,34 @@ function ReferenceRow({ reference, onChanged }: { reference: any; onChanged: () 
 }
 
 // Reference Check decision gate. References are checked off-system; the recorder
-// marks the outcome here and the app acts on it: Cleared advances the candidate
-// to the Offer stage (the recruiter then sends the offer letter from the Offer
-// section), Failed rejects (with the standard rejection-email undo window), and
-// Concerns records the note and holds the candidate in Reference Check.
+// marks each reference (cleared / concerns / failed) and then records a single
+// final decision: Pass advances the candidate to the Offer stage (the recruiter
+// then sends the offer letter from the Offer section), Fail rejects (with the
+// standard rejection-email undo window). Pass/Fail map to the backend outcome
+// enum's 'cleared'/'failed'; the 'concerns' hold path is no longer offered here.
 function ReferenceCheckSection({ candidate, onChanged }: { candidate: any; onChanged: () => void }) {
   const c = candidate;
-  const [outcome, setOutcome] = useState<'cleared' | 'concerns' | 'failed' | ''>('');
+  // The final decision is just Pass or Fail. Pass advances to Offer, Fail rejects.
+  // (Per-reference marks below can still be cleared / concerns / failed.) Mapped to
+  // the backend outcome enum on submit: pass -> cleared, fail -> failed.
+  const [outcome, setOutcome] = useState<'pass' | 'fail' | ''>('');
   const [notes, setNotes] = useState('');
   const record = trpc.candidates.recordReferenceOutcome.useMutation({
     onSuccess: () => { setOutcome(''); setNotes(''); onChanged(); },
   });
   const refs = trpc.candidates.references.useQuery({ id: c.id });
   const refList: any[] = (refs.data as any[]) ?? [];
-  const LABEL: Record<string, string> = { cleared: 'Cleared', concerns: 'Concerns', failed: 'Failed' };
+  // Display label for a previously-recorded outcome. New decisions store cleared/failed;
+  // 'concerns' can only appear on legacy records made before this became Pass/Fail.
+  const PRIOR_LABEL: Record<string, string> = { cleared: 'Pass', failed: 'Fail', concerns: 'Concerns' };
+  const FINAL_LABEL: Record<string, string> = { pass: 'Pass', fail: 'Fail' };
   const prior = c.referenceOutcome as string | null;
-  const submitLabel = outcome === 'cleared' ? 'Record & advance to Offer'
-    : outcome === 'failed' ? 'Record & reject'
-    : outcome === 'concerns' ? 'Save note & hold'
+  const submitLabel = outcome === 'pass' ? 'Record & advance to Offer'
+    : outcome === 'fail' ? 'Record & reject'
     : 'Choose an outcome';
   return (
     <div className="space-y-3">
-      <div className="text-gray-500">Reference checks are done manually. Mark each reference below, then record the overall decision — the app moves the candidate accordingly.</div>
+      <div className="text-gray-500">Reference checks are done manually. Mark each reference below, then record the final decision — Pass advances to Offer, Fail rejects.</div>
       <div>
         <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">References provided ({refList.length})</div>
         {refList.length === 0 ? (
@@ -1172,26 +1178,28 @@ function ReferenceCheckSection({ candidate, onChanged }: { candidate: any; onCha
       </div>
       {prior && (
         <div className="text-[12px] bg-gray-50 border border-gray-200 rounded px-2.5 py-1.5">
-          Last recorded: <b>{LABEL[prior] ?? prior}</b>{c.referenceNotes ? <> — {c.referenceNotes}</> : null}
+          Last recorded: <b>{PRIOR_LABEL[prior] ?? prior}</b>{c.referenceNotes ? <> — {c.referenceNotes}</> : null}
           {c.referenceDecidedAt ? <span className="text-gray-400"> ({new Date(c.referenceDecidedAt).toLocaleDateString()})</span> : null}
         </div>
       )}
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 -mb-1">Overall decision</div>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 -mb-1">Final decision</div>
       <div className="flex gap-2 flex-wrap">
-        {(['cleared', 'concerns', 'failed'] as const).map((o) => (
-          <button
-            key={o}
-            type="button"
-            onClick={() => setOutcome(o)}
-            className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${outcome === o ? 'bg-ls-primary text-white border-ls-primary' : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'}`}
-          >
-            {LABEL[o]}
-          </button>
-        ))}
+        {(['pass', 'fail'] as const).map((o) => {
+          const activeCls = o === 'fail' ? 'bg-rose-600 text-white border-rose-600' : 'bg-emerald-500 text-white border-emerald-500';
+          return (
+            <button
+              key={o}
+              type="button"
+              onClick={() => setOutcome(o)}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${outcome === o ? activeCls : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'}`}
+            >
+              {FINAL_LABEL[o]}
+            </button>
+          );
+        })}
       </div>
-      {outcome === 'cleared' &&<div className="text-[12px] text-emerald-700">Advances the candidate to the Offer stage. You then send the offer letter from the Offer section.</div>}
-      {outcome === 'failed' && <div className="text-[12px] text-rose-700">Rejects the candidate. The rejection email sends after a short undo window.</div>}
-      {outcome === 'concerns' && <div className="text-[12px] text-amber-700">Records the concern and keeps the candidate in Reference Check.</div>}
+      {outcome === 'pass' && <div className="text-[12px] text-emerald-700">Advances the candidate to the Offer stage. You then send the offer letter from the Offer section.</div>}
+      {outcome === 'fail' && <div className="text-[12px] text-rose-700">Rejects the candidate. The rejection email sends after a short undo window.</div>}
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
@@ -1202,8 +1210,8 @@ function ReferenceCheckSection({ candidate, onChanged }: { candidate: any; onCha
         <button
           type="button"
           disabled={!outcome || record.isLoading}
-          onClick={() => outcome && record.mutate({ id: c.id, outcome, notes: notes.trim() || undefined })}
-          className={`text-xs font-semibold px-3 py-2 rounded-md ${!outcome || record.isLoading ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : outcome === 'failed' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-ls-primary text-white hover:opacity-90'}`}
+          onClick={() => outcome && record.mutate({ id: c.id, outcome: outcome === 'pass' ? 'cleared' : 'failed', notes: notes.trim() || undefined })}
+          className={`text-xs font-semibold px-3 py-2 rounded-md ${!outcome || record.isLoading ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : outcome === 'fail' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-ls-primary text-white hover:opacity-90'}`}
         >
           {record.isLoading ? 'Saving…' : submitLabel}
         </button>
