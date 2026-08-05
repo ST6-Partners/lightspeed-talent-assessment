@@ -7,23 +7,8 @@ import { trpc } from '../lib/trpc';
 // candidate opens the emailed link, answers the work-sample question plus a
 // short self-report (the EPP stand-in), and submits — capturing a real response
 // instead of randomly-simulated scores.
-export default function Assessment() {
-  const { token = '' } = useParams();
-  const [submission, setSubmission] = useState('');
-  const [selected, setSelected] = useState<string[]>([]);
-  const [eppAnswer, setEppAnswer] = useState<'agree' | 'disagree' | ''>('');
-  const [done, setDone] = useState(false);
-
-  const { data, isLoading, error } = trpc.candidates.assessmentGetByToken.useQuery(
-    { token },
-    { enabled: !!token, retry: false },
-  );
-
-  const submitMutation = trpc.candidates.assessmentSubmit.useMutation({
-    onSuccess: () => setDone(true),
-  });
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
     <div className="min-h-screen bg-ls-bg flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         <div className="flex items-center gap-3 mb-5">
@@ -42,6 +27,24 @@ export default function Assessment() {
       </div>
     </div>
   );
+}
+
+export default function Assessment() {
+  const { token = '' } = useParams();
+  const [submission, setSubmission] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [eppAnswer, setEppAnswer] = useState<'agree' | 'disagree' | ''>('');
+  const [done, setDone] = useState(false);
+
+  const { data, isLoading, error } = trpc.candidates.assessmentGetByToken.useQuery(
+    { token },
+    { enabled: !!token, retry: false },
+  );
+
+  const submitMutation = trpc.candidates.assessmentSubmit.useMutation({
+    onSuccess: () => setDone(true),
+  });
+
 
   if (isLoading) {
     return <Shell><div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400 text-sm">Loading…</div></Shell>;

@@ -10,17 +10,8 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
-export default function JdReview() {
-  const { token = '' } = useParams();
-  const view = trpc.intake.jdReviewView.useQuery({ token }, { enabled: !!token, retry: false });
-  const [approverName, setApproverName] = useState('');
-  const [done, setDone] = useState<string | null>(null);
-
-  const approve = trpc.intake.jdReviewApprove.useMutation({
-    onSuccess: (r) => setDone(r.jobTitle || 'the role'),
-  });
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
     <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
       <div style={{ width: '100%', maxWidth: 760, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
@@ -31,6 +22,18 @@ export default function JdReview() {
       </div>
     </div>
   );
+}
+
+export default function JdReview() {
+  const { token = '' } = useParams();
+  const view = trpc.intake.jdReviewView.useQuery({ token }, { enabled: !!token, retry: false });
+  const [approverName, setApproverName] = useState('');
+  const [done, setDone] = useState<string | null>(null);
+
+  const approve = trpc.intake.jdReviewApprove.useMutation({
+    onSuccess: (r) => setDone(r.jobTitle || 'the role'),
+  });
+
   const card: React.CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '22px 24px', boxShadow: '0 4px 16px rgba(20,40,80,.05)' };
   const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 700, color: '#374151', margin: '16px 0 4px', textTransform: 'uppercase', letterSpacing: '.03em' };
   const body: React.CSSProperties = { fontSize: 14, color: '#1f2733', whiteSpace: 'pre-wrap', lineHeight: 1.5, margin: 0 };

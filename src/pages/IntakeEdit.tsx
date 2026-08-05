@@ -14,6 +14,20 @@ const EMPLOYMENT = ['Full-Time', 'Part-Time', 'Contract', 'Internship'];
 const ARRANGEMENT = ['On-site', 'Hybrid', 'Remote'];
 const TIMELINE = ['standard', 'senior', 'custom'];
 
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 720, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+          <span style={{ fontWeight: 700, color: '#1f2733' }}>Lightspeed</span>
+          <span style={{ color: '#5b6675', fontSize: 13 }}>Talent Assessment</span>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function IntakeEdit() {
   const { token = '' } = useParams();
   const view = trpc.intake.editView.useQuery({ token }, { enabled: !!token, retry: false });
@@ -56,17 +70,6 @@ export default function IntakeEdit() {
   const resubmit = trpc.intake.editResubmit.useMutation({ onSuccess: () => setDone({ kind: 'resubmitted', msg: 'Saved and re-submitted. The approval chain has restarted from the first approver.' }) });
   const err = save.error?.message || resubmit.error?.message;
 
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 720, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-          <span style={{ fontWeight: 700, color: '#1f2733' }}>Lightspeed</span>
-          <span style={{ color: '#5b6675', fontSize: 13 }}>Talent Assessment</span>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
   const card: React.CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '22px 24px', boxShadow: '0 4px 16px rgba(20,40,80,.05)' };
   const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', margin: '12px 0 3px' };
   const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', fontSize: 13, border: '1px solid #d1d5db', borderRadius: 6, boxSizing: 'border-box' };
