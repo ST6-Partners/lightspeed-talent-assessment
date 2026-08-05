@@ -5,13 +5,43 @@
 import { z } from 'zod';
 import { eq, asc, sql } from 'drizzle-orm';
 import { TRPCError } from '@trpc/server';
-import { router, protectedProcedure } from '../trpc.js';
+import { router, protectedProcedure, publicProcedure } from '../trpc.js';
 import { assessmentTasks } from '../db/schema/assessmentTasks.js';
+import { inboundEmails } from '../db/schema/email.js';
 import { auditChange } from '../services/audit.js';
+import { sendEmail } from '../services/email.js';
 import { draftTaskFromUpload, isSupportedUploadType } from '../services/ai.js';
 
 const DIFFICULTY = ['Entry', 'Mid', 'Senior'] as const;
-const STATUS = ['Draft', 'In Review', 'Live', 'Retired'] as const;
+
+function appBaseUrl(): string {
+  const explicit = process.env.APP_BASE_URL;
+  if (explicit) return explicit.replace(/\/$/, '');
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (railway) return `https://${railway}`;
+  return '';
+}
+
+// Email the designated approver a link to review / edit / approve a new task.
+// Mirrors the JD sign-off flow: also records a simulated inbox copy so the
+// message shows up in the in-app test inbox without a live mail key.
+async function sendTaskReviewInvite(db: any, task: any, approverEmail: string): Promise<void> {
+  const url = `${appBaseUrl()}/task-review/${task.id}`;
+  const subject = `Review & approve a new work sample: ${task.title}`;
+  const html =
+    `<p>A new work sample task, <strong>${task.title}</strong>, was added to the library and needs your approval before it can be used on a role.</p>` +
+    `<p><a href="${url}">Review, edit, and approve it here</a>.</p>` +
+    `<p>Until you approve, it stays a Draft and can't be attached to any role.</p>`;
+  await sendEmail({ to: approverEmail, subject, html, templateId: 'task_review_invite' })
+    .catch((err: unknown) => console.error('[tasks] review invite send failed:', err));
+  await db.insert(inboundEmails).values({
+    fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',
+    fromName: 'Lightspeed Hiring',
+    toEmail: approverEmail, subject, body: html,
+    replyTag: 'task_review', source: 'simulated',
+    raw: { kind: 'task_review', taskId: task.id },
+  }).catch((err: unknown) => console.error('[tasks] review invite inbox record failed:', err));
+}
 
 const TaskInput = z.object({
   title: z.string().min(1).max(300),
@@ -23,7 +53,9 @@ const TaskInput = z.object({
   showYourWorkInstructions: z.string().optional(),
   scoringGuideWork: z.string().optional(),
   scoringGuideAi: z.string().optional(),
-  status: z.enum(STATUS).optional(),
+  // status is intentionally NOT settable here — a task's status is driven by
+  // the approval workflow (create => Draft; approve => Live; retire => Retired),
+  // never by a free-form field, so nothing unreviewed can be made Live.
   deliveryMode: z.enum(['take_home', 'live_walkthrough']).optional(),
   // ── Answer format ────────────────────────────────────────
   //  'free_text'    — candidate writes/pastes an answer (default)
@@ -78,13 +110,18 @@ export const assessmentTasksRouter = router({
   }),
 
   create: protectedProcedure
-    .input(TaskInput)
+    .input(TaskInput.extend({ approverEmail: z.string().email().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const values = normalizeTaskInput(input);
+      const { approverEmail, ...rest } = input;
+      const values = normalizeTaskInput(rest);
+      // New tasks are ALWAYS Draft — a task only becomes Live via approval (the
+      // emailed review link or the in-app Approve action), so nothing unreviewed
+      // can be attached to a role.
       const [t] = await ctx.db.insert(assessmentTasks)
-        .values({ ...values, createdBy: ctx.user.id })
+        .values({ ...values, status: 'Draft', createdBy: ctx.user.id })
         .returning();
       await auditChange(ctx.db, ctx.user.id, t.id, 'assessment_tasks', 'create');
+      if (approverEmail) await sendTaskReviewInvite(ctx.db, t, approverEmail);
       return t;
     }),
 
@@ -101,6 +138,74 @@ export const assessmentTasksRouter = router({
         .returning();
       await auditChange(ctx.db, ctx.user.id, id, 'assessment_tasks', 'update');
       return t;
+    }),
+
+  // ── Approval workflow — the only ways a task's status changes ──
+  // In-app approve (logged-in HR/admin): Draft -> Live.
+  approve: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [t] = await ctx.db.update(assessmentTasks)
+        .set({ status: 'Live', updatedAt: new Date() })
+        .where(eq(assessmentTasks.id, input.id))
+        .returning();
+      if (!t) throw new TRPCError({ code: 'NOT_FOUND' });
+      await auditChange(ctx.db, ctx.user.id, input.id, 'assessment_tasks', 'update');
+      return t;
+    }),
+
+  // Retire a Live task (removes it from new roles without deleting history).
+  retire: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const [t] = await ctx.db.update(assessmentTasks)
+        .set({ status: 'Retired', updatedAt: new Date() })
+        .where(eq(assessmentTasks.id, input.id))
+        .returning();
+      if (!t) throw new TRPCError({ code: 'NOT_FOUND' });
+      await auditChange(ctx.db, ctx.user.id, input.id, 'assessment_tasks', 'update');
+      return t;
+    }),
+
+  // ── PUBLIC: the emailed review link (approver may not be logged in) ──
+  reviewView: publicProcedure
+    .input(z.object({ token: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const t = await ctx.db.query.assessmentTasks.findFirst({ where: eq(assessmentTasks.id, input.token) });
+      if (!t) throw new TRPCError({ code: 'NOT_FOUND', message: 'This review link is invalid or has expired.' });
+      return { task: t, alreadyDecided: t.status !== 'Draft' };
+    }),
+
+  reviewSaveEdits: publicProcedure
+    .input(z.object({
+      token: z.string().uuid(),
+      title: z.string().min(1).max(300).optional(),
+      brief: z.string().optional(),
+      showYourWorkInstructions: z.string().optional(),
+      scoringGuideWork: z.string().optional(),
+      scoringGuideAi: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { token, ...edits } = input;
+      const existing = await ctx.db.query.assessmentTasks.findFirst({ where: eq(assessmentTasks.id, token) });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'This review link is invalid.' });
+      const [t] = await ctx.db.update(assessmentTasks)
+        .set({ ...edits, updatedAt: new Date() })
+        .where(eq(assessmentTasks.id, token))
+        .returning();
+      return t;
+    }),
+
+  reviewApprove: publicProcedure
+    .input(z.object({ token: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.assessmentTasks.findFirst({ where: eq(assessmentTasks.id, input.token) });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND', message: 'This review link is invalid.' });
+      const [t] = await ctx.db.update(assessmentTasks)
+        .set({ status: 'Live', updatedAt: new Date() })
+        .where(eq(assessmentTasks.id, input.token))
+        .returning();
+      return { ok: true as const, title: t.title };
     }),
 
   // Draft a task from an uploaded file (screenshot / PDF / text). The file

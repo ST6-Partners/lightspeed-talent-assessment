@@ -1,5 +1,5 @@
 import { useState, Fragment } from 'react';
-import { Plus, X, Trash2, Pencil, ChevronRight, ChevronDown, PenLine, Upload, Check } from 'lucide-react';
+import { Plus, X, Trash2, Pencil, ChevronRight, ChevronDown, PenLine, Upload, Check, Archive } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const DIFFICULTIES = ['Entry', 'Mid', 'Senior'] as const;
@@ -21,12 +21,14 @@ type Form = {
   deliveryMode: 'take_home' | 'live_walkthrough';
   answerFormat: 'free_text' | 'multi_select';
   options: Opt[]; selectCount: string;
+  approverEmail: string;
 };
 const EMPTY: Form = {
   title: '', departmentId: '', difficulty: 'Mid', timeLimitMin: '',
   brief: '', showYourWorkInstructions: '', scoringGuideWork: '', scoringGuideAi: '',
   status: 'Draft', version: '1', deliveryMode: 'take_home',
   answerFormat: 'free_text', options: [{ text: '', correct: false }, { text: '', correct: false }], selectCount: '',
+  approverEmail: '',
 };
 
 export default function TaskLibrary() {
@@ -46,6 +48,8 @@ export default function TaskLibrary() {
   const createMutation = trpc.tasks.create.useMutation({ onSuccess: () => { refetch(); close(); } });
   const updateMutation = trpc.tasks.update.useMutation({ onSuccess: () => { refetch(); close(); } });
   const deleteMutation = trpc.tasks.delete.useMutation({ onSuccess: () => refetch() });
+  const approveMutation = trpc.tasks.approve.useMutation({ onSuccess: () => refetch() });
+  const retireMutation = trpc.tasks.retire.useMutation({ onSuccess: () => refetch() });
   const linkJdMutation = trpc.jobDescriptions.setWorkSampleTask.useMutation({ onSuccess: () => refetchJds() });
   const draftMutation = trpc.tasks.draftFromUpload.useMutation();
 
@@ -78,6 +82,7 @@ export default function TaskLibrary() {
       answerFormat: t.answerFormat === 'multi_select' ? 'multi_select' : 'free_text',
       options: opts,
       selectCount: t.selectCount != null ? String(t.selectCount) : '',
+      approverEmail: '',
     });
     setMode('write'); setShowForm(true); setUploadError(null); setDraftNote(null);
   };
@@ -95,7 +100,6 @@ export default function TaskLibrary() {
       showYourWorkInstructions: form.showYourWorkInstructions || undefined,
       scoringGuideWork: form.scoringGuideWork || undefined,
       scoringGuideAi: form.scoringGuideAi || undefined,
-      status: form.status,
       version: form.version ? parseInt(form.version) : undefined,
       deliveryMode: form.deliveryMode,
       answerFormat: form.answerFormat,
@@ -106,7 +110,7 @@ export default function TaskLibrary() {
         : null,
     };
     if (editingId) updateMutation.mutate({ id: editingId, ...payload });
-    else createMutation.mutate(payload);
+    else createMutation.mutate({ ...payload, approverEmail: form.approverEmail || undefined });
   };
 
   const pickError = (): string | null => {
@@ -144,6 +148,7 @@ export default function TaskLibrary() {
         answerFormat: draft.answerFormat === 'multi_select' ? 'multi_select' : 'free_text',
         options: opts,
         selectCount: draft.selectCount != null ? String(draft.selectCount) : '',
+        approverEmail: '',
       });
       setDraftNote(draft.sandbox
         ? 'Draft created in sandbox mode (no AI key set) — edit the fields below, then save.'
@@ -413,18 +418,28 @@ export default function TaskLibrary() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
-              <select value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value as any })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan">
-                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
+              {editingId ? (
+                <>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                  <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_COLORS[form.status] ?? ''}`}>{form.status}</span>
+                  <p className="text-xs text-gray-400 mt-1">Status changes via Approve / Retire in the list, not here.</p>
+                </>
+              ) : (
+                <>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Send to for approval *</label>
+                  <input type="email" value={form.approverEmail}
+                    onChange={(e) => setForm({ ...form, approverEmail: e.target.value })}
+                    placeholder="hiring manager's email"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+                  <p className="text-xs text-gray-400 mt-1">New tasks save as Draft. This person gets a link to review, edit, and approve it — it can't be used on a role until they do.</p>
+                </>
+              )}
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <button onClick={handleSubmit} disabled={!form.title || !!pe || saving}
+            <button onClick={handleSubmit} disabled={!form.title || !!pe || saving || (!editingId && !form.approverEmail)}
               className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50">
-              {saving ? 'Saving...' : editingId ? 'Save Task' : 'Create Task'}
+              {saving ? 'Saving...' : editingId ? 'Save Task' : 'Create Task (send for approval)'}
             </button>
             <button onClick={close} className="px-4 py-2 text-gray-600 text-sm">Cancel</button>
           </div>
@@ -482,6 +497,12 @@ export default function TaskLibrary() {
                   <td className="px-4 py-3 text-gray-500">v{t.version}</td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
+                      {t.status === 'Draft' && (
+                        <button onClick={() => approveMutation.mutate({ id: t.id })} disabled={approveMutation.isLoading} className="p-1.5 text-gray-400 hover:text-green-600 rounded hover:bg-gray-100" title="Approve → Live"><Check size={15} /></button>
+                      )}
+                      {t.status === 'Live' && (
+                        <button onClick={() => retireMutation.mutate({ id: t.id })} disabled={retireMutation.isLoading} className="p-1.5 text-gray-400 hover:text-amber-600 rounded hover:bg-gray-100" title="Retire"><Archive size={15} /></button>
+                      )}
                       <button onClick={() => startEdit(t)} className="p-1.5 text-gray-400 hover:text-gray-700 rounded hover:bg-gray-100" title="Edit"><Pencil size={15} /></button>
                       <button onClick={() => deleteMutation.mutate({ id: t.id })} className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-gray-100" title="Delete"><Trash2 size={15} /></button>
                     </div>
