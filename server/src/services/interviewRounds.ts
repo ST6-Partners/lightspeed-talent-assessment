@@ -20,7 +20,7 @@ import { getCompanyTalkingPoints, type CompanyTalkingPoints } from './companyTal
 import { scoreWalkthroughFromTranscript } from './workSampleScoring.js';
 import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
 import { logDecision } from './decisionLog.js';
-import { emailInterviewRoundPrep, emailInterviewScheduledHR, emailInterviewCompletedHR } from './email.js';
+import { emailInterviewRoundPrep, emailInterviewScheduledHR } from './email.js';
 import { enterWorkSampleStage, roleUsesWorkSample } from './workSampleEntry.js';
 import {
   analyzeInterviewTranscript,
@@ -59,40 +59,6 @@ export async function sendInterviewScheduledTeamEmail(candidateId: string): Prom
       interviewerName: r.interviewerName ?? null,
       when: r.scheduledAt ? fmt(r.scheduledAt) : null,
     })),
-  });
-  return true;
-}
-
-/** Send THIS round's completed feedback (from the transcript) to the round's own
- *  interviewer — not the hiring team. Fired when the round's scorecard is submitted
- *  (values.saveReview). The NEXT round's interviewer gets their briefing separately
- *  via sendNextRoundPrep, so this email is just the feedback for the round they ran.
- *  No-op if the round has no interviewer email. */
-export async function sendInterviewCompletedTeamEmail(roundId: string): Promise<boolean> {
-  const round = await db.query.candidateInterviews.findFirst({ where: eq(candidateInterviews.id, roundId) });
-  if (!round) return false;
-  if (!round.interviewerEmail) {
-    console.warn(`[interview-rounds] round ${roundId} completed but has no interviewer email — feedback email skipped`);
-    return false;
-  }
-  const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, round.candidateId) });
-  if (!candidate) return false;
-  const jd = candidate.jdId
-    ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
-    : null;
-  await emailInterviewCompletedHR({
-    to: round.interviewerEmail,
-    firstName: candidate.firstName,
-    lastName: candidate.lastName,
-    jobTitle: jd?.jobTitle ?? undefined,
-    roundName: round.roundName,
-    interviewScore: (round.score as number | null) ?? null,
-    feedback: (round.feedbackHr as string | null) ?? null,
-    // No candidate link and no next-round briefing here — the next interviewer is
-    // briefed separately (sendNextRoundPrep); this is just the interviewer's own read.
-    candidateUrl: undefined,
-    nextRound: null,
-    nextBriefing: null,
   });
   return true;
 }

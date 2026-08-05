@@ -589,50 +589,10 @@ export async function emailInterviewScheduledHR(data: {
   });
 }
 
-// 15. Interview round completed → hiring team, with feedback + next-round briefing
-export async function emailInterviewCompletedHR(data: {
-  to: string;
-  firstName: string;
-  lastName: string;
-  jobTitle?: string;
-  roundName?: string;
-  interviewScore?: number | null;
-  feedback?: string | null;
-  candidateUrl?: string;
-  nextRound?: { roundName: string; interviewerName?: string | null } | null;
-  nextBriefing?: {
-    rounds: { roundName: string; interviewerName: string | null; writtenRead: string }[];
-    followUps: { roundName: string; type: string; text: string }[];
-  } | null;
-}) {
-  const fb = (data.feedback ?? '').trim();
-  const feedbackBlock = fb
-    ? `
-      ${p('<strong>Post-interview feedback</strong>')}
-      <div style="background:#f5f5f5;border-radius:8px;padding:16px 20px;margin:0 0 20px;font-size:14px;line-height:1.6;">${esc(fb).replace(/\n/g, '<br/>')}</div>`
-    : '';
-  const nb = data.nextBriefing;
-  const hasNext = !!(data.nextRound || (nb && (nb.rounds.length || nb.followUps.length)));
-  const nextBlock = hasNext
-    ? `
-      ${p(`<strong>Briefing for the next round${data.nextRound?.roundName ? ` — ${esc(data.nextRound.roundName)}` : ''}</strong>${data.nextRound?.interviewerName ? ` (Interviewer: ${esc(data.nextRound.interviewerName)})` : ''}`)}
-      ${nb && nb.rounds.length ? `<div style="margin:0 0 12px;">${nb.rounds.map((r) => `<div style="border-left:3px solid #4FA9D6;padding:6px 12px;margin:0 0 8px;font-size:14px;line-height:1.6;"><strong>${esc(r.roundName)}${r.interviewerName ? ` — ${esc(r.interviewerName)}` : ''}:</strong> ${esc(r.writtenRead)}</div>`).join('')}</div>` : ''}
-      ${nb && nb.followUps.length ? `${p('Follow-ups to chase:')}<ul style="font-size:14px;line-height:1.6;color:#374151;margin:0 0 16px;padding-left:20px;">${nb.followUps.map((ff) => `<li>${esc(ff.text)}${ff.roundName ? ` <span style="color:#9ca3af;">(${esc(ff.roundName)})</span>` : ''}</li>`).join('')}</ul>` : ''}`
-    : `${p('This was the final interview round.')}`;
-  await sendEmail({
-    to: data.to,
-    templateId: 'interview_completed_interviewer',
-    subject: `Interview complete: ${data.firstName} ${data.lastName}${data.roundName ? ` — ${data.roundName}` : ''}`,
-    html: wrap(`
-      ${h1('Interview completed')}
-      ${p(`The ${data.roundName ? `<strong>${esc(data.roundName)}</strong> round` : 'interview'} with <strong>${data.firstName} ${data.lastName}</strong> for <strong>${data.jobTitle ?? 'the position'}</strong> is complete.`)}
-      ${data.interviewScore != null ? p(`Interview score: <strong>${data.interviewScore}/100</strong> (advisory)`) : ''}
-      ${feedbackBlock}
-      ${nextBlock}
-      ${data.candidateUrl ? button('Review in pipeline', data.candidateUrl) : ''}
-    `),
-  });
-}
+// 15. (removed 2026-08-05) The "Interview complete" notification email was cut
+// per Jade — it was noise, especially on the final round with no feedback. The
+// round's interviewer still gets their AI debrief via emailInterviewFeedbackInterviewer
+// (processInterview), and the next round's interviewer is briefed via emailInterviewRoundPrep.
 
 // 16. Offer accepted → HR
 export async function emailOfferAcceptedHR(data: CandidateEmailData) {

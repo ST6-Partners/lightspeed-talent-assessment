@@ -32,6 +32,96 @@ const STAGE_LABEL: Record<string, string> = {
 };
 const stageLabel = (s: string): string => STAGE_LABEL[s] ?? s;
 
+// ── "Needs action" — one source of truth for the badge, the filter, and the
+// in-dropdown banner ──────────────────────────────────────────────────────
+// "Needs action" = the system is waiting on a human advance/reject decision and
+// the thing that stage waits on has already happened:
+//   • Reference Check  — always (only a human moves it to Offer or reject)
+//   • Offer            — always (a human sends the offer letter, then marks Hired)
+//   • Work Sample      — once the sample is submitted or scored (take-home or walkthrough)
+//   • Phone Screen     — until the candidate confirms a time, or once the call has ended
+//   • Interview        — when there is no common availability to book the round
+export function needsAction(c: any): boolean {
+  switch (c.currentStage) {
+    case 'Reference Check': return true;
+    case 'Offer': return true;
+    case 'Interview': return !!c.interviewNeedsOutreach;
+    case 'Work Sample': return !!(c.workSampleSubmittedAt || c.workSampleScore != null);
+    case 'Phone Screen': {
+      // Needs action until the CANDIDATE confirms a time (phoneScreenScheduledAt).
+      // Covers: recruiter still owes availability, windows sent but not yet booked,
+      // and the candidate replied "no availability" (no time set). Also flags again
+      // once the scheduled call has actually ENDED (phoneScreenEndAt — falls back to
+      // the start time for older records confirmed before that field existed) and a
+      // decision is due — not merely once it's started.
+      const confirmed = !!c.phoneScreenScheduledAt;
+      const callEndRef = c.phoneScreenEndAt ?? c.phoneScreenScheduledAt;
+      const callHappened = confirmed && new Date(callEndRef).getTime() < Date.now();
+      return !confirmed || callHappened;
+    }
+    default: return false;
+  }
+}
+
+// The specific, plain-language action the recruiter needs to take. Returns a
+// short headline + a one/two-sentence detail, so both the badge tooltip and the
+// prominent in-dropdown banner say exactly the same thing for every case.
+export type NeedsActionInfo = { headline: string; detail: string };
+export function needsActionInfo(c: any): NeedsActionInfo {
+  if (c.currentStage === 'Interview' && c.interviewNeedsOutreach) {
+    return {
+      headline: 'Reach out to set the interview time',
+      detail: 'No common interview availability. Contact the candidate directly to agree on a time, then set the round time below.',
+    };
+  }
+  if (c.currentStage === 'Phone Screen') {
+    if (!c.phoneScreenScheduledAt) {
+      if (Array.isArray(c.phoneScreenCandidateSlots) && c.phoneScreenCandidateSlots.length > 0) {
+        return {
+          headline: 'Reach out to set a time',
+          detail: 'The candidate couldn’t make your proposed times, so there’s no common availability. Contact them directly to agree on a time, then log it in the Screening call section below.',
+        };
+      }
+      return c.phoneScreenBookingOpenedAt
+        ? {
+            headline: 'Follow up on the phone screen',
+            detail: 'The candidate hasn’t booked a time yet (or replied that none work). Follow up so the call gets on the calendar.',
+          }
+        : {
+            headline: 'Set your phone-screen availability',
+            detail: 'Add your availability in the Screening call section below so the candidate can pick a time to confirm.',
+          };
+    }
+    return {
+      headline: 'Log the phone-screen outcome',
+      detail: 'The screening call has ended. Record how it went, then decide: advance the candidate or reject.',
+    };
+  }
+  if (c.currentStage === 'Work Sample') {
+    return {
+      headline: 'Review the work sample',
+      detail: 'The candidate’s work sample is in and AI-graded (advisory only). Review it in the Work Sample section below, then advance or reject.',
+    };
+  }
+  if (c.currentStage === 'Reference Check') {
+    return {
+      headline: 'Record the reference-check outcome',
+      detail: 'References are handled off-system. Record the outcome in the Reference Check section below — Cleared advances to Offer, Failed rejects.',
+    };
+  }
+  if (c.currentStage === 'Offer') {
+    return {
+      headline: 'Send the offer, then mark Hired',
+      detail: 'Send the offer letter from the Offer section below. Once the candidate accepts, mark them Hired.',
+    };
+  }
+  return {
+    headline: 'Action needed',
+    detail: 'This candidate is waiting on your decision — advance or reject.',
+  };
+}
+export function needsActionReason(c: any): string { return needsActionInfo(c).detail; }
+
 export default function Candidates() {
   const [showForm, setShowForm] = useState(false);
   const [stageFilter, setStageFilter] = useState<Stage | ''>('');
@@ -243,48 +333,6 @@ export default function Candidates() {
   const CLOSED_STAGES: readonly string[] = CLOSED;
   const matchesInternal = (c: any) =>
     internalFilter === 'all' || (internalFilter === 'internal' ? c.isInternal : !c.isInternal);
-
-  // "Needs action" = the system is waiting on a human advance/reject decision and
-  // the thing that stage waits on has already happened:
-  //   • Reference Check  — always (only a human moves it to Offer or Reject)
-  //   • Offer            — always (a human sends the offer letter, then marks Hired)
-  //   • Work Sample      — once the sample is submitted or scored (take-home or walkthrough)
-  //   • Phone Screen     — once the scheduled call time has passed
-  const needsAction = (c: any): boolean => {
-    switch (c.currentStage) {
-      case 'Reference Check': return true;
-      case 'Offer': return true;
-      case 'Interview': return !!c.interviewNeedsOutreach;
-      case 'Work Sample': return !!(c.workSampleSubmittedAt || c.workSampleScore != null);
-      case 'Phone Screen': {
-        // Needs action until the CANDIDATE confirms a time (phoneScreenScheduledAt).
-        // Covers: recruiter still owes availability, windows sent but not yet booked,
-        // and the candidate replied "no availability" (no time set). Also flags again
-        // once the scheduled call has actually ENDED (phoneScreenEndAt — falls back to
-        // the start time for older records confirmed before that field existed) and a
-        // decision is due — not merely once it's started.
-        const confirmed = !!c.phoneScreenScheduledAt;
-        const callEndRef = c.phoneScreenEndAt ?? c.phoneScreenScheduledAt;
-        const callHappened = confirmed && new Date(callEndRef).getTime() < Date.now();
-        return !confirmed || callHappened;
-      }
-      default: return false;
-    }
-  };
-  const needsActionReason = (c: any): string => {
-    if (c.currentStage === 'Interview' && c.interviewNeedsOutreach) {
-      return 'No common interview availability — reach out to the candidate and set the round time';
-    }
-    if (c.currentStage === 'Phone Screen' && !c.phoneScreenScheduledAt) {
-      if (Array.isArray(c.phoneScreenCandidateSlots) && c.phoneScreenCandidateSlots.length > 0) {
-        return 'No common availability — reach out to the candidate to set a time, then log it';
-      }
-      return c.phoneScreenBookingOpenedAt
-        ? 'Phone screen not confirmed yet — the candidate hasn\u2019t booked a time (or replied that none work); follow up'
-        : 'Set your phone-screen availability so the candidate can confirm a time';
-    }
-    return 'Waiting on your decision — advance or reject this candidate';
-  };
 
   // Active applicants (drives the top stat cards).
   const visibleCandidates = ((candidates ?? []) as any[]).filter((c: any) =>
@@ -1238,8 +1286,21 @@ function CandidateDetail({ candidate, wsApplicable, nextStage, onReject, onChang
   const advance = trpc.candidates.advanceStage.useMutation({ onSuccess: onChanged });
   const update = trpc.candidates.update.useMutation({ onSuccess: onChanged });
 
+  const action = needsAction(c) ? needsActionInfo(c) : null;
+
   return (
     <div className="w-full">
+      {action && (
+        <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3" role="status">
+          <div className="flex items-start gap-2">
+            <span className="mt-0.5 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-700 font-medium shrink-0 uppercase tracking-wide">Needs action</span>
+            <div>
+              <div className="text-sm font-semibold text-amber-800">{action.headline}</div>
+              <p className="text-xs text-amber-700 mt-0.5">{action.detail}</p>
+            </div>
+          </div>
+        </div>
+      )}
       <PipelineStages
         candidate={c}
         wsApplicable={wsApplicable}

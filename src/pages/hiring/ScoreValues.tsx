@@ -240,13 +240,25 @@ export default function ScoreValues() {
 
   const isExisting = currentReviewId != null;
   const isDirty = snap(reviewerId, reviewedAt, interviewId, scores) !== baseline;
-  const canSave = !!reviewerId && !!interviewId && (Object.values(scores).some((n) => typeof n === 'number') || Object.values(capScores).some((n) => typeof n === 'number'));
+  // Every item in every section must have a selection before the scorecard can
+  // be submitted — either a 1-5 score or an explicit "N/A" (not assessed). This
+  // stops half-filled scorecards; N/A is the one-click escape for anything the
+  // reviewer genuinely didn't assess.
+  const valuesList = (values ?? []) as any[];
+  const capList = (capItems ?? []) as any[];
+  const valueAnswered = (v: any) => typeof scores[v.id] === 'number' || naValues[v.id] === true;
+  const capAnswered = (it: any) => typeof capScores[it.id] === 'number' || naCaps[it.id] === true;
+  const valuesMissing = valuesList.filter((v) => !valueAnswered(v)).length;
+  const capMissing = capList.filter((it) => !capAnswered(it)).length;
+  const hasAnyItems = valuesList.length > 0 || capList.length > 0;
+  const sectionsComplete = valuesMissing === 0 && capMissing === 0;
+  const canSave = !!reviewerId && !!interviewId && hasAnyItems && sectionsComplete;
 
   return (
     <div className="max-w-3xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-ls-ink">Score Candidate on Values</h1>
-        <p className="text-ls-ink-3 text-sm mt-1">EPP pre-fills a suggested score for each value — the reviewer adjusts with interview judgment. Leave an item blank or mark it <b>N/A</b> (not assessed) and it won't count toward the average.</p>
+        <p className="text-ls-ink-3 text-sm mt-1">EPP pre-fills a suggested score for each value — the reviewer adjusts with interview judgment. Every item needs a selection before you can submit: give it a 1-5 score, or mark it <b>N/A</b> (not assessed) to exclude it from the average.</p>
       </div>
 
       <div className="bg-white rounded-xl border border-ls-line shadow-sm p-5 mb-5">
@@ -533,6 +545,14 @@ export default function ScoreValues() {
               <span className="inline-flex items-center gap-1.5 text-sm text-ls-thrive font-medium"><Check size={16} /> Submitted — edit any score to re-submit.</span>
             )}
             {!reviewerId && <span className="text-xs text-ls-ink-3">Select a reviewer to submit.</span>}
+            {reviewerId && !interviewId && <span className="text-xs text-ls-ink-3">Select the interview round to submit.</span>}
+            {reviewerId && !!interviewId && !sectionsComplete && (
+              <span className="text-xs text-amber-700 font-medium">
+                Score or mark N/A every item to submit
+                {(valuesMissing > 0 || capMissing > 0) ? ' — ' : ''}
+                {[valuesMissing > 0 ? `Values (${valuesMissing} left)` : null, capMissing > 0 ? `Capability (${capMissing} left)` : null].filter(Boolean).join(', ')}.
+              </span>
+            )}
             {saved && <span className="inline-flex items-center gap-1.5 text-sm text-ls-thrive font-medium"><Check size={16} /> Saved</span>}
           </div>
         </>
