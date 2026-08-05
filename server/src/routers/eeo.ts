@@ -13,23 +13,24 @@
 // ============================================================
 
 import { z } from 'zod';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, desc } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { candidates, jobDescriptions } from '../db/schema/hiring.js';
 import { eeoResponses } from '../db/schema/eeo.js';
-import { biasFlagDispositions } from '../db/schema/biasRemediation.js';
+import { biasFlagDispositions, biasAlertLog } from '../db/schema/biasRemediation.js';
 import { requireAdmin } from '../services/permissions.js';
 import { runAdverseImpactAudit, simulateCutoffAudit } from '../services/adverseImpact.js';
 import { ASSESSMENT_PASS_THRESHOLD } from '../services/assessmentDecision.js';
 import { emailEeoSelfId } from '../services/email.js';
 
 // Statuses an admin can set on a flag. Snoozed uses snoozeDays.
+// ('validated_documented' was retired from the picker; ACK_STATUSES still
+// recognizes it for any legacy row.)
 const DISPOSITION_STATUS = [
   'open',
   'reviewed_no_change',
-  'validated_documented',
   'remediation_applied_monitoring',
   'snoozed',
 ] as const;
@@ -301,5 +302,14 @@ export const eeoRouter = router({
         .filter((s) => s.flaggedCount > 0 && !s.lowResponse)
         .sort((a, b) => b.flaggedCount - a.flaggedCount || a.jobTitle.localeCompare(b.jobTitle));
       return { concerns, evaluated: summaries.length };
+    }),
+
+  // ── ADMIN: append-only history of past bias alerts (Bias tab footer) ──
+  // The durable record. Unlike bell notifications (deletable per user), these
+  // rows are never removed from the UI. Newest first.
+  alertHistory: protectedProcedure
+    .use(requireAdmin)
+    .query(async ({ ctx }) => {
+      return ctx.db.select().from(biasAlertLog).orderBy(desc(biasAlertLog.createdAt)).limit(200);
     }),
 });

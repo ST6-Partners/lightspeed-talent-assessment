@@ -750,6 +750,13 @@
       "when": 1960000075000,
       "tag": "0107_offer_esign",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1960000076000,
+      "tag": "0108_bias_alert_log",
+      "breakpoints": true
     }
   ]
 }
