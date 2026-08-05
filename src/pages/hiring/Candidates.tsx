@@ -382,8 +382,19 @@ export default function Candidates() {
   // back to the reusable-JD link (requisition.base_jd_id) when the JD carries no
   // back-link. Mirrors the server's resolveReqIdForJd so a closed reusable-JD
   // role is recognized here too.
+  // When several requisitions reuse the same library JD (base_jd_id) — e.g. a
+  // backfill opened against a reusable JD that also has a closed prior req — pick
+  // the most ACTIVE one, not whichever was written last. Otherwise a JD shared by
+  // a Closed and an Open req resolves to the Closed req and the live open role
+  // gets filed under "Closed roles" and dropped from the open list.
+  const reqActivityRank = (r: any) =>
+    r?.status === 'Open' ? 3 : r?.status === 'On Hold' ? 2 : r?.status === 'Closed' ? 0 : 1;
   const reqByBaseJd: Record<string, any> = {};
-  for (const r of (requisitions ?? []) as any[]) if (r.baseJdId) reqByBaseJd[r.baseJdId] = r;
+  for (const r of (requisitions ?? []) as any[]) {
+    if (!r.baseJdId) continue;
+    const cur = reqByBaseJd[r.baseJdId];
+    if (!cur || reqActivityRank(r) > reqActivityRank(cur)) reqByBaseJd[r.baseJdId] = r;
+  }
   const reqForJd = (jdId: string) => {
     const jd = jdById[jdId];
     if (jd?.reqId && reqById[jd.reqId]) return reqById[jd.reqId];

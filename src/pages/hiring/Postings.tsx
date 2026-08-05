@@ -40,7 +40,13 @@ export default function Postings() {
 
   const open = (reqs ?? []).filter((r: any) => r.status === 'Open');
   const jdByReq: Record<string, any> = {};
-  for (const jd of (jds ?? []) as any[]) { if (!jdByReq[jd.reqId]) jdByReq[jd.reqId] = jd; }
+  const jdById: Record<string, any> = {};
+  for (const jd of (jds ?? []) as any[]) { if (!jdByReq[jd.reqId]) jdByReq[jd.reqId] = jd; jdById[jd.id] = jd; }
+  // Resolve a req's JD by its direct reqId link, then fall back to the reusable
+  // library JD it was opened against (base_jd_id) — a backfill sets base_jd_id but
+  // no reqId link, so without this the role shows a generic "{dept} role" title
+  // and a 0 candidate count instead of the reused JD's title and pipeline.
+  const jdForReq = (r: any) => jdByReq[r.id] ?? (r.baseJdId ? jdById[r.baseJdId] : null);
   const candByJd: Record<string, any[]> = {};
   for (const c of (candidates ?? []) as any[]) { if (c.jdId) (candByJd[c.jdId] ??= []).push(c); }
 
@@ -71,7 +77,7 @@ export default function Postings() {
             </thead>
             <tbody>
               {open.map((r: any) => {
-                const jd = jdByReq[r.id];
+                const jd = jdForReq(r);
                 const roleCandidates = jd ? (candByJd[jd.id] ?? []) : [];
                 const isExpanded = expanded.has(r.id);
                 return (
