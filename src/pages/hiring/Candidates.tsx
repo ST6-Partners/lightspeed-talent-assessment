@@ -166,6 +166,7 @@ export default function Candidates() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [openClosed, setOpenClosed] = useState<Record<string, boolean>>({});
+  const [showClosedRoles, setShowClosedRoles] = useState(false);
   const [editNotes, setEditNotes] = useState<Record<string, string>>({});
   const [form, setForm] = useState({
     jdId: '', firstName: '', lastName: '', email: '',
@@ -369,6 +370,17 @@ export default function Candidates() {
   for (const j of (jobDescriptions ?? []) as any[]) jdById[j.id] = j;
   const reqById: Record<string, any> = {};
   for (const r of (requisitions ?? []) as any[]) reqById[r.id] = r;
+  // Resolve a JD's requisition: prefer the direct jd.req_id back-link, then fall
+  // back to the reusable-JD link (requisition.base_jd_id) when the JD carries no
+  // back-link. Mirrors the server's resolveReqIdForJd so a closed reusable-JD
+  // role is recognized here too.
+  const reqByBaseJd: Record<string, any> = {};
+  for (const r of (requisitions ?? []) as any[]) if (r.baseJdId) reqByBaseJd[r.baseJdId] = r;
+  const reqForJd = (jdId: string) => {
+    const jd = jdById[jdId];
+    if (jd?.reqId && reqById[jd.reqId]) return reqById[jd.reqId];
+    return reqByBaseJd[jdId] ?? null;
+  };
 
   // Group EVERY candidate (active + closed) by role, so a filled/closed role
   // still shows a card with its own closed-out list.
@@ -391,14 +403,16 @@ export default function Candidates() {
       .sort((a: any, b: any) => String(a.currentStage).localeCompare(String(b.currentStage)));
     const counts: Record<string, number> = {};
     for (const c of cands) counts[c.currentStage] = (counts[c.currentStage] ?? 0) + 1;
+    const req = jdId === 'none' ? null : reqForJd(jdId);
     return {
       jdId,
       cands,
       closed,
       counts,
+      reqStatus: (req?.status ?? null) as string | null,
       title: jdId === 'none' ? 'Unassigned role' : getJdTitle(jdId),
-      dept: jdId === 'none' ? '' : (deptByReq[jdById[jdId]?.reqId] ?? ''),
-      hm: jdId === 'none' ? '' : (reqById[jdById[jdId]?.reqId]?.hiringManager ?? ''),
+      dept: jdId === 'none' ? '' : (req?.department ?? deptByReq[jdById[jdId]?.reqId] ?? ''),
+      hm: jdId === 'none' ? '' : (req?.hiringManager ?? reqById[jdById[jdId]?.reqId]?.hiringManager ?? ''),
     };
   }).sort((a, b) => b.cands.length - a.cands.length);
 
@@ -407,6 +421,16 @@ export default function Candidates() {
   const visibleRoleGroups = roleQuery
     ? roleGroups.filter((g) => g.title.toLowerCase().includes(roleQuery) || (g.dept ?? '').toLowerCase().includes(roleQuery))
     : roleGroups;
+
+  // A role whose requisition is Closed (manually or auto-filled) is no longer an
+  // open role — move it out of the main list into a collapsed "Closed roles"
+  // section so it stops masquerading as active. Unassigned ('none') and On Hold
+  // stay in the open list.
+  const openRoleGroups = visibleRoleGroups.filter((g) => g.reqStatus !== 'Closed');
+  const closedRoleGroups = visibleRoleGroups.filter((g) => g.reqStatus === 'Closed');
+  // "Open roles" stat counts requisitions actually in the Open status, matching
+  // the Requisitions page (not "any role group that still has candidate rows").
+  const openRoleCount = ((requisitions ?? []) as any[]).filter((r: any) => r.status === 'Open').length;
 
   const candidateRow = (c: any) => {
     const nextStage = getNextStage(c);
@@ -476,6 +500,142 @@ export default function Candidates() {
         </tr>
       )}
       </Fragment>
+    );
+  };
+
+  // Render one role card (funnel + expandable roster + closed-out list).
+  // Shared by the open-role list and the collapsed "Closed roles" section.
+  const renderRoleCard = (g: any) => {
+    const collapsed = collapsedRoles[g.jdId] ?? true;
+    const maxN = Math.max(1, ...FUNNEL_STAGES.map((st) => g.counts[st] ?? 0));
+    return (
+                <div key={g.jdId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="p-4 cursor-pointer hover:bg-gray-50" onClick={() => toggleRole(g.jdId)}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <ChevronDown size={16} className={`text-gray-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+                          <span className="text-base font-semibold text-gray-900">{g.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 ml-6 text-xs text-gray-500 flex-wrap">
+                          {g.dept && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{g.dept}</span>}
+                          {g.hm && <span>{g.hm}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-3 ml-6">
+                      {FUNNEL_STAGES.map((st) => {
+                        const n = g.counts[st] ?? 0;
+                        const h = Math.max(3, Math.round((n / maxN) * 28));
+                        return (
+                          <div key={st} className="flex-1 text-center" title={`${st}: ${n}`}>
+                            <div className="text-sm font-semibold text-gray-900">{n}</div>
+                            <div className="mx-auto my-1 rounded" style={{ height: `${h}px`, background: n ? '#93b5e8' : '#eef1f5' }} />
+                            <div className="text-[10px] text-gray-400 leading-tight">{st}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {!collapsed && g.jdId !== 'none' && g.cands.length > 0 && <RoleRankingDropdown jdId={g.jdId} />}
+                  {!collapsed && g.cands.length > 0 && (
+                    <div className="border-t border-gray-100 overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
+                            <th className="px-2 py-2.5 w-8"></th>
+                            <th className="px-4 py-2.5">Name</th>
+                            <th className="px-4 py-2.5">Email</th>
+                            <th className="px-4 py-2.5">Stage</th>
+                            <th className="px-4 py-2.5">CCAT</th>
+                            <th className="px-4 py-2.5">Role Fit Match</th>
+                            <th className="px-4 py-2.5 w-24">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {g.cands.map((c: any) => candidateRow(c))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {!collapsed && g.closed.length > 0 && (
+                    <div className="border-t border-gray-100 px-4 py-3">
+                      <button
+                        onClick={() => setOpenClosed((m) => ({ ...m, [g.jdId]: !m[g.jdId] }))}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-600 transition-colors"
+                      >
+                        <ChevronDown size={15} className={`text-gray-400 transition-transform ${openClosed[g.jdId] ? '' : '-rotate-90'}`} />
+                        <Archive size={15} className="text-gray-400" />
+                        <span>Closed out</span>
+                        <span className="text-gray-400 font-normal">· {g.closed.length}</span>
+                        <span className="ml-auto flex items-center gap-1.5">
+                          {g.closed.filter((c: any) => c.currentStage === 'Rejected').length > 0 && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] rounded-full bg-red-100 text-red-700">
+                              {g.closed.filter((c: any) => c.currentStage === 'Rejected').length} rejected
+                            </span>
+                          )}
+                          {g.closed.filter((c: any) => c.currentStage === 'Not Selected').length > 0 && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] rounded-full bg-gray-200 text-gray-600">
+                              {g.closed.filter((c: any) => c.currentStage === 'Not Selected').length} not selected
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                      {openClosed[g.jdId] && (
+                        <div className="mt-2 overflow-x-auto">
+                          <table className="w-full">
+                            <tbody>
+                              {g.closed.map((c: any) => (
+                                <tr key={c.id} className="border-b border-gray-50 text-sm">
+                                  <td className="px-2 py-2 w-8">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedIds.has(c.id)}
+                                      onChange={() => toggleSelected(c.id)}
+                                      className="rounded border-gray-300"
+                                    />
+                                  </td>
+                                  <td className="px-2 py-2 font-medium text-gray-700">
+                                    <span className="inline-flex items-center gap-1.5">
+                                      {c.firstName} {c.lastName}
+                                      {c.currentStage === 'Rejected' && (
+                                        <button
+                                          onClick={() => unrejectMutation.mutate({ id: c.id })}
+                                          disabled={unrejectMutation.isLoading}
+                                          className="p-1 text-gray-400 hover:text-green-600 transition-colors"
+                                          title="Unreject — restore to previous stage"
+                                        >
+                                          <RotateCcw size={13} />
+                                        </button>
+                                      )}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-2">
+                                    <span className={`inline-flex px-2 py-0.5 text-[11px] rounded-full ${STAGE_COLORS[c.currentStage] ?? 'bg-gray-100 text-gray-600'}`}>
+                                      {c.currentStage}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-2 text-gray-400 text-xs">{c.email}</td>
+                                  <td className="px-2 py-2 text-gray-400 text-xs">{c.rejectionReason ?? ''}</td>
+                                  <td className="px-2 py-2 text-right">
+                                    <button
+                                      onClick={() => doDelete(c.id)}
+                                      disabled={deleteMutation.isLoading}
+                                      className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                                      title="Delete (build tool)"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
     );
   };
 
@@ -804,7 +964,7 @@ export default function Candidates() {
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Open roles</div>
-            <div className="text-2xl font-bold text-gray-900 mt-1">{roleGroups.filter((g) => g.jdId !== 'none' && g.cands.length > 0).length}</div>
+            <div className="text-2xl font-bold text-gray-900 mt-1">{openRoleCount}</div>
           </div>
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">In pipeline</div>
@@ -843,139 +1003,30 @@ export default function Candidates() {
           <div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400 text-sm">{roleQuery ? `No roles match “${roleSearch.trim()}”.` : 'No candidates found.'}</div>
         ) : (
           <div className="space-y-3">
-            {visibleRoleGroups.map((g) => {
-              const collapsed = collapsedRoles[g.jdId] ?? true;
-              const maxN = Math.max(1, ...FUNNEL_STAGES.map((st) => g.counts[st] ?? 0));
-              return (
-                <div key={g.jdId} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <div className="p-4 cursor-pointer hover:bg-gray-50" onClick={() => toggleRole(g.jdId)}>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <ChevronDown size={16} className={`text-gray-400 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
-                          <span className="text-base font-semibold text-gray-900">{g.title}</span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 ml-6 text-xs text-gray-500 flex-wrap">
-                          {g.dept && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{g.dept}</span>}
-                          {g.hm && <span>{g.hm}</span>}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 mt-3 ml-6">
-                      {FUNNEL_STAGES.map((st) => {
-                        const n = g.counts[st] ?? 0;
-                        const h = Math.max(3, Math.round((n / maxN) * 28));
-                        return (
-                          <div key={st} className="flex-1 text-center" title={`${st}: ${n}`}>
-                            <div className="text-sm font-semibold text-gray-900">{n}</div>
-                            <div className="mx-auto my-1 rounded" style={{ height: `${h}px`, background: n ? '#93b5e8' : '#eef1f5' }} />
-                            <div className="text-[10px] text-gray-400 leading-tight">{st}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
+            {openRoleGroups.length === 0 ? (
+              <div className="bg-white rounded-lg border border-gray-200 p-6 text-center text-gray-400 text-sm">No open roles right now.</div>
+            ) : (
+              openRoleGroups.map((g) => renderRoleCard(g))
+            )}
+            {closedRoleGroups.length > 0 && (
+              <div className="pt-1">
+                <button
+                  onClick={() => setShowClosedRoles((v) => !v)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-600 transition-colors border border-gray-200"
+                >
+                  <ChevronDown size={15} className={`text-gray-400 transition-transform ${showClosedRoles ? '' : '-rotate-90'}`} />
+                  <Archive size={15} className="text-gray-400" />
+                  <span>Closed roles</span>
+                  <span className="text-gray-400 font-normal">· {closedRoleGroups.length}</span>
+                  <span className="ml-auto text-xs text-gray-400 font-normal">filled or closed — candidates released</span>
+                </button>
+                {showClosedRoles && (
+                  <div className="space-y-3 mt-3">
+                    {closedRoleGroups.map((g) => renderRoleCard(g))}
                   </div>
-                  {!collapsed && g.jdId !== 'none' && g.cands.length > 0 && <RoleRankingDropdown jdId={g.jdId} />}
-                  {!collapsed && g.cands.length > 0 && (
-                    <div className="border-t border-gray-100 overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
-                            <th className="px-2 py-2.5 w-8"></th>
-                            <th className="px-4 py-2.5">Name</th>
-                            <th className="px-4 py-2.5">Email</th>
-                            <th className="px-4 py-2.5">Stage</th>
-                            <th className="px-4 py-2.5">CCAT</th>
-                            <th className="px-4 py-2.5">Role Fit Match</th>
-                            <th className="px-4 py-2.5 w-24">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {g.cands.map((c: any) => candidateRow(c))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {!collapsed && g.closed.length > 0 && (
-                    <div className="border-t border-gray-100 px-4 py-3">
-                      <button
-                        onClick={() => setOpenClosed((m) => ({ ...m, [g.jdId]: !m[g.jdId] }))}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-600 transition-colors"
-                      >
-                        <ChevronDown size={15} className={`text-gray-400 transition-transform ${openClosed[g.jdId] ? '' : '-rotate-90'}`} />
-                        <Archive size={15} className="text-gray-400" />
-                        <span>Closed out</span>
-                        <span className="text-gray-400 font-normal">· {g.closed.length}</span>
-                        <span className="ml-auto flex items-center gap-1.5">
-                          {g.closed.filter((c: any) => c.currentStage === 'Rejected').length > 0 && (
-                            <span className="inline-flex px-2 py-0.5 text-[11px] rounded-full bg-red-100 text-red-700">
-                              {g.closed.filter((c: any) => c.currentStage === 'Rejected').length} rejected
-                            </span>
-                          )}
-                          {g.closed.filter((c: any) => c.currentStage === 'Not Selected').length > 0 && (
-                            <span className="inline-flex px-2 py-0.5 text-[11px] rounded-full bg-gray-200 text-gray-600">
-                              {g.closed.filter((c: any) => c.currentStage === 'Not Selected').length} not selected
-                            </span>
-                          )}
-                        </span>
-                      </button>
-                      {openClosed[g.jdId] && (
-                        <div className="mt-2 overflow-x-auto">
-                          <table className="w-full">
-                            <tbody>
-                              {g.closed.map((c: any) => (
-                                <tr key={c.id} className="border-b border-gray-50 text-sm">
-                                  <td className="px-2 py-2 w-8">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedIds.has(c.id)}
-                                      onChange={() => toggleSelected(c.id)}
-                                      className="rounded border-gray-300"
-                                    />
-                                  </td>
-                                  <td className="px-2 py-2 font-medium text-gray-700">
-                                    <span className="inline-flex items-center gap-1.5">
-                                      {c.firstName} {c.lastName}
-                                      {c.currentStage === 'Rejected' && (
-                                        <button
-                                          onClick={() => unrejectMutation.mutate({ id: c.id })}
-                                          disabled={unrejectMutation.isLoading}
-                                          className="p-1 text-gray-400 hover:text-green-600 transition-colors"
-                                          title="Unreject — restore to previous stage"
-                                        >
-                                          <RotateCcw size={13} />
-                                        </button>
-                                      )}
-                                    </span>
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    <span className={`inline-flex px-2 py-0.5 text-[11px] rounded-full ${STAGE_COLORS[c.currentStage] ?? 'bg-gray-100 text-gray-600'}`}>
-                                      {c.currentStage}
-                                    </span>
-                                  </td>
-                                  <td className="px-2 py-2 text-gray-400 text-xs">{c.email}</td>
-                                  <td className="px-2 py-2 text-gray-400 text-xs">{c.rejectionReason ?? ''}</td>
-                                  <td className="px-2 py-2 text-right">
-                                    <button
-                                      onClick={() => doDelete(c.id)}
-                                      disabled={deleteMutation.isLoading}
-                                      className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                                      title="Delete (build tool)"
-                                    >
-                                      <Trash2 size={15} />
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                )}
+              </div>
+            )}
           </div>
         )}
 
