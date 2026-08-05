@@ -1053,6 +1053,7 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
     case 'Work Sample':
       return (
         <div className="space-y-2">
+          <WalkthroughSchedulingSection candidate={c} onChanged={onChanged} />
           <div className="bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5 text-[11px] text-amber-800">AI grade is advisory — it never advances or rejects on its own. A human reviews it and decides.</div>
           <div className="flex gap-4 flex-wrap">
             <span>AI grade: <b className="text-gray-900">{c.workSampleScore != null ? `${c.workSampleScore}/100` : '—'}</b></span>
@@ -2322,6 +2323,61 @@ export function PhoneScreenSchedulingSection({ candidate, onChanged: _onChanged,
             </button>
           </div>
         </>
+      )}
+    </Section>
+  );
+}
+
+// Recruiter-first scheduling for a LIVE WALKTHROUGH work sample: offer >=3
+// date/time windows; the candidate is emailed those windows and picks one. No
+// Calendly. Renders nothing for take-home work samples (isWalkthrough === false).
+export function WalkthroughSchedulingSection({ candidate, onChanged }: { candidate: any; onChanged?: () => void }) {
+  const status = trpc.scheduling.walkthroughStatusFor.useQuery({ candidateId: candidate.id });
+  const s = status.data;
+  const submit = trpc.scheduling.submitWalkthroughAvailability.useMutation({ onSuccess: () => { status.refetch(); onChanged?.(); } });
+  const [rows, setRows] = useState<{ date: string; start: string; end: string }[]>([
+    { date: '', start: '', end: '' }, { date: '', start: '', end: '' }, { date: '', start: '', end: '' },
+  ]);
+  const [note, setNote] = useState('');
+  if (!s || !s.isWalkthrough) return null;
+  const scheduled = s.scheduledAt ? new Date(s.scheduledAt) : null;
+  const valid = rows.filter((r) => r.date && r.start && r.end);
+  const setRow = (i: number, patch: Partial<{ date: string; start: string; end: string }>) => setRows(rows.map((r, k) => (k === i ? { ...r, ...patch } : r)));
+  const today = new Date().toISOString().slice(0, 10);
+  const blank3 = () => setRows([{ date: '', start: '', end: '' }, { date: '', start: '', end: '' }, { date: '', start: '', end: '' }]);
+  return (
+    <Section title="Work sample walkthrough" defaultOpen>
+      {scheduled ? (
+        <div className="text-sm text-green-700 font-medium">Walkthrough confirmed{s.selectedSlot ? ` — ${s.selectedSlot}` : `: ${scheduled.toLocaleString()}`}</div>
+      ) : s.opened ? (
+        <div className="text-sm text-gray-600 space-y-1">
+          <div>Your availability was sent to the candidate. Waiting on them to pick a time.</div>
+          {s.availability && <div className="text-xs text-gray-500 whitespace-pre-wrap border border-gray-100 rounded p-2">{s.availability}</div>}
+          {s.bookingUrl && <div className="text-xs">Candidate link: <a className="text-ls-primary underline" href={s.bookingUrl}>booking page</a></div>}
+          <button onClick={blank3} className="text-xs text-ls-primary font-medium">Offer new times</button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-500">Offer at least 3 time windows. The candidate is emailed those windows and picks one to confirm the live walkthrough. No external calendar needed.</p>
+          {rows.map((r, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input type="date" value={r.date} min={today} onChange={(e) => setRow(i, { date: e.target.value })} className="flex-1 px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+              <input type="time" value={r.start} onChange={(e) => setRow(i, { start: e.target.value })} className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+              <span className="text-gray-400 text-xs">to</span>
+              <input type="time" value={r.end} onChange={(e) => setRow(i, { end: e.target.value })} className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+              {rows.length > 3 && <button onClick={() => setRows(rows.filter((_, k) => k !== i))} className="text-gray-400 hover:text-red-500 text-sm" title="Remove">✕</button>}
+            </div>
+          ))}
+          <button onClick={() => setRows([...rows, { date: '', start: '', end: '' }])} className="text-xs text-ls-primary font-medium">+ Add another time</button>
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional note to the candidate" className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+          {submit.error && <p className="text-xs text-red-600">{submit.error.message}</p>}
+          <button
+            onClick={() => submit.mutate({ candidateId: candidate.id, windows: valid, note: note || undefined })}
+            disabled={valid.length < 3 || submit.isLoading}
+            className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50">
+            {submit.isLoading ? 'Sending…' : valid.length < 3 ? `Send availability (need ${3 - valid.length} more)` : 'Send availability'}
+          </button>
+        </div>
       )}
     </Section>
   );

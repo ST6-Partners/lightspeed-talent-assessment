@@ -764,6 +764,13 @@
       "when": 1960000077000,
       "tag": "0109_offer_decline",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1960000078000,
+      "tag": "0110_walkthrough_availability",
+      "breakpoints": true
     }
   ]
 }

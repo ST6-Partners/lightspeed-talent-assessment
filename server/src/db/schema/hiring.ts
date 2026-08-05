@@ -283,7 +283,13 @@ export const candidates = pgTable('candidates', {
   workSampleBookingToken: varchar('work_sample_booking_token', { length: 64 }),
   workSampleBookingOpenedAt: timestamp('work_sample_booking_opened_at', { withTimezone: true }),
   workSampleScheduledAt: timestamp('work_sample_scheduled_at', { withTimezone: true }),
+  workSampleEndAt: timestamp('work_sample_end_at', { withTimezone: true }),
   workSampleJoinUrl: text('work_sample_join_url'),
+  // Recruiter-first walkthrough scheduling (mirrors the phone-screen slots):
+  // offered windows [{date,start,end,label}], their formatted text, and the pick.
+  workSampleSlots: jsonb('work_sample_slots'),
+  workSampleAvailability: text('work_sample_availability'),
+  workSampleSelectedSlot: text('work_sample_selected_slot'),
   // AI-generated interview content
   interviewQuestions: jsonb('interview_questions'),
   interviewTranscript: text('interview_transcript'),

@@ -1,8 +1,45 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, Calendar } from 'lucide-react';
 import PhoneScreenConfirm from './PhoneScreenConfirm';
 import { trpc } from '../lib/trpc';
+
+// Candidate picks one of the recruiter's offered walkthrough windows (no Calendly).
+function WalkthroughConfirm({ token, firstName, jobTitle, slots }: { token: string; firstName?: string; jobTitle?: string | null; slots: string[] }) {
+  const [picked, setPicked] = useState('');
+  const [done, setDone] = useState(false);
+  const confirm = trpc.scheduling.confirmWalkthrough.useMutation({ onSuccess: () => setDone(true) });
+  if (done) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+        <CheckCircle2 className="mx-auto mb-3 text-green-600" size={28} />
+        <h1 className="font-semibold text-gray-900 mb-1">Walkthrough confirmed</h1>
+        <p className="text-sm text-gray-500">Thanks{firstName ? `, ${firstName}` : ''} — your work sample walkthrough{jobTitle ? ` for ${jobTitle}` : ''} is booked for {picked}. A calendar invite is on its way by email.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <h1 className="text-xl font-bold text-gray-900">Schedule your work sample walkthrough{jobTitle ? ` — ${jobTitle}` : ''}</h1>
+      <p className="text-gray-500 text-sm mt-1 mb-4">Hi {firstName}, for this role the work sample is a short live walkthrough. Pick a time below and you'll walk our team through the task on the call.</p>
+      <div className="flex flex-col gap-2">
+        {slots.map((sl, i) => (
+          <label key={i} className={`flex items-center gap-3 p-3 rounded-md border cursor-pointer text-sm ${picked === sl ? 'border-ls-primary bg-ls-primary-50' : 'border-gray-200 hover:border-gray-300'}`}>
+            <input type="radio" name="ws-slot" checked={picked === sl} onChange={() => setPicked(sl)} />
+            <span className="text-gray-800">{sl}</span>
+          </label>
+        ))}
+      </div>
+      {confirm.error && <p className="text-sm text-red-600 mt-3">{confirm.error.message}</p>}
+      <button
+        onClick={() => confirm.mutate({ token, slot: picked })}
+        disabled={!picked || confirm.isLoading}
+        className="mt-4 px-5 py-2.5 bg-ls-primary text-white rounded-md text-sm font-semibold hover:bg-ls-primary-600 disabled:opacity-50">
+        {confirm.isLoading ? 'Confirming…' : 'Confirm this time'}
+      </button>
+    </div>
+  );
+}
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -114,6 +151,15 @@ export default function BookInterview() {
             <p className="text-sm text-amber-600">Scheduling isn't set up yet. We'll email you as soon as it's ready.</p>
           )}
         </div>
+      </Shell>
+    );
+  }
+
+  // Work-sample walkthrough, recruiter-first: pick one of the offered windows.
+  if (data.mode === 'work_sample_walkthrough' && data.slots && data.slots.length > 0) {
+    return (
+      <Shell>
+        <WalkthroughConfirm token={token} firstName={data.firstName} jobTitle={data.jobTitle} slots={data.slots} />
       </Shell>
     );
   }
