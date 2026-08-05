@@ -55,8 +55,13 @@ export async function dispositionCandidatesForReqStatus(
   // Scope candidates to THIS requisition. Prefer the direct candidate.req_id
   // link (a reusable JD can serve several requisitions); fall back to the legacy
   // jd.req_id walk for candidates created before req_id was backfilled.
+  const dispReq = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, reqId) });
   const jds = await db.query.jobDescriptions.findMany({ where: eq(jobDescriptions.reqId, reqId) });
-  const jdIds = jds.map((j: any) => j.id);
+  const jdIdSet = new Set<string>(jds.map((j: any) => j.id));
+  // Reusable-JD model: include the JD the requisition points to via base_jd_id
+  // (the JD carries no jd.req_id back-link), so a legacy walk alone misses it.
+  if (dispReq?.baseJdId) jdIdSet.add(dispReq.baseJdId as string);
+  const jdIds = [...jdIdSet];
   const byReq = await db.query.candidates.findMany({ where: eq(candidates.reqId, reqId) });
   const byJd = jdIds.length
     ? await db.query.candidates.findMany({ where: inArray(candidates.jdId, jdIds) })
@@ -158,7 +163,12 @@ export async function maybeAutoCloseFilledReq(
   // Count hires against THIS requisition (candidate.req_id), falling back to the
   // legacy jd.req_id walk for candidates predating the req_id backfill.
   const jds = await db.query.jobDescriptions.findMany({ where: eq(jobDescriptions.reqId, req.id) });
-  const jdIds = jds.map((j: any) => j.id);
+  const jdIdSet = new Set<string>(jds.map((j: any) => j.id));
+  // Reusable-JD model: the requisition links to its JD via base_jd_id (the JD
+  // carries no back-link), so a legacy jd.req_id lookup misses it. Include the
+  // base JD so candidates on a reusable JD are counted toward the fill.
+  if (req.baseJdId) jdIdSet.add(req.baseJdId as string);
+  const jdIds = [...jdIdSet];
   const byReq = await db.query.candidates.findMany({ where: eq(candidates.reqId, req.id) });
   const byJd = jdIds.length
     ? await db.query.candidates.findMany({ where: inArray(candidates.jdId, jdIds) })

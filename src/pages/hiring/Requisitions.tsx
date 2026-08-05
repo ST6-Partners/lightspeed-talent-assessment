@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Pencil, Trash2, Send } from 'lucide-react';
+import { X, Pencil, Trash2, Send, Ban } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -95,6 +95,19 @@ export default function Requisitions() {
 
   const handleDelete = (r: any) => {
     deleteMutation.mutate({ id: r.id });
+  };
+
+  const handleClose = (r: any) => {
+    if (
+      window.confirm(
+        `Close "${r.department}" and release its remaining candidates?\n\n` +
+          `The role will be marked Closed and every candidate still in the pipeline ` +
+          `will be moved to Not Selected (role ended — not an individual rejection) ` +
+          `and sent a courtesy note. Anyone already Hired keeps their status.`,
+      )
+    ) {
+      updateMutation.mutate({ id: r.id, status: 'Closed' });
+    }
   };
 
   const saving = createMutation.isLoading || updateMutation.isLoading;
@@ -311,6 +324,16 @@ export default function Requisitions() {
                           title="Submit for approval"
                         >
                           <Send size={15} />
+                        </button>
+                      )}
+                      {(r.status === 'Open' || r.status === 'On Hold') && (
+                        <button
+                          onClick={() => handleClose(r)}
+                          disabled={updateMutation.isLoading}
+                          className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                          title="Close role & release remaining candidates"
+                        >
+                          <Ban size={15} />
                         </button>
                       )}
                       <button
