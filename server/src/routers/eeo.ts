@@ -19,9 +19,20 @@ import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { candidates, jobDescriptions } from '../db/schema/hiring.js';
 import { eeoResponses } from '../db/schema/eeo.js';
+import { biasFlagDispositions } from '../db/schema/biasRemediation.js';
 import { requireAdmin } from '../services/permissions.js';
-import { runAdverseImpactAudit } from '../services/adverseImpact.js';
+import { runAdverseImpactAudit, simulateCutoffAudit } from '../services/adverseImpact.js';
+import { ASSESSMENT_PASS_THRESHOLD } from '../services/assessmentDecision.js';
 import { emailEeoSelfId } from '../services/email.js';
+
+// Statuses an admin can set on a flag. Snoozed uses snoozeDays.
+const DISPOSITION_STATUS = [
+  'open',
+  'reviewed_no_change',
+  'validated_documented',
+  'remediation_applied_monitoring',
+  'snoozed',
+] as const;
 
 function appBaseUrl(): string {
   const explicit = process.env.APP_BASE_URL;
@@ -181,6 +192,59 @@ export const eeoRouter = router({
         where: eq(jobDescriptions.id, input.jdId),
       });
       const result = await runAdverseImpactAudit(ctx.db, input.jdId);
-      return { ...result, jobTitle: jd?.jobTitle ?? 'Unknown role' };
+      return { ...result, jobTitle: jd?.jobTitle ?? 'Unknown role', baseCutoff: ASSESSMENT_PASS_THRESHOLD };
+    }),
+
+  // ── ADMIN: cutoff what-if (Remediate-this-flag) ────────────
+  // Re-runs the four-fifths audit at a chosen CCAT cutoff over the same
+  // population, plus a "who this adds" readout. Aggregate only. Read-only:
+  // this NEVER changes the live gate — it only previews a change.
+  simulateCutoff: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ jdId: z.string().uuid(), cutoff: z.number().int().min(0).max(50) }))
+    .query(async ({ ctx, input }) => {
+      return simulateCutoffAudit(ctx.db, input.jdId, input.cutoff, ASSESSMENT_PASS_THRESHOLD);
+    }),
+
+  // ── ADMIN: read a role's flag disposition ──────────────────
+  getDisposition: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({ jdId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const row = await ctx.db.query.biasFlagDispositions.findFirst({
+        where: eq(biasFlagDispositions.jdId, input.jdId),
+      });
+      return row ?? null;
+    }),
+
+  // ── ADMIN: set/clear a role's flag disposition ─────────────
+  // Upsert by role. Acknowledged statuses tell the hourly bias-alert job to
+  // stop re-raising the flag; 'snoozed' quiets it until snoozeDays elapse.
+  setDisposition: protectedProcedure
+    .use(requireAdmin)
+    .input(z.object({
+      jdId: z.string().uuid(),
+      status: z.enum(DISPOSITION_STATUS),
+      note: z.string().max(2000).optional(),
+      snoozeDays: z.number().int().min(1).max(365).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const snoozeUntil = input.status === 'snoozed' && input.snoozeDays
+        ? new Date(Date.now() + input.snoozeDays * 24 * 3600 * 1000)
+        : null;
+      const now = new Date();
+      const values = {
+        jdId: input.jdId,
+        status: input.status,
+        note: input.note ?? null,
+        snoozeUntil,
+        decidedBy: ctx.user.id,
+        decidedByName: ctx.user.name ?? ctx.user.email ?? null,
+        updatedAt: now,
+      };
+      await ctx.db.insert(biasFlagDispositions)
+        .values(values)
+        .onConflictDoUpdate({ target: biasFlagDispositions.jdId, set: values });
+      return { ok: true };
     }),
 });

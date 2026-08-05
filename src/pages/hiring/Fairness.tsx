@@ -68,6 +68,130 @@ function Dimension({ dim }: { dim: any }) {
   );
 }
 
+const DISP_LABELS: Record<string, string> = {
+  open: 'Open — no action',
+  reviewed_no_change: 'Reviewed, no change needed',
+  validated_documented: 'Validated & documented',
+  remediation_applied_monitoring: 'Remediation applied — monitoring',
+  snoozed: 'Snoozed',
+};
+
+function flaggedCount(dims: any[]): number {
+  return dims.reduce((n, d) => n + d.groups.filter((g: any) => g.status === 'flagged').length, 0);
+}
+
+// ── Remediate-this-flag: the workbench under the audit ──────
+function Remediation({ jdId, baseCutoff, liveFlagged }: { jdId: string; baseCutoff: number; liveFlagged: number }) {
+  const [cutoff, setCutoff] = useState<number>(baseCutoff);
+  const [status, setStatus] = useState<string>('remediation_applied_monitoring');
+  const [note, setNote] = useState<string>('');
+  const [snoozeDays, setSnoozeDays] = useState<number>(30);
+  const [saved, setSaved] = useState<boolean>(false);
+
+  const sim = trpc.eeo.simulateCutoff.useQuery({ jdId, cutoff }, { enabled: !!jdId, keepPreviousData: true });
+  const disp = trpc.eeo.getDisposition.useQuery({ jdId }, { enabled: !!jdId });
+  const setDisposition = trpc.eeo.setDisposition.useMutation({
+    onSuccess: () => { setSaved(true); disp.refetch(); },
+  });
+
+  const simFlagged = sim.data ? flaggedCount(sim.data.dimensions) : null;
+  const lowered = cutoff < baseCutoff;
+  const current = disp.data as any;
+
+  return (
+    <div style={{ borderTop: '1px solid #e5e7eb', marginTop: 22, paddingTop: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>Remediate this flag</div>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', background: '#EAF4FA', color: '#246F97', border: '1px solid #cfe6f4', borderRadius: 999, padding: '3px 9px' }}>New</span>
+      </div>
+      <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.7, margin: '8px 0 14px' }}>
+        The one legal, group-blind lever the gate actually has is the cutoff itself. Model a new CCAT cutoff below and the four-fifths
+        audit re-runs on the same candidates. This never changes the live gate — it only previews. Any change applies to <b>everyone</b>;
+        the app will not adjust scores by group.
+      </div>
+
+      {/* Cutoff simulator */}
+      <div style={{ background: '#f9fafb', border: '1px solid #eef0f2', borderRadius: 8, padding: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <label style={{ fontSize: 13, fontWeight: 600 }}>Preview CCAT cutoff</label>
+          <div>
+            <span style={{ fontSize: 18, fontWeight: 700, color: '#2E89B8' }}>{cutoff}</span>
+            <span style={{ fontSize: 12, color: '#9ca3af' }}> / 50 · current gate is {baseCutoff}</span>
+          </div>
+        </div>
+        <input type="range" min={15} max={40} step={1} value={cutoff}
+          onChange={(e) => { setCutoff(Number(e.target.value)); setSaved(false); }}
+          style={{ width: '100%', accentColor: '#2E89B8', marginTop: 10 }} />
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginTop: 6 }}>
+          <div><span style={{ color: '#6b7280' }}>Groups flagged now</span> <b style={{ color: liveFlagged ? RED : '#111827' }}>{liveFlagged}</b></div>
+          <div style={{ color: '#9ca3af' }}>→</div>
+          <div><span style={{ color: '#6b7280' }}>at cutoff {cutoff}</span> <b style={{ color: (simFlagged ?? 0) ? RED : GREEN }}>{simFlagged ?? '…'}</b></div>
+          {cutoff !== baseCutoff && (
+            <button onClick={() => { setCutoff(baseCutoff); setSaved(false); }}
+              style={{ marginLeft: 'auto', background: '#fff', color: '#2E89B8', border: '1px solid #cfe6f4', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Reset to {baseCutoff}</button>
+          )}
+        </div>
+
+        {sim.data && (
+          <div style={{ fontSize: 12.5, color: '#4b5563', lineHeight: 1.6, marginTop: 10, background: '#fff', border: '1px solid #eef0f2', borderRadius: 6, padding: '9px 11px' }}>
+            {lowered
+              ? <>Lowering the cutoff to {cutoff} lets through <b>{sim.data.addedCount}</b> more candidate{sim.data.addedCount === 1 ? '' : 's'} on this role{sim.data.addedMedianPercentile != null ? <> (median CCAT percentile <b>{sim.data.addedMedianPercentile}</b>)</> : ''}. Real candidates, not a synthetic score — check they clear the bar you'd actually defend as job-related.</>
+              : cutoff > baseCutoff
+                ? <>Raising the cutoff to {cutoff} removes <b>{sim.data.removedCount}</b> candidate{sim.data.removedCount === 1 ? '' : 's'} who currently pass. This usually widens the gap, not closes it.</>
+                : <>This is the current gate. Move the slider to preview a change.</>}
+          </div>
+        )}
+      </div>
+
+      {/* Simulated four-fifths bars */}
+      {sim.data && cutoff !== baseCutoff && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10 }}>Four-fifths audit at cutoff {cutoff} (preview)</div>
+          {sim.data.dimensions.filter((d: any) => d.groups.some((g: any) => g.status !== 'insufficient')).map((d: any) => <Dimension key={d.key} dim={d} />)}
+        </div>
+      )}
+
+      {/* Disposition / close-out */}
+      <div style={{ background: '#f9fafb', border: '1px solid #eef0f2', borderRadius: 8, padding: 16, marginTop: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Close out this flag</div>
+        <div style={{ fontSize: 12.5, color: '#6b7280', lineHeight: 1.6, marginBottom: 10 }}>
+          Record what you decided. An acknowledged flag stops the weekly re-alert; a snooze quiets it for a set window. Everything is logged with your name.
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <select value={status} onChange={(e) => { setStatus(e.target.value); setSaved(false); }}
+            style={{ fontSize: 13, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 7, background: '#fff' }}>
+            {Object.entries(DISP_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          {status === 'snoozed' && (
+            <label style={{ fontSize: 12, color: '#6b7280' }}>for
+              <input type="number" min={1} max={365} value={snoozeDays} onChange={(e) => setSnoozeDays(Number(e.target.value))}
+                style={{ width: 60, margin: '0 6px', padding: '6px 8px', border: '1px solid #e5e7eb', borderRadius: 6 }} /> days</label>
+          )}
+          <button onClick={() => setDisposition.mutate({ jdId, status: status as any, note: note || undefined, snoozeDays: status === 'snoozed' ? snoozeDays : undefined })}
+            disabled={setDisposition.isLoading}
+            style={{ background: '#2E89B8', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 15px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            {setDisposition.isLoading ? 'Saving…' : 'Save disposition'}
+          </button>
+        </div>
+        <input placeholder="Optional note (what you changed / why it's justified)" value={note} onChange={(e) => setNote(e.target.value)}
+          style={{ width: '100%', marginTop: 10, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 13, fontFamily: 'inherit' }} />
+        {(saved || current) && (
+          <div style={{ fontSize: 12.5, color: '#136047', marginTop: 10 }}>
+            {saved ? '✓ Saved. ' : ''}Current status: <b>{DISP_LABELS[current?.status] ?? DISP_LABELS[status]}</b>
+            {current?.decidedByName ? <> — set by {current.decidedByName}</> : ''}
+            {current?.snoozeUntil ? <> · quiet until {new Date(current.snoozeUntil).toLocaleDateString()}</> : ''}
+          </div>
+        )}
+      </div>
+
+      <div style={{ fontSize: 11.5, color: '#9ca3af', lineHeight: 1.6, marginTop: 12 }}>
+        A cutoff change is a real selection-procedure change with legal weight. Use this to support a documented, job-related
+        validation your counsel (and ideally an I-O psychologist) signs off on — not to make the call automatically.
+      </div>
+    </div>
+  );
+}
+
 export default function Fairness() {
   const { data: roles } = trpc.eeo.auditRoles.useQuery();
   const [jdId, setJdId] = useState<string>('');
@@ -152,6 +276,10 @@ export default function Fairness() {
           )}
 
           {audit.dimensions.map((d: any) => <Dimension key={d.key} dim={d} />)}
+
+          {flagged > 0 && effectiveJd && (
+            <Remediation jdId={effectiveJd} baseCutoff={(audit as any).baseCutoff ?? 30} liveFlagged={flagged} />
+          )}
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', borderTop: '1px solid #f3f4f6', paddingTop: 14, marginTop: 4 }}>
             <Lock size={14} style={{ color: '#9ca3af', marginTop: 2 }} />

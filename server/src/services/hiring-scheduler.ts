@@ -29,6 +29,7 @@ import { businessHoursBetween } from '../routers/interviews.js';
 import { valueReviews } from '../db/schema/values.js';
 import { users } from '../db/schema/core.js';
 import { notifications } from '../db/schema/notifications.js';
+import { biasFlagDispositions, ACK_STATUSES } from '../db/schema/biasRemediation.js';
 import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
 import { runAdverseImpactAudit } from './adverseImpact.js';
 
@@ -885,6 +886,17 @@ async function runBiasAlert(): Promise<JobResult> {
       }
     }
     if (!flags.length) continue;
+
+    // Respect an operator disposition (Remediate-this-flag). An acknowledged
+    // flag (reviewed / validated / remediation-applied-monitoring) or an active
+    // snooze means someone has engaged with it — don't keep re-raising it.
+    const disp = await db.query.biasFlagDispositions.findFirst({
+      where: eq(biasFlagDispositions.jdId, role.jdId),
+    });
+    if (disp) {
+      if ((ACK_STATUSES as readonly string[]).includes(disp.status)) continue;
+      if (disp.status === 'snoozed' && disp.snoozeUntil && new Date(disp.snoozeUntil) > new Date()) continue;
+    }
 
     // Dedupe: skip if we already alerted on this role inside the cooldown window.
     const recent = (await db.select().from(notifications).where(and(

@@ -120,6 +120,109 @@ function buildDimension(key: string, label: string, rows: RawRow[]): Dimension {
   return { key, label, reference, groups };
 }
 
+// ── Cutoff what-if (Remediate-this-flag) ───────────────────
+// Re-derives the four-fifths tally at an ARBITRARY CCAT cutoff over the
+// same audited population, from candidates.ccat_score (not the stored
+// pass/fail outcome). This models the one legal, group-blind remediation
+// lever the app actually has: moving the cutoff for everyone, then seeing
+// whether the disparity shrinks. Same aggregate-only, MIN_SAMPLE-suppressed
+// rules as the live audit.
+async function tallyByColumnAtCutoff(
+  db: DrizzleClient,
+  jdId: string,
+  column: 'sex' | 'race_ethnicity' | 'veteran_status' | 'disability_status',
+  cutoff: number,
+): Promise<RawRow[]> {
+  const col = sql.raw(`er."${column}"`);
+  const res: any = await db.execute(sql`
+    WITH latest AS (
+      SELECT DISTINCT ON (dl.candidate_id) dl.candidate_id
+      FROM decision_log dl
+      WHERE dl.decision_type = 'assessment_gate'
+      ORDER BY dl.candidate_id, dl.created_at DESC
+    )
+    SELECT ${col} AS grp,
+           COUNT(*)::int AS assessed,
+           SUM(CASE WHEN c.ccat_score IS NOT NULL AND c.ccat_score >= ${cutoff} THEN 1 ELSE 0 END)::int AS passed
+    FROM latest l
+    JOIN candidates c ON c.id = l.candidate_id
+    JOIN eeo_responses er ON er.candidate_id = c.id AND er.status = 'completed'
+    WHERE c.jd_id = ${jdId}
+      AND ${col} IS NOT NULL
+      AND ${col} <> 'Declined'
+    GROUP BY ${col}
+    ORDER BY ${col}
+  `);
+  return (res.rows ?? res) as RawRow[];
+}
+
+export interface SimulationResult {
+  jdId: string;
+  cutoff: number;
+  baseCutoff: number;
+  addedCount: number;        // pass at `cutoff` but not at baseCutoff (cutoff lowered)
+  removedCount: number;      // pass at baseCutoff but not at `cutoff` (cutoff raised)
+  addedMedianPercentile: number | null; // median CCAT percentile of the added candidates
+  dimensions: Dimension[];
+}
+
+export async function simulateCutoffAudit(
+  db: DrizzleClient,
+  jdId: string,
+  cutoff: number,
+  baseCutoff = 30,
+): Promise<SimulationResult> {
+  const [sexRows, raceRows, vetRows, disRows] = await Promise.all([
+    tallyByColumnAtCutoff(db, jdId, 'sex', cutoff),
+    tallyByColumnAtCutoff(db, jdId, 'race_ethnicity', cutoff),
+    tallyByColumnAtCutoff(db, jdId, 'veteran_status', cutoff),
+    tallyByColumnAtCutoff(db, jdId, 'disability_status', cutoff),
+  ]);
+
+  // Who this cutoff change adds or removes vs the current gate, over the
+  // whole role — a real "who does this let through" readout, not a synthetic
+  // quality score. Added = below the old bar but at/above the new one.
+  const lo = Math.min(cutoff, baseCutoff);
+  const hi = Math.max(cutoff, baseCutoff);
+  const deltaRes: any = await db.execute(sql`
+    WITH latest AS (
+      SELECT DISTINCT ON (dl.candidate_id) dl.candidate_id
+      FROM decision_log dl
+      WHERE dl.decision_type = 'assessment_gate'
+      ORDER BY dl.candidate_id, dl.created_at DESC
+    )
+    SELECT c.ccat_score AS score, c.ccat_percentile AS pct
+    FROM latest l
+    JOIN candidates c ON c.id = l.candidate_id
+    WHERE c.jd_id = ${jdId}
+      AND c.ccat_score IS NOT NULL
+      AND c.ccat_score >= ${lo} AND c.ccat_score < ${hi}
+  `);
+  const deltaRows = (deltaRes.rows ?? deltaRes) as { score: number; pct: number | null }[];
+  const lowered = cutoff < baseCutoff;
+  const addedCount = lowered ? deltaRows.length : 0;
+  const removedCount = lowered ? 0 : deltaRows.length;
+  const pcts = deltaRows.map((r) => r.pct).filter((p): p is number => p != null).sort((a, b) => a - b);
+  const addedMedianPercentile = lowered && pcts.length
+    ? pcts[Math.floor((pcts.length - 1) / 2)]
+    : null;
+
+  return {
+    jdId,
+    cutoff,
+    baseCutoff,
+    addedCount,
+    removedCount,
+    addedMedianPercentile,
+    dimensions: [
+      buildDimension('sex', 'By sex', sexRows),
+      buildDimension('raceEthnicity', 'By race / ethnicity', raceRows),
+      buildDimension('veteran', 'By veteran status', vetRows),
+      buildDimension('disability', 'By disability status', disRows),
+    ],
+  };
+}
+
 export async function runAdverseImpactAudit(db: DrizzleClient, jdId: string): Promise<AuditResult> {
   const [sexRows, raceRows, vetRows, disRows] = await Promise.all([
     tallyByColumn(db, jdId, 'sex'),
