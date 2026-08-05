@@ -140,10 +140,14 @@ export default function JobDescriptions() {
     }));
   };
 
-  // How many openings (requisitions) reuse this library description. A req links
-  // to its JD via base_jd_id; legacy 1:1 rows are counted via the JD's own reqId.
-  const usedBy = (jd: any) =>
-    (requisitions ?? []).filter((r: any) => r.baseJdId === jd.id || r.id === jd.reqId).length;
+  // How many currently-OPEN roles use this library description. A req links to
+  // its JD via base_jd_id (legacy 1:1 rows via the JD's own reqId). Only count
+  // status === 'Open' — the app's definition of an open role everywhere else —
+  // so Draft / Closed / seeded requisitions don't inflate the number.
+  const openRolesFor = (jd: any) =>
+    (requisitions ?? []).filter(
+      (r: any) => r.status === 'Open' && (r.baseJdId === jd.id || r.id === jd.reqId),
+    ).length;
 
   // Group the library by the description's own department.
   const grouped = (jobDescriptions ?? []).reduce((acc: Record<string, any[]>, jd: any) => {
@@ -338,7 +342,7 @@ export default function JobDescriptions() {
               <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
                 <th className="px-4 py-3">Job Title</th>
                 <th className="px-4 py-3">EPP Values</th>
-                <th className="px-4 py-3">Used by</th>
+                <th className="px-4 py-3">Open roles</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 w-28"></th>
               </tr>
@@ -353,7 +357,7 @@ export default function JobDescriptions() {
                     </td>
                   </tr>
                   {grouped[dept].map((jd: any) => {
-                    const openings = usedBy(jd);
+                    const openings = openRolesFor(jd);
                     return (
                       <tr key={jd.id} className={`border-b border-gray-50 text-sm ${jd.pendingReview ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}`}>
                         <td className="px-4 py-3 font-medium text-gray-900">
@@ -374,8 +378,8 @@ export default function JobDescriptions() {
                         </td>
                         <td className="px-4 py-3 text-xs">
                           {openings > 0
-                            ? <span className="text-gray-700"><span className="inline-flex items-center justify-center min-w-[20px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold mr-1.5">{openings}</span>{openings === 1 ? 'opening' : 'openings'}</span>
-                            : <span className="text-gray-400">— unused</span>}
+                            ? <span className="text-gray-700"><span className="inline-flex items-center justify-center min-w-[20px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold mr-1.5">{openings}</span>{openings === 1 ? 'open role' : 'open roles'}</span>
+                            : <span className="text-gray-400">— none open</span>}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_COLORS[jdStatus(jd)] ?? ''}`}>
