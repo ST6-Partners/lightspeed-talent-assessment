@@ -416,11 +416,40 @@ export default function Candidates() {
     };
   }).sort((a, b) => b.cands.length - a.cands.length);
 
+  // Show open roles that have NO candidates yet as empty cards, so the list
+  // matches the "Open roles" count. Without this a freshly opened role (no
+  // applicants) is counted in the stat but never rendered. Keyed by the role's
+  // JD, resolved from the requisition's own JD (jd.reqId) or its base-JD link;
+  // skipped when a candidate group already covers that JD.
+  const presentJdIds = new Set(roleGroups.map((g) => g.jdId));
+  const emptyOpenGroups = ((requisitions ?? []) as any[])
+    .filter((r: any) => r.status === 'Open')
+    .map((r: any) => {
+      const jd = ((jobDescriptions ?? []) as any[]).find((j: any) => j.reqId === r.id)
+        ?? (r.baseJdId ? jdById[r.baseJdId] : null);
+      return jd ? { r, jd } : null;
+    })
+    .filter((x: any) => !!x && !presentJdIds.has(x.jd.id))
+    // Dedupe: two open reqs could resolve to the same reusable JD.
+    .filter((x: any, i: number, arr: any[]) => arr.findIndex((y: any) => y.jd.id === x.jd.id) === i)
+    .map(({ r, jd }: any) => ({
+      jdId: jd.id,
+      cands: [] as any[],
+      closed: [] as any[],
+      counts: {} as Record<string, number>,
+      reqStatus: r.status as string | null,
+      title: jd.jobTitle ?? getJdTitle(jd.id),
+      dept: (r.department ?? '') as string,
+      hm: (r.hiringManager ?? '') as string,
+    }))
+    .sort((a: any, b: any) => a.title.localeCompare(b.title));
+  const allRoleGroups = [...roleGroups, ...emptyOpenGroups];
+
   // Role search: filter the role list by title or department (case-insensitive).
   const roleQuery = roleSearch.trim().toLowerCase();
   const visibleRoleGroups = roleQuery
-    ? roleGroups.filter((g) => g.title.toLowerCase().includes(roleQuery) || (g.dept ?? '').toLowerCase().includes(roleQuery))
-    : roleGroups;
+    ? allRoleGroups.filter((g) => g.title.toLowerCase().includes(roleQuery) || (g.dept ?? '').toLowerCase().includes(roleQuery))
+    : allRoleGroups;
 
   // A role whose requisition is Closed (manually or auto-filled) is no longer an
   // open role — move it out of the main list into a collapsed "Closed roles"
@@ -537,6 +566,11 @@ export default function Candidates() {
                       })}
                     </div>
                   </div>
+                  {!collapsed && g.cands.length === 0 && g.closed.length === 0 && (
+                    <div className="border-t border-gray-100 px-4 py-4 text-sm text-gray-500">
+                      No candidates in this role yet. Use <span className="font-medium text-gray-700">Add Candidate</span> and pick this role to start its pipeline.
+                    </div>
+                  )}
                   {!collapsed && g.jdId !== 'none' && g.cands.length > 0 && <RoleRankingDropdown jdId={g.jdId} />}
                   {!collapsed && g.cands.length > 0 && (
                     <div className="border-t border-gray-100 overflow-x-auto">
