@@ -7,9 +7,8 @@
 // ============================================================
 
 import { useState } from 'react';
-import { ShieldAlert, Lock } from 'lucide-react';
+import { ShieldAlert, Lock, ChevronRight, ChevronDown } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
-import SearchSelect from '../../components/SearchSelect';
 
 const GREEN = '#1D9E75';
 const RED = '#E24B4A';
@@ -192,14 +191,9 @@ function Remediation({ jdId, baseCutoff, liveFlagged }: { jdId: string; baseCuto
   );
 }
 
-export default function Fairness() {
-  const { data: roles } = trpc.eeo.auditRoles.useQuery();
-  const [jdId, setJdId] = useState<string>('');
-  const effectiveJd = jdId || roles?.[0]?.jdId || '';
-  const { data: audit, isLoading, refetch } = trpc.eeo.audit.useQuery(
-    { jdId: effectiveJd },
-    { enabled: !!effectiveJd },
-  );
+// ── The full audit + remediation for one role (shown when a row expands) ──
+function RoleDetail({ jdId }: { jdId: string }) {
+  const { data: audit, isLoading, refetch } = trpc.eeo.audit.useQuery({ jdId }, { enabled: !!jdId });
   const retryWrites = trpc.decisions.retryFailures.useMutation({ onSuccess: () => refetch() });
 
   const lowResponse = audit && audit.responseRate < 50;
@@ -207,88 +201,151 @@ export default function Fairness() {
     ? audit.dimensions.reduce((n: number, d: any) => n + d.groups.filter((g: any) => g.status === 'flagged').length, 0)
     : 0;
 
+  if (isLoading || !audit) return <div style={{ fontSize: 13, color: '#9ca3af', padding: '10px 2px' }}>Loading…</div>;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 18, fontSize: 13 }}>
+        <div><span style={{ color: '#6b7280' }}>Assessed</span> <span style={{ fontWeight: 600 }}>{audit.assessed}</span></div>
+        <div><span style={{ color: '#6b7280' }}>Answered the voluntary survey</span> <span style={{ fontWeight: 600 }}>{audit.responseRate}%</span></div>
+        <div><span style={{ color: '#6b7280' }}>Groups flagged</span> <span style={{ fontWeight: 600, color: flagged ? RED : '#111827' }}>{flagged}</span></div>
+      </div>
+
+      {audit.integrityGap > 0 && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fef2f2', color: '#991b1b', borderRadius: 6, padding: '10px 12px', marginBottom: 18, fontSize: 13, lineHeight: 1.6 }}>
+          <ShieldAlert size={18} style={{ marginTop: 1, flexShrink: 0 }} />
+          <span style={{ flex: 1 }}>
+            {audit.integrityGap} assessment decision{audit.integrityGap > 1 ? 's' : ''} for this role could not be recorded, so this audit may be missing those candidates. Replay the dropped records to make it complete.
+          </span>
+          <button
+            onClick={() => retryWrites.mutate()}
+            disabled={retryWrites.isLoading}
+            style={{ flexShrink: 0, background: '#991b1b', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            {retryWrites.isLoading ? 'Replaying…' : 'Replay records'}
+          </button>
+        </div>
+      )}
+
+      {lowResponse && (
+        <div style={{ display: 'flex', gap: 10, background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '10px 12px', marginBottom: 18, fontSize: 13, lineHeight: 1.6 }}>
+          <ShieldAlert size={18} style={{ marginTop: 1, flexShrink: 0 }} />
+          <span>Only {audit.responseRate}% of assessed candidates answered the survey. Results are unreliable at this response rate — treat any flag as a prompt to investigate, not a conclusion.</span>
+        </div>
+      )}
+
+      {flagged > 0 && !lowResponse && (
+        <div style={{ display: 'flex', gap: 10, background: '#fef2f2', color: '#991b1b', borderRadius: 6, padding: '10px 12px', marginBottom: 18, fontSize: 13, lineHeight: 1.6 }}>
+          <ShieldAlert size={18} style={{ marginTop: 1, flexShrink: 0 }} />
+          <span>{flagged} group{flagged > 1 ? 's' : ''} on this role pass below the four-fifths (0.80) threshold. Review whether a score of 30 is job-related for this role.</span>
+        </div>
+      )}
+
+      {audit.dimensions.map((d: any) => <Dimension key={d.key} dim={d} />)}
+
+      {flagged > 0 && (
+        <Remediation jdId={jdId} baseCutoff={(audit as any).baseCutoff ?? 30} liveFlagged={flagged} />
+      )}
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', borderTop: '1px solid #f3f4f6', paddingTop: 14, marginTop: 4 }}>
+        <Lock size={14} style={{ color: '#9ca3af', marginTop: 2 }} />
+        <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.6 }}>
+          An internal early-warning tool, not a compliance determination. Groups under 30 are not scored.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Short disposition pill for a summary row.
+function dispPill(status: string | null, snoozeUntil: any): { text: string; bg: string; fg: string } | null {
+  if (!status || status === 'open') return null;
+  if (status === 'snoozed') {
+    const until = snoozeUntil ? ` to ${new Date(snoozeUntil).toLocaleDateString()}` : '';
+    return { text: `Snoozed${until}`, bg: '#eef0f2', fg: '#51606A' };
+  }
+  const map: Record<string, string> = {
+    reviewed_no_change: 'Reviewed',
+    validated_documented: 'Documented',
+    remediation_applied_monitoring: 'Monitoring',
+  };
+  return { text: map[status] ?? status, bg: '#E6F4EF', fg: '#136047' };
+}
+
+export default function Fairness() {
+  const { data: summary, isLoading } = trpc.eeo.flagSummary.useQuery();
+  const [openJd, setOpenJd] = useState<string | null>(null);
+
+  const totalFlaggedRoles = (summary ?? []).filter((r: any) => r.flaggedCount > 0).length;
+
   return (
     <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb', padding: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Fairness check — assessment gate</div>
-          <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>Who cleared the CCAT cutoff of 30, by group</div>
-        </div>
-        <div style={{ width: 280 }}>
-          <SearchSelect
-            value={effectiveJd}
-            onChange={setJdId}
-            placeholder="Search a role…"
-            emptyText="No matching roles"
-            options={(roles ?? []).map((r: any) => ({ value: r.jdId, label: `${r.jobTitle} (${r.assessed})` }))}
-          />
-        </div>
+      <div style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Fairness check — assessment gate</div>
+      <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.7, margin: '6px 0 16px' }}>
+        Each role's automated assessment gate, checked against the four-fifths rule. A group is flagged when
+        it clears the CCAT cutoff at less than four-fifths (80%) of the top group's rate. Click a role to open
+        its full breakdown and remediation. Demographics are voluntary, self-reported, shown in aggregate
+        only, and never used to score, advance, or reject anyone.
       </div>
 
-      <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.7, margin: '14px 0 18px' }}>
-        Each bar is the share of a group that scored 30 or higher. The dashed line sits at four-fifths of
-        the top group's rate — a bar that falls short is flagged, meaning that group is clearing the cutoff
-        noticeably less often. Demographics are voluntary, self-reported, shown in aggregate only, and never
-        used to score, advance, or reject anyone.
-      </div>
-
-      {!roles?.length && (
-        <div style={{ fontSize: 13, color: '#9ca3af' }}>No roles have assessment-gate decisions yet.</div>
+      {!isLoading && summary && summary.length > 0 && (
+        <div style={{ fontSize: 13, marginBottom: 14 }}>
+          <span style={{ color: '#6b7280' }}>Roles with a flag</span>{' '}
+          <span style={{ fontWeight: 600, color: totalFlaggedRoles ? RED : GREEN }}>{totalFlaggedRoles}</span>
+          <span style={{ color: '#9ca3af' }}> of {summary.length}</span>
+        </div>
       )}
 
       {isLoading && <div style={{ fontSize: 13, color: '#9ca3af' }}>Loading…</div>}
-
-      {audit && (
-        <>
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 18, fontSize: 13 }}>
-            <div><span style={{ color: '#6b7280' }}>Assessed</span> <span style={{ fontWeight: 600 }}>{audit.assessed}</span></div>
-            <div><span style={{ color: '#6b7280' }}>Answered the voluntary survey</span> <span style={{ fontWeight: 600 }}>{audit.responseRate}%</span></div>
-            <div><span style={{ color: '#6b7280' }}>Groups flagged</span> <span style={{ fontWeight: 600, color: flagged ? RED : '#111827' }}>{flagged}</span></div>
-          </div>
-
-          {audit.integrityGap > 0 && (
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fef2f2', color: '#991b1b', borderRadius: 6, padding: '10px 12px', marginBottom: 18, fontSize: 13, lineHeight: 1.6 }}>
-              <ShieldAlert size={18} style={{ marginTop: 1, flexShrink: 0 }} />
-              <span style={{ flex: 1 }}>
-                {audit.integrityGap} assessment decision{audit.integrityGap > 1 ? 's' : ''} for this role could not be recorded, so this audit may be missing those candidates. Replay the dropped records to make it complete.
-              </span>
-              <button
-                onClick={() => retryWrites.mutate()}
-                disabled={retryWrites.isLoading}
-                style={{ flexShrink: 0, background: '#991b1b', color: '#fff', border: 'none', borderRadius: 6, padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                {retryWrites.isLoading ? 'Replaying…' : 'Replay records'}
-              </button>
-            </div>
-          )}
-
-          {lowResponse && (
-            <div style={{ display: 'flex', gap: 10, background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '10px 12px', marginBottom: 18, fontSize: 13, lineHeight: 1.6 }}>
-              <ShieldAlert size={18} style={{ marginTop: 1, flexShrink: 0 }} />
-              <span>Only {audit.responseRate}% of assessed candidates answered the survey. Results are unreliable at this response rate — treat any flag as a prompt to investigate, not a conclusion.</span>
-            </div>
-          )}
-
-          {flagged > 0 && !lowResponse && (
-            <div style={{ display: 'flex', gap: 10, background: '#fef2f2', color: '#991b1b', borderRadius: 6, padding: '10px 12px', marginBottom: 18, fontSize: 13, lineHeight: 1.6 }}>
-              <ShieldAlert size={18} style={{ marginTop: 1, flexShrink: 0 }} />
-              <span>{flagged} group{flagged > 1 ? 's' : ''} on this role pass below the four-fifths (0.80) threshold. Review whether a score of 30 is job-related for this role.</span>
-            </div>
-          )}
-
-          {audit.dimensions.map((d: any) => <Dimension key={d.key} dim={d} />)}
-
-          {flagged > 0 && effectiveJd && (
-            <Remediation jdId={effectiveJd} baseCutoff={(audit as any).baseCutoff ?? 30} liveFlagged={flagged} />
-          )}
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', borderTop: '1px solid #f3f4f6', paddingTop: 14, marginTop: 4 }}>
-            <Lock size={14} style={{ color: '#9ca3af', marginTop: 2 }} />
-            <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.6 }}>
-              An internal early-warning tool, not a compliance determination. Groups under 30 are not scored.
-            </div>
-          </div>
-        </>
+      {!isLoading && summary && summary.length === 0 && (
+        <div style={{ fontSize: 13, color: '#9ca3af' }}>No roles have assessment-gate decisions yet.</div>
       )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {(summary ?? []).map((r: any) => {
+          const open = openJd === r.jdId;
+          const pill = dispPill(r.dispositionStatus, r.snoozeUntil);
+          return (
+            <div key={r.jdId} style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
+              <button
+                onClick={() => setOpenJd(open ? null : r.jdId)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: open ? '#f9fafb' : '#fff', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+                {open
+                  ? <ChevronDown size={16} style={{ color: '#9ca3af', flexShrink: 0 }} />
+                  : <ChevronRight size={16} style={{ color: '#9ca3af', flexShrink: 0 }} />}
+                <div style={{ flexShrink: 0, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 240 }}>{r.jobTitle}</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>{r.assessed} assessed</div>
+                </div>
+                <div style={{ flex: 1, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {r.lowResponse ? (
+                    <span style={{ fontSize: 11.5, color: '#92400e', background: '#fef3c7', borderRadius: 999, padding: '2px 9px' }}>Low response — unreliable</span>
+                  ) : r.flaggedCount === 0 ? (
+                    <span style={{ fontSize: 12, color: GREEN }}>Within range</span>
+                  ) : (
+                    <>
+                      {r.flags.slice(0, 3).map((f: any, i: number) => (
+                        <span key={i} style={{ fontSize: 11.5, color: '#991b1b', background: '#F8EAE8', borderRadius: 999, padding: '2px 9px', whiteSpace: 'nowrap' }}>
+                          {f.group}{f.ratio != null ? ` ${f.ratio}x` : ''}
+                        </span>
+                      ))}
+                      {r.flags.length > 3 && <span style={{ fontSize: 11.5, color: '#991b1b' }}>+{r.flags.length - 3} more</span>}
+                    </>
+                  )}
+                </div>
+                {pill && <span style={{ fontSize: 11, fontWeight: 600, background: pill.bg, color: pill.fg, borderRadius: 999, padding: '2px 9px', flexShrink: 0 }}>{pill.text}</span>}
+                {r.flaggedCount > 0 && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: RED, borderRadius: 999, padding: '2px 8px', flexShrink: 0 }}>{r.flaggedCount}</span>
+                )}
+              </button>
+              {open && (
+                <div style={{ borderTop: '1px solid #eef0f2', padding: '14px 14px 16px' }}>
+                  <RoleDetail jdId={r.jdId} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

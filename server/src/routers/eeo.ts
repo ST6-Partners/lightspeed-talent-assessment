@@ -247,4 +247,53 @@ export const eeoRouter = router({
         .onConflictDoUpdate({ target: biasFlagDispositions.jdId, set: values });
       return { ok: true };
     }),
+
+  // ── ADMIN: one-line-per-role concern summary (Bias tab triage list) ──
+  // Runs the four-fifths audit for every role with assessment-gate decisions
+  // and returns a compact roll-up: flagged concerns + current disposition.
+  // Powers the summarized list at the top of the Bias tab; a row expands to
+  // the full audit. Aggregate only.
+  flagSummary: protectedProcedure
+    .use(requireAdmin)
+    .query(async ({ ctx }) => {
+      const rolesRes: any = await ctx.db.execute(sql`
+        SELECT jd.id AS "jdId", jd.job_title AS "jobTitle", COUNT(DISTINCT dl.candidate_id)::int AS assessed
+        FROM decision_log dl
+        JOIN candidates c ON c.id = dl.candidate_id
+        JOIN job_descriptions jd ON jd.id = c.jd_id
+        WHERE dl.decision_type = 'assessment_gate'
+        GROUP BY jd.id, jd.job_title
+        ORDER BY jd.job_title ASC
+      `);
+      const roles = (rolesRes.rows ?? rolesRes) as { jdId: string; jobTitle: string; assessed: number }[];
+
+      const dispRows = await ctx.db.select().from(biasFlagDispositions);
+      const dispByJd = new Map(dispRows.map((d) => [d.jdId, d]));
+
+      const summaries = await Promise.all(roles.map(async (role) => {
+        const audit = await runAdverseImpactAudit(ctx.db, role.jdId);
+        const flags: { dimension: string; group: string; passRate: number | null; ratio: number | null }[] = [];
+        for (const dim of audit.dimensions) {
+          for (const g of dim.groups) {
+            if (g.status === 'flagged') flags.push({ dimension: dim.label, group: g.group, passRate: g.passRate, ratio: g.ratio });
+          }
+        }
+        const d = dispByJd.get(role.jdId);
+        return {
+          jdId: role.jdId,
+          jobTitle: role.jobTitle,
+          assessed: audit.assessed,
+          responseRate: audit.responseRate,
+          lowResponse: audit.responseRate < 50,
+          flaggedCount: flags.length,
+          flags,
+          dispositionStatus: d?.status ?? null,
+          snoozeUntil: d?.snoozeUntil ?? null,
+        };
+      }));
+
+      // Most concerning first: flagged roles by flag count, then the rest.
+      summaries.sort((a, b) => b.flaggedCount - a.flaggedCount || a.jobTitle.localeCompare(b.jobTitle));
+      return summaries;
+    }),
 });
