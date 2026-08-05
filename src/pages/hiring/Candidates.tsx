@@ -54,7 +54,14 @@ export function needsAction(c: any): boolean {
       return true;
     }
     case 'Interview': return !!c.interviewNeedsOutreach;
-    case 'Work Sample': return !!(c.workSampleSubmittedAt || c.workSampleScore != null);
+    case 'Work Sample': {
+      // Take-home: action once there's a submission or score to review.
+      if (c.workSampleSubmittedAt || c.workSampleScore != null) return true;
+      // Live walkthrough: action while the recruiter still needs to offer times
+      // (nothing scheduled yet, no windows sent). Once sent, it's on the candidate.
+      if (c.workSampleIsWalkthrough && !c.workSampleScheduledAt && !c.workSampleBookingOpenedAt) return true;
+      return false;
+    }
     case 'Phone Screen': {
       // Needs action until the CANDIDATE confirms a time (phoneScreenScheduledAt).
       // Covers: recruiter still owes availability, windows sent but not yet booked,
@@ -106,6 +113,12 @@ export function needsActionInfo(c: any): NeedsActionInfo {
     };
   }
   if (c.currentStage === 'Work Sample') {
+    if (c.workSampleIsWalkthrough && !(c.workSampleSubmittedAt || c.workSampleScore != null)) {
+      return {
+        headline: 'Offer walkthrough times',
+        detail: 'This role’s work sample is a live walkthrough. Offer at least 3 time windows in the Work Sample section below so the candidate can pick one.',
+      };
+    }
     return {
       headline: 'Review the work sample',
       detail: 'The candidate’s work sample is in and AI-graded (advisory only). Review it in the Work Sample section below, then advance or reject.',

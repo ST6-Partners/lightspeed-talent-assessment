@@ -1,5 +1,5 @@
 import { resolveDeptWorkSample } from '../services/workSampleResolver.js';
-import { ensureWalkthroughRound } from '../services/workSampleWalkthrough.js';
+import { ensureWalkthroughRound, WALKTHROUGH_ROUND_NAME } from '../services/workSampleWalkthrough.js';
 // ============================================================
 // CANDIDATES ROUTER — CRUD + stage management + email triggers
 // ============================================================
@@ -620,10 +620,17 @@ export const candidatesRouter = router({
       }).from(offerApprovals).orderBy(desc(offerApprovals.createdAt));
       const offerStateById = new Map<string, string>();
       for (const r of offerRows) { if (!offerStateById.has(r.candidateId)) offerStateById.set(r.candidateId, r.status); }
+      // Which candidates have a Work Sample WALKTHROUGH round — so the Work Sample
+      // Needs-action marker can flag "offer walkthrough times" (there's no take-home
+      // submission to wait on for a walkthrough).
+      const walkRounds = await ctx.db.select({ candidateId: candidateInterviews.candidateId })
+        .from(candidateInterviews).where(eq(candidateInterviews.roundName, WALKTHROUGH_ROUND_NAME));
+      const walkIds = new Set(walkRounds.map((r) => r.candidateId));
       return result.map((c) => ({
         ...c,
         interviewNeedsOutreach: interviewNeedIds.has(c.id),
         offerApprovalState: offerStateById.get(c.id) ?? null,
+        workSampleIsWalkthrough: walkIds.has(c.id),
       }));
     }),
 
