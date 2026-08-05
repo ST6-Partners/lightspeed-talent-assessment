@@ -1283,6 +1283,27 @@ export async function sendApprovalRequest(to: string, d: ApprovalRequestData): P
 
 export const HIRING_TEAM_INBOX = process.env.HIRING_TEAM_INBOX ?? 'hiring-team@lightspeed.test';
 
+// Recruiter nudge: a live-walkthrough candidate reached Work Sample, so the
+// recruiter needs to offer availability windows (nothing goes to the candidate
+// until they do). Sent to the hiring-team inbox on walkthrough-round creation.
+export async function emailWalkthroughAvailabilityNeeded(data: { candidateName: string; jobTitle?: string; candidateId: string }) {
+  const base = (process.env.APP_BASE_URL ?? (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : '')).replace(/\/$/, '');
+  const link = base ? `${base}/hiring/candidates?candidate=${data.candidateId}` : '';
+  const name = data.candidateName || 'A candidate';
+  const first = data.candidateName ? data.candidateName.split(' ')[0] : 'the candidate';
+  await sendEmail({
+    to: HIRING_TEAM_INBOX,
+    templateId: 'walkthrough_availability_needed',
+    subject: `Action needed: offer walkthrough times — ${name}`,
+    html: wrap(`
+      ${h1('Offer work sample walkthrough times')}
+      ${p(`<strong>${name}</strong>${data.jobTitle ? ` for <strong>${data.jobTitle}</strong>` : ''} has reached the Work Sample stage, and this role's work sample is a live walkthrough.`)}
+      ${p('Please offer at least 3 time windows in the Work Sample section so the candidate can pick one. Nothing is sent to the candidate until you do.')}
+      ${link ? p(`<a href="${link}">Open ${first} and offer times</a>`) : ''}
+    `),
+  });
+}
+
 interface KickoffData {
   department: string;
   jobTitle?: string;
