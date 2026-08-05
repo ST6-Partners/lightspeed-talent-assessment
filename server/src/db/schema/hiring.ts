@@ -301,6 +301,13 @@ export const candidates = pgTable('candidates', {
   managerAware: boolean('manager_aware').notNull().default(false),
   internalEmployee: varchar('internal_employee', { length: 200 }),
   leadershipAwareness: text('leadership_awareness'),
+  // Offer e-signature. The offer email carries an "Agree & sign" button pointing at
+  // /offer-sign/<offerSignToken>. When the candidate signs (in-app, or via Adobe
+  // Sign's own flow → webhook), they auto-advance to Hired and the role auto-closes
+  // once its openings are filled. offerSignedAt makes completion idempotent.
+  offerSignToken: varchar('offer_sign_token', { length: 64 }),
+  offerAgreementId: varchar('offer_agreement_id', { length: 128 }),
+  offerSignedAt: timestamp('offer_signed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

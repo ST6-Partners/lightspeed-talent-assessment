@@ -743,6 +743,13 @@
       "when": 1960000074002,
       "tag": "0106_jd_req_optional",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1960000075000,
+      "tag": "0107_offer_esign",
+      "breakpoints": true
     }
   ]
 }

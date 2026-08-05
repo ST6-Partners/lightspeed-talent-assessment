@@ -467,12 +467,23 @@ export async function emailPostInterviewThankYou(data: CandidateEmailData) {
 }
 
 // 7. Offer extended
-export async function emailOfferLetter(data: { to: string; firstName: string; jobTitle?: string; letterHtml: string }) {
+export function offerSignBlock(signUrl: string): string {
+  return `
+    <!--OFFER_SIGN_BLOCK-->
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px 24px;margin:24px 0 8px;text-align:center;">
+      <div style="font-size:15px;font-weight:700;color:#166534;margin:0 0 6px;">Ready to accept? Sign electronically</div>
+      <p style="font-size:13px;line-height:1.6;color:#15803d;margin:0 0 16px;">Review your offer and sign securely via Adobe Sign \u2014 no printing required. Signing accepts the offer.</p>
+      ${button('Agree &amp; sign', signUrl)}
+    </div>`;
+}
+
+export async function emailOfferLetter(data: { to: string; firstName: string; jobTitle?: string; letterHtml: string; signUrl?: string }) {
+  const html = data.signUrl ? `${data.letterHtml}${offerSignBlock(data.signUrl)}` : data.letterHtml;
   await sendEmail({
     to: data.to,
     templateId: 'offer_letter',
     subject: `Your offer from Lightspeed Systems${data.jobTitle ? ` \u2014 ${data.jobTitle}` : ''}`,
-    html: data.letterHtml,
+    html,
   });
 }
 

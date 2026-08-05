@@ -465,6 +465,40 @@ async function main() {
     }).catch((err) => console.error('[Criteria] Webhook handler error:', err));
   });
 
+  // ── Adobe Sign webhook — offer signed → auto-advance to Hired ──
+  // Adobe verifies a new webhook by sending X-AdobeSign-ClientId, which must be
+  // echoed back (header + body). Real events carry { event, agreement: { id, status } };
+  // on a completed/signed agreement we map by offerAgreementId and complete the offer.
+  const adobeSignWebhook = async (req: any, res: any) => {
+    const clientId = (req.headers['x-adobesign-clientid'] as string | undefined) ?? '';
+    if (clientId) res.setHeader('X-AdobeSign-ClientId', clientId);
+
+    const body = (req.body ?? {}) as any;
+    const agreement = body.agreement ?? {};
+    const agreementId: string | undefined = agreement.id ?? body.agreementId;
+    const status: string = String(agreement.status ?? body.status ?? body.event ?? '').toUpperCase();
+
+    // Verification handshake (no event payload) → just echo the client id.
+    if (!agreementId) return res.status(200).json({ xAdobeSignClientId: clientId });
+
+    res.status(200).json({ xAdobeSignClientId: clientId, received: true });
+
+    const signed = /SIGNED|COMPLETED|WORKFLOW_COMPLETED/.test(status);
+    if (!signed) return;
+
+    import('./server/src/db.js').then(async ({ db }) => {
+      const { eq } = await import('drizzle-orm');
+      const { candidates } = await import('./server/src/db/schema/hiring.js');
+      const { completeOfferSignature } = await import('./server/src/services/offerSignature.js');
+      const candidate = await db.query.candidates.findFirst({ where: eq(candidates.offerAgreementId, agreementId) });
+      if (!candidate) { console.warn('[AdobeSign] no candidate for agreement', agreementId); return; }
+      await completeOfferSignature(db, candidate, { signerName: null, changedByUserId: null, via: 'adobe_sign' });
+      console.log('[AdobeSign] offer signed → Hired for candidate', candidate.id);
+    }).catch((err) => console.error('[AdobeSign] webhook handler error:', err));
+  };
+  app.get('/api/webhooks/adobe-sign', adobeSignWebhook);
+  app.post('/api/webhooks/adobe-sign', adobeSignWebhook);
+
   // ── Zoom webhook — recording ready ────────────────────────
   app.post('/api/webhooks/zoom', express.raw({ type: '*/*' }), async (req, res) => {
     const secret = process.env.ZOOM_WEBHOOK_SECRET_TOKEN;

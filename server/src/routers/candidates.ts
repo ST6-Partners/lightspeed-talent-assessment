@@ -5,7 +5,7 @@ import { ensureWalkthroughRound } from '../services/workSampleWalkthrough.js';
 // ============================================================
 
 import { z } from 'zod';
-import { eq, desc, and, isNull, isNotNull } from 'drizzle-orm';
+import { eq, desc, and, isNull, isNotNull, inArray } from 'drizzle-orm';
 import { candidateInterviews } from '../db/schema/interviews.js';
 import { TRPCError } from '@trpc/server';
 import { randomUUID } from 'node:crypto';
@@ -31,7 +31,7 @@ import {
   dispatchStageEmail,
   emailInterviewerQuestions,
   sendEmail,
-  emailOfferLetter, emailEeoSelfId, emailInvitedToAssessment } from '../services/email.js';
+  emailOfferLetter, emailEeoSelfId, emailInvitedToAssessment, offerSignBlock } from '../services/email.js';
 import { ensureAssessmentInvite, getAssessmentByToken, submitAssessment, isCriteriaConfigured } from '../services/assessmentPlaceholder.js';
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
@@ -40,7 +40,8 @@ import { scoreSkillsFit } from '../services/ai.js';
 import { computeEppScans, ingestEppResults, buildRoleFitNotes } from '../services/eppScans.js';
 import { draftTransitionPlan } from '../services/ai.js';
 import { renderOfferLetter, renderInternalOfferLetter, STANDARD_OFFER_CLAUSES, STANDARD_INTERNAL_OFFER_CLAUSES, type OfferLetterInput, type InternalOfferLetterInput } from '../services/offerLetter.js';
-import { createOfferAgreement } from '../services/adobeSign.js';
+import { createOfferAgreement, isAdobeSignConfigured } from '../services/adobeSign.js';
+import { completeOfferSignature } from '../services/offerSignature.js';
 import { getInternalReportConfig, setInternalReportConfig } from '../services/internalReport.js';
 import { applyAssessmentDecision } from '../services/assessmentDecision.js';
 import { seedCandidateResume, seedAssessmentResults, simulateUpstreamScores } from '../services/postAssessmentReview.js';
@@ -186,7 +187,31 @@ async function deliverOfferToCandidate(db: any, userId: string | null, candidate
   const jobTitle = offer.jobTitle;
   const letterHtml = renderOfferLetter(offer);
 
-  await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle, letterHtml }).catch((err) => console.warn('[email] emailOfferLetter failed (non-blocking):', err));
+  // Mint (or reuse) the e-signature token so the offer email carries an
+  // "Agree & sign" button \u2192 /offer-sign/<token>. When Adobe Sign is configured,
+  // also open a real agreement so its own signing flow + webhook stay in sync;
+  // in stub mode the in-app signing page is the signing surface.
+  const signToken = candidate.offerSignToken ?? randomUUID();
+  let agreementId: string | null = candidate.offerAgreementId ?? null;
+  if (isAdobeSignConfigured()) {
+    try {
+      const res = await createOfferAgreement({
+        candidateName: `${candidate.firstName ?? ''} ${candidate.lastName ?? ''}`.trim(),
+        candidateEmail: candidate.email,
+        jobTitle: jobTitle ?? 'the role',
+        letterHtml,
+      });
+      if (res.agreementId) agreementId = res.agreementId;
+    } catch (err) { console.warn('[adobesign] createOfferAgreement failed (non-blocking):', err); }
+  }
+  await db.update(candidates)
+    .set({ offerSignToken: signToken, offerAgreementId: agreementId, updatedAt: new Date() })
+    .where(eq(candidates.id, candidate.id));
+
+  const signUrl = `/offer-sign/${signToken}`;
+  const emailedHtml = `${letterHtml}${offerSignBlock(signUrl)}`;
+
+  await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle, letterHtml, signUrl }).catch((err) => console.warn('[email] emailOfferLetter failed (non-blocking):', err));
 
   const offerSubject = `Your offer from Lightspeed Systems${jobTitle ? ` \u2014 ${jobTitle}` : ''}`;
   try {
@@ -195,7 +220,7 @@ async function deliverOfferToCandidate(db: any, userId: string | null, candidate
       fromName: 'Lightspeed Hiring',
       toEmail: candidate.email,
       subject: offerSubject,
-      body: letterHtml,
+      body: emailedHtml,
       replyTag: 'offer',
       source: 'simulated',
       raw: { kind: 'offer_letter', candidateId: candidate.id },
@@ -1671,6 +1696,36 @@ export const candidatesRouter = router({
     }),
 
   // Recruiter: latest approval state for a candidate (drives the Offer section UI).
+  // Public (tokenized): the candidate opens their offer signing page.
+  offerSignView: publicProcedure
+    .input(z.object({ token: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.offerSignToken, input.token) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This signing link is invalid or has expired.' });
+      // Show the offer letter from the most recent offer email (strip the embedded sign block).
+      const [row] = await ctx.db.select().from(inboundEmails)
+        .where(and(eq(inboundEmails.toEmail, candidate.email), inArray(inboundEmails.replyTag, ['offer', 'internal_offer'])))
+        .orderBy(desc(inboundEmails.receivedAt)).limit(1);
+      const rawBody = ((row?.body as string | undefined) ?? '');
+      const letterHtml = rawBody.split('<!--OFFER_SIGN_BLOCK-->')[0];
+      return {
+        candidateName: `${candidate.firstName ?? ''} ${candidate.lastName ?? ''}`.trim(),
+        letterHtml,
+        alreadySigned: !!candidate.offerSignedAt || candidate.currentStage === 'Hired',
+      };
+    }),
+
+  // Public (tokenized): the candidate agrees & signs → auto-advance to Hired,
+  // close the role once its openings are filled. Idempotent.
+  offerSignAccept: publicProcedure
+    .input(z.object({ token: z.string().uuid(), signerName: z.string().min(1).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.offerSignToken, input.token) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This signing link is invalid or has expired.' });
+      const result = await completeOfferSignature(ctx.db, candidate, { signerName: input.signerName, changedByUserId: null, via: 'in_app' });
+      return { ok: true as const, alreadySigned: result.alreadyDone, roleClosed: result.roleClosed };
+    }),
+
   offerApprovalStatus: protectedProcedure
     .input(z.object({ candidateId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {

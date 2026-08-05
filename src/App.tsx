@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import OfferApproval from './pages/OfferApproval';
+import OfferSign from './pages/OfferSign';
 import JdReview from './pages/JdReview';
 import IntakeEdit from './pages/IntakeEdit';
 import Layout from './components/Layout';
@@ -56,6 +57,7 @@ export default function App() {
       <Route path="/apply-internal/:jdId" element={<ApplyInternal />} />
       <Route path="/approve/:token" element={<Approve />} />
       <Route path="/offer-approval/:token" element={<OfferApproval />} />
+      <Route path="/offer-sign/:token" element={<OfferSign />} />
       <Route path="/jd-review/:token" element={<JdReview />} />
       <Route path="/intake-edit/:token" element={<IntakeEdit />} />
       <Route element={<Layout />}>
