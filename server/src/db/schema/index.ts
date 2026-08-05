@@ -60,8 +60,8 @@ export { candidateEppScores } from './epp.js';
 // Decision Log (1 table) — Phase 2 decision provenance & transparency
 export { decisionLog } from './decisions.js';
 
-// Bias-flag disposition (1 table) — Remediate-this-flag lifecycle on the Bias tab
-export { biasFlagDispositions } from './biasRemediation.js';
+// Bias-flag disposition + alert history (2 tables) — Remediate-this-flag on the Bias tab
+export { biasFlagDispositions, biasAlertLog } from './biasRemediation.js';
 
 // Email (1 table) — inbound/test inbox
 export { inboundEmails } from './email.js';

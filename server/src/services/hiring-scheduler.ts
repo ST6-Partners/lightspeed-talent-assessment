@@ -29,7 +29,7 @@ import { businessHoursBetween } from '../routers/interviews.js';
 import { valueReviews } from '../db/schema/values.js';
 import { users } from '../db/schema/core.js';
 import { notifications } from '../db/schema/notifications.js';
-import { biasFlagDispositions, ACK_STATUSES } from '../db/schema/biasRemediation.js';
+import { biasFlagDispositions, ACK_STATUSES, biasAlertLog } from '../db/schema/biasRemediation.js';
 import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
 import { runAdverseImpactAudit } from './adverseImpact.js';
 
@@ -914,6 +914,18 @@ async function runBiasAlert(): Promise<JobResult> {
       referenceId: role.jdId,
       referenceType: 'fairness',
     })));
+
+    // Durable, undeletable history record (the Bias tab "Alert history").
+    // Separate from the per-user notifications above, which a recipient can
+    // delete from the bell.
+    try {
+      await db.insert(biasAlertLog).values({
+        jdId: role.jdId,
+        jobTitle: role.jobTitle,
+        summary: flags.join('; '),
+        flaggedCount: flags.length,
+      });
+    } catch (err) { console.error('[bias-alert] history log write failed for', role.jdId, err); }
 
     const base = schedAppBaseUrl();
     const link = base ? `${base}/hiring/fairness` : '';

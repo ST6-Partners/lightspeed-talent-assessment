@@ -11,7 +11,7 @@
 // decision about a flag, never the underlying self-ID data.
 // ============================================================
 
-import { pgTable, uuid, varchar, text, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, integer } from 'drizzle-orm/pg-core';
 
 // status:
 //   'open'                             — flagged, nobody has acted (default)
@@ -32,8 +32,21 @@ export const biasFlagDispositions = pgTable('bias_flag_dispositions', {
 });
 
 // Statuses that suppress a fresh bias alert (the operator has engaged with it).
+// 'validated_documented' is kept here for backward-compat with any row already
+// carrying it, even though it's no longer offered in the disposition dropdown.
 export const ACK_STATUSES = [
   'reviewed_no_change',
   'validated_documented',
   'remediation_applied_monitoring',
 ] as const;
+
+// Append-only history of bias alerts (the durable record behind the Bias tab's
+// "Alert history" section). One row per alert firing; never deleted from the UI.
+export const biasAlertLog = pgTable('bias_alert_log', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  jdId: uuid('jd_id'),
+  jobTitle: varchar('job_title', { length: 300 }),
+  summary: text('summary').notNull(),
+  flaggedCount: integer('flagged_count'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});

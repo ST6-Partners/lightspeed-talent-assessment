@@ -70,10 +70,11 @@ function Dimension({ dim }: { dim: any }) {
 const DISP_LABELS: Record<string, string> = {
   open: 'Open — no action',
   reviewed_no_change: 'Reviewed, no change needed',
-  validated_documented: 'Validated & documented',
   remediation_applied_monitoring: 'Remediation applied — monitoring',
   snoozed: 'Snoozed',
 };
+// Legacy label still rendered if an old row carries this retired status.
+const LEGACY_DISP_LABELS: Record<string, string> = { ...DISP_LABELS, validated_documented: 'Validated & documented' };
 
 function flaggedCount(dims: any[]): number {
   return dims.reduce((n, d) => n + d.groups.filter((g: any) => g.status === 'flagged').length, 0);
@@ -176,7 +177,7 @@ function Remediation({ jdId, baseCutoff, liveFlagged }: { jdId: string; baseCuto
           style={{ width: '100%', marginTop: 10, padding: '8px 10px', border: '1px solid #e5e7eb', borderRadius: 7, fontSize: 13, fontFamily: 'inherit' }} />
         {(saved || current) && (
           <div style={{ fontSize: 12.5, color: '#136047', marginTop: 10 }}>
-            {saved ? '✓ Saved. ' : ''}Current status: <b>{DISP_LABELS[current?.status] ?? DISP_LABELS[status]}</b>
+            {saved ? '✓ Saved. ' : ''}Current status: <b>{LEGACY_DISP_LABELS[current?.status] ?? LEGACY_DISP_LABELS[status]}</b>
             {current?.decidedByName ? <> — set by {current.decidedByName}</> : ''}
             {current?.snoozeUntil ? <> · quiet until {new Date(current.snoozeUntil).toLocaleDateString()}</> : ''}
           </div>
@@ -271,6 +272,39 @@ function dispPill(status: string | null, snoozeUntil: any): { text: string; bg: 
   return { text: map[status] ?? status, bg: '#E6F4EF', fg: '#136047' };
 }
 
+// Append-only history of every bias alert that has fired. Shown at the very
+// bottom of the tab. Undeletable from the UI — the durable record.
+function AlertHistory() {
+  const { data } = trpc.eeo.alertHistory.useQuery();
+  const rows = data ?? [];
+  return (
+    <div style={{ borderTop: '1px solid #e5e7eb', marginTop: 24, paddingTop: 16 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 600, color: '#111827' }}>Alert history</div>
+      <div style={{ fontSize: 12, color: '#9ca3af', margin: '4px 0 12px', lineHeight: 1.6 }}>
+        Every bias alert that has fired, with its date. This is a permanent record — it can't be deleted here
+        or from the notification bell, so an alert can't be lost even if someone dismisses the notification.
+      </div>
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: '#9ca3af' }}>No alerts have fired yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {rows.map((r: any) => (
+            <div key={r.id} style={{ display: 'flex', gap: 12, alignItems: 'baseline', fontSize: 12.5, padding: '8px 11px', background: '#f9fafb', border: '1px solid #eef0f2', borderRadius: 6 }}>
+              <div style={{ width: 150, flexShrink: 0, color: '#51606A', fontVariantNumeric: 'tabular-nums' }}>
+                {new Date(r.createdAt).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontWeight: 600, color: '#111827' }}>{r.jobTitle ?? 'Unknown role'}</span>
+                {r.summary ? <span style={{ color: '#6b7280' }}>: {r.summary}</span> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Fairness() {
   const { data: summary, isLoading } = trpc.eeo.flagSummary.useQuery();
   const [openJd, setOpenJd] = useState<string | null>(null);
@@ -352,6 +386,8 @@ export default function Fairness() {
           );
         })}
       </div>
+
+      <AlertHistory />
     </div>
   );
 }
