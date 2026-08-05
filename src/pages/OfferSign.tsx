@@ -11,6 +11,26 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle, XCircle } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
+const card: React.CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '22px 24px', boxShadow: '0 4px 16px rgba(20,40,80,.05)' };
+const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', fontSize: 14, border: '1px solid #d1d5db', borderRadius: 8, boxSizing: 'border-box' };
+
+// Module scope on purpose: a component defined INSIDE OfferSign got a new
+// identity on every render, so each keystroke remounted this whole subtree and
+// the input lost focus after one character. Keeping Shell stable fixes that.
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 760, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+          <span style={{ fontWeight: 700, color: '#1f2733' }}>Lightspeed</span>
+          <span style={{ color: '#5b6675', fontSize: 13 }}>Talent Assessment</span>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function OfferSign() {
   const { token = '' } = useParams();
   const [search] = useSearchParams();
@@ -26,20 +46,6 @@ export default function OfferSign() {
 
   const accept = trpc.candidates.offerSignAccept.useMutation({ onSuccess: () => setDone(true) });
   const decline = trpc.candidates.offerDecline.useMutation({ onSuccess: () => setDeclined(true) });
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 760, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-          <span style={{ fontWeight: 700, color: '#1f2733' }}>Lightspeed</span>
-          <span style={{ color: '#5b6675', fontSize: 13 }}>Talent Assessment</span>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-  const card: React.CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '22px 24px', boxShadow: '0 4px 16px rgba(20,40,80,.05)' };
-  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', fontSize: 14, border: '1px solid #d1d5db', borderRadius: 8, boxSizing: 'border-box' };
 
   if (view.isLoading) return <Shell><div style={card}>Loading…</div></Shell>;
   if (view.error || !view.data) return <Shell><div style={card}><div style={{ display: 'flex', gap: 8, color: '#b91c1c' }}><AlertCircle size={18} /> This signing link is invalid or has expired.</div></div></Shell>;
