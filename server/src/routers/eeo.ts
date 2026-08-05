@@ -292,8 +292,14 @@ export const eeoRouter = router({
         };
       }));
 
-      // Most concerning first: flagged roles by flag count, then the rest.
-      summaries.sort((a, b) => b.flaggedCount - a.flaggedCount || a.jobTitle.localeCompare(b.jobTitle));
-      return summaries;
+      // Only surface ACTUAL, RELIABLE concerns: a real flag backed by an
+      // adequate survey response rate. Roles with no flag, or with too few
+      // survey responses to judge (lowResponse), are noise on a concerns tab
+      // and are excluded. `evaluated` reports how many roles were checked so
+      // the UI can say what was screened out.
+      const concerns = summaries
+        .filter((s) => s.flaggedCount > 0 && !s.lowResponse)
+        .sort((a, b) => b.flaggedCount - a.flaggedCount || a.jobTitle.localeCompare(b.jobTitle));
+      return { concerns, evaluated: summaries.length };
     }),
 });

@@ -275,33 +275,39 @@ export default function Fairness() {
   const { data: summary, isLoading } = trpc.eeo.flagSummary.useQuery();
   const [openJd, setOpenJd] = useState<string | null>(null);
 
-  const totalFlaggedRoles = (summary ?? []).filter((r: any) => r.flaggedCount > 0).length;
+  const concerns = summary?.concerns ?? [];
+  const evaluated = summary?.evaluated ?? 0;
+  const screenedOut = Math.max(0, evaluated - concerns.length);
 
   return (
     <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb', padding: 20 }}>
       <div style={{ fontSize: 16, fontWeight: 600, color: '#111827' }}>Fairness check — assessment gate</div>
       <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.7, margin: '6px 0 16px' }}>
-        Each role's automated assessment gate, checked against the four-fifths rule. A group is flagged when
-        it clears the CCAT cutoff at less than four-fifths (80%) of the top group's rate. Click a role to open
-        its full breakdown and remediation. Demographics are voluntary, self-reported, shown in aggregate
-        only, and never used to score, advance, or reject anyone.
+        Only roles with an actual, reliable adverse-impact concern are listed. A group is flagged when it
+        clears the CCAT cutoff at less than four-fifths (80%) of the top group's rate. Roles with too few
+        survey responses to judge are not shown. Click a role to open its full breakdown and remediation.
+        Demographics are voluntary, self-reported, shown in aggregate only, and never used to score,
+        advance, or reject anyone.
       </div>
 
-      {!isLoading && summary && summary.length > 0 && (
+      {!isLoading && summary && concerns.length > 0 && (
         <div style={{ fontSize: 13, marginBottom: 14 }}>
-          <span style={{ color: '#6b7280' }}>Roles with a flag</span>{' '}
-          <span style={{ fontWeight: 600, color: totalFlaggedRoles ? RED : GREEN }}>{totalFlaggedRoles}</span>
-          <span style={{ color: '#9ca3af' }}> of {summary.length}</span>
+          <span style={{ fontWeight: 600, color: RED }}>{concerns.length}</span>
+          <span style={{ color: '#6b7280' }}> role{concerns.length === 1 ? '' : 's'} with a reliable flag</span>
+          {screenedOut > 0 && <span style={{ color: '#9ca3af' }}> · {screenedOut} other role{screenedOut === 1 ? '' : 's'} clear or too few responses to judge</span>}
         </div>
       )}
 
       {isLoading && <div style={{ fontSize: 13, color: '#9ca3af' }}>Loading…</div>}
-      {!isLoading && summary && summary.length === 0 && (
-        <div style={{ fontSize: 13, color: '#9ca3af' }}>No roles have assessment-gate decisions yet.</div>
+      {!isLoading && summary && concerns.length === 0 && (
+        <div style={{ fontSize: 13, color: '#6b7280' }}>
+          No reliable adverse-impact concerns right now.
+          {evaluated > 0 && <span style={{ color: '#9ca3af' }}> {evaluated} role{evaluated === 1 ? '' : 's'} evaluated — all clear or with too few survey responses to judge.</span>}
+        </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {(summary ?? []).map((r: any) => {
+        {concerns.map((r: any) => {
           const open = openJd === r.jdId;
           const pill = dispPill(r.dispositionStatus, r.snoozeUntil);
           return (
