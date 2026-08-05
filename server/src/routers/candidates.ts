@@ -31,7 +31,7 @@ import {
   dispatchStageEmail,
   emailInterviewerQuestions,
   sendEmail,
-  emailOfferLetter, emailEeoSelfId, emailInvitedToAssessment, offerSignBlock } from '../services/email.js';
+  emailOfferLetter, emailEeoSelfId, emailInvitedToAssessment, offerSignBlock, emailOfferDeclinedHR } from '../services/email.js';
 import { ensureAssessmentInvite, getAssessmentByToken, submitAssessment, isCriteriaConfigured } from '../services/assessmentPlaceholder.js';
 import { generateInterviewQuestions } from '../services/ai.js';
 import { screenResumeRequirements } from '../services/ai.js';
@@ -1714,6 +1714,7 @@ export const candidatesRouter = router({
         candidateName: `${candidate.firstName ?? ''} ${candidate.lastName ?? ''}`.trim(),
         letterHtml,
         alreadySigned: !!candidate.offerSignedAt || candidate.currentStage === 'Hired',
+        alreadyDeclined: !!candidate.offerDeclinedAt,
       };
     }),
 
@@ -1724,8 +1725,57 @@ export const candidatesRouter = router({
     .mutation(async ({ ctx, input }) => {
       const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.offerSignToken, input.token) });
       if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This signing link is invalid or has expired.' });
+      if (candidate.offerDeclinedAt) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This offer was already declined.' });
       const result = await completeOfferSignature(ctx.db, candidate, { signerName: input.signerName, changedByUserId: null, via: 'in_app' });
       return { ok: true as const, alreadySigned: result.alreadyDone, roleClosed: result.roleClosed };
+    }),
+
+  // Public (tokenized): the candidate declines the offer. Closes them out of the
+  // pipeline (moves to Rejected) WITHOUT sending a company-rejection email — they
+  // chose to decline — and notifies HR. Idempotent; blocked once already signed.
+  offerDecline: publicProcedure
+    .input(z.object({ token: z.string().uuid(), reason: z.string().max(2000).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.offerSignToken, input.token) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This offer link is invalid or has expired.' });
+      if (candidate.offerSignedAt || candidate.currentStage === 'Hired') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'This offer was already accepted and can no longer be declined.' });
+      }
+      if (candidate.offerDeclinedAt) return { ok: true as const, alreadyDeclined: true as const };
+
+      const reason = input.reason?.trim() || null;
+      const now = new Date();
+      const fromStage = candidate.currentStage;
+      await ctx.db.update(candidates)
+        .set({ offerDeclinedAt: now, offerDeclineReason: reason, currentStage: 'Rejected', updatedAt: now })
+        .where(eq(candidates.id, candidate.id));
+      await ctx.db.insert(candidateStageHistory).values({
+        candidateId: candidate.id,
+        fromStage,
+        toStage: 'Rejected',
+        changedBy: null,
+        reason: reason ? `Candidate declined the offer — ${reason}` : 'Candidate declined the offer',
+      });
+      await logDecision(ctx.db, {
+        candidateId: candidate.id,
+        decisionType: 'manual_stage_change',
+        outcome: 'rejected',
+        decidedByType: 'human',
+        decidedBy: null,
+        reason: reason ? `Offer declined by candidate — ${reason}` : 'Offer declined by candidate',
+        inputs: { via: 'offer_decline', fromStage },
+      });
+
+      // Resolve the role title for the HR notification (candidates carry jdId).
+      let jobTitle: string | undefined = (candidate as any).jobTitle ?? undefined;
+      if (!jobTitle && candidate.jdId) {
+        const jd = await ctx.db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) });
+        jobTitle = jd?.jobTitle ?? undefined;
+      }
+      await emailOfferDeclinedHR({ firstName: candidate.firstName, lastName: candidate.lastName, email: candidate.email, jobTitle, declineReason: reason } as any)
+        .catch((err) => console.warn('[email] emailOfferDeclinedHR failed (non-blocking):', err));
+
+      return { ok: true as const, alreadyDeclined: false as const };
     }),
 
   offerApprovalStatus: protectedProcedure

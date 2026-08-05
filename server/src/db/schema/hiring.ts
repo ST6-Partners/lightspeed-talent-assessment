@@ -308,6 +308,10 @@ export const candidates = pgTable('candidates', {
   offerSignToken: varchar('offer_sign_token', { length: 64 }),
   offerAgreementId: varchar('offer_agreement_id', { length: 128 }),
   offerSignedAt: timestamp('offer_signed_at', { withTimezone: true }),
+  // If the candidate declines the offer (the "Decline offer" button next to
+  // "Agree & sign"), they are closed out without a company-rejection email.
+  offerDeclinedAt: timestamp('offer_declined_at', { withTimezone: true }),
+  offerDeclineReason: text('offer_decline_reason'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

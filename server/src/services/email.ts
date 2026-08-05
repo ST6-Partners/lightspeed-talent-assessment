@@ -473,7 +473,10 @@ export function offerSignBlock(signUrl: string): string {
     <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px 24px;margin:24px 0 8px;text-align:center;">
       <div style="font-size:15px;font-weight:700;color:#166534;margin:0 0 6px;">Ready to accept? Sign electronically</div>
       <p style="font-size:13px;line-height:1.6;color:#15803d;margin:0 0 16px;">Review your offer and sign securely via Adobe Sign \u2014 no printing required. Signing accepts the offer.</p>
-      ${button('Agree &amp; sign', signUrl)}
+      <div>
+        <a href="${signUrl}" style="display:inline-block;background:#15803d;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;margin:0 6px 8px;">Agree &amp; sign</a>
+        <a href="${signUrl}?decline=1" style="display:inline-block;background:#fff;color:#b91c1c;border:1px solid #f0a8a8;padding:11px 24px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600;margin:0 6px 8px;">Decline offer</a>
+      </div>
       <p style="font-size:12px;color:#4d7c5a;margin:14px 0 0;word-break:break-all;">Or paste this link into your browser: ${signUrl}</p>
     </div>`;
 }
@@ -616,6 +619,21 @@ export async function emailOfferAcceptedHR(data: CandidateEmailData) {
       ${h1('Offer accepted!')}
       ${p(`<strong>${data.firstName} ${data.lastName}</strong> has signed and accepted the offer for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
       ${p('They have been moved to <strong>Hired</strong> automatically. Please initiate the onboarding process.')}
+    `),
+  });
+}
+
+// 16b. Offer declined → HR
+export async function emailOfferDeclinedHR(data: CandidateEmailData & { declineReason?: string | null }) {
+  await sendEmail({
+    to: HR_EMAIL,
+    templateId: 'offer_declined_hr',
+    subject: `Offer declined: ${data.firstName} ${data.lastName} — ${data.jobTitle ?? 'position'}`,
+    html: wrap(`
+      ${h1('Offer declined')}
+      ${p(`<strong>${data.firstName} ${data.lastName}</strong> has declined the offer for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
+      ${data.declineReason ? p(`Reason given: <em>${data.declineReason}</em>`) : ''}
+      ${p('They have been closed out of the pipeline. No rejection email was sent to the candidate.')}
     `),
   });
 }
