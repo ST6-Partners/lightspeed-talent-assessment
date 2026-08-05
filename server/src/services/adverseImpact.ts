@@ -163,6 +163,7 @@ export interface SimulationResult {
   addedCount: number;        // pass at `cutoff` but not at baseCutoff (cutoff lowered)
   removedCount: number;      // pass at baseCutoff but not at `cutoff` (cutoff raised)
   addedMedianPercentile: number | null; // median CCAT percentile of the added candidates
+  passingAvgPercentile: number | null;  // avg CCAT percentile of the pool passing at `cutoff` (real quality proxy)
   dimensions: Dimension[];
 }
 
@@ -207,6 +208,26 @@ export async function simulateCutoffAudit(
     ? pcts[Math.floor((pcts.length - 1) / 2)]
     : null;
 
+  // Real quality proxy: the average CCAT percentile of everyone who passes at
+  // this cutoff. Lowering the cutoff pulls in lower-percentile candidates, so
+  // this genuinely falls — no synthetic score.
+  const qRes: any = await db.execute(sql`
+    WITH latest AS (
+      SELECT DISTINCT ON (dl.candidate_id) dl.candidate_id
+      FROM decision_log dl
+      WHERE dl.decision_type = 'assessment_gate'
+      ORDER BY dl.candidate_id, dl.created_at DESC
+    )
+    SELECT AVG(c.ccat_percentile)::float AS avg_pct
+    FROM latest l
+    JOIN candidates c ON c.id = l.candidate_id
+    WHERE c.jd_id = ${jdId}
+      AND c.ccat_score IS NOT NULL AND c.ccat_score >= ${cutoff}
+      AND c.ccat_percentile IS NOT NULL
+  `);
+  const avgPct = (qRes.rows ?? qRes)[0]?.avg_pct;
+  const passingAvgPercentile = avgPct != null ? Math.round(Number(avgPct)) : null;
+
   return {
     jdId,
     cutoff,
@@ -214,6 +235,7 @@ export async function simulateCutoffAudit(
     addedCount,
     removedCount,
     addedMedianPercentile,
+    passingAvgPercentile,
     dimensions: [
       buildDimension('sex', 'By sex', sexRows),
       buildDimension('raceEthnicity', 'By race / ethnicity', raceRows),
