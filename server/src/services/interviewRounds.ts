@@ -21,7 +21,7 @@ import { scoreWalkthroughFromTranscript } from './workSampleScoring.js';
 import { WALKTHROUGH_ROUND_NAME } from './workSampleWalkthrough.js';
 import { logDecision } from './decisionLog.js';
 import { emailInterviewRoundPrep, emailInterviewScheduledHR, emailInterviewCompletedHR } from './email.js';
-import { enterWorkSampleStage } from './workSampleEntry.js';
+import { enterWorkSampleStage, roleUsesWorkSample } from './workSampleEntry.js';
 import {
   analyzeInterviewTranscript,
   synthesizeInterviewTranscript,
@@ -163,9 +163,10 @@ const INTERVIEW_PHASE_STAGES = ['Interview'];
  * manual status edit). If every round for this candidate is now completed,
  * marks the interview done and auto-advances the candidate to the next stage.
  *
- * Work Sample sits AFTER the interview and is OPT-IN per role via
- * jd.workSampleRequired (the same flag the candidate-facing work-sample flow
- * treats as authoritative). So:
+ * Work Sample sits AFTER the interview and is per-role: a role has one when it
+ * has resolvable task/instructions content OR the recruiter opted in via
+ * jd.workSampleRequired (see roleUsesWorkSample — the same notion the send side
+ * uses). So:
  *   • role uses a work sample -> advance to Work Sample AND run the same entry
  *     side effects the manual advance does (mint the take-home /work-sample
  *     link + invite email, or seed a live-walkthrough round). The candidate
@@ -188,12 +189,16 @@ export async function maybeAdvanceOnAllRoundsComplete(
   const candidate = await db.query.candidates.findFirst({ where: eq(candidates.id, candidateId) });
   if (!candidate || !INTERVIEW_PHASE_STAGES.includes(candidate.currentStage)) return;
 
-  // Does this candidate's role use a work sample? Gate on the JD flag, the same
-  // signal workSample.infoForJd / the intake form use for `required`.
+  // Does this candidate's role use a work sample? Use the SAME notion the send
+  // side (enterWorkSampleStage) and the manual advance paths use: a role has a
+  // work sample when the flag is set OR resolvable task/instructions exist.
+  // Gating on the workSampleRequired boolean alone silently skipped candidates
+  // past a Work Sample their role really had (seeded/legacy roles carry
+  // instructions but no opt-in flag), advancing them straight to Reference Check.
   const jd = candidate.jdId
     ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
     : null;
-  const usesWorkSample = (jd as any)?.workSampleRequired === true;
+  const usesWorkSample = await roleUsesWorkSample(db, candidate, jd);
   const toStage = usesWorkSample ? 'Work Sample' : 'Reference Check';
 
   const fromStage = candidate.currentStage;

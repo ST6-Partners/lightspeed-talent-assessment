@@ -34,6 +34,49 @@ function appBaseUrl(): string {
 }
 
 /**
+ * Does this candidate's role actually have a work sample to send?
+ *
+ * This is the SAME notion of "has a work sample" that enterWorkSampleStage (and
+ * the manual advance paths in the candidates router) use when they decide what
+ * to send: a role has a work sample when it has resolvable library/dept task
+ * content OR free-text JD instructions — OR when a recruiter has explicitly
+ * opted the role in via jd.workSampleRequired.
+ *
+ * The auto-advance-on-rounds-complete router MUST gate on THIS, not on the
+ * workSampleRequired boolean alone. Gating only on the boolean silently skipped
+ * candidates past a Work Sample stage their role really had (e.g. seeded/legacy
+ * roles that carry workSampleInstructions but never had the opt-in flag set, or
+ * roles whose work sample is a linked/library task), sending them straight to
+ * Reference Check with no work sample. Keeping this in lockstep with the send
+ * logic means: if a manual move into Work Sample would email a sample, the
+ * automatic post-interview move routes into Work Sample too (and vice-versa).
+ *
+ * @param dbIn        drizzle db handle (defaults to the app db)
+ * @param candidate   the candidate (only jdId is read)
+ * @param jdIn        optional already-loaded JD row, to avoid a re-query
+ */
+export async function roleUsesWorkSample(
+  dbIn: any,
+  candidate: { jdId?: string | null },
+  jdIn?: { workSampleRequired?: boolean | null; workSampleInstructions?: string | null } | null,
+): Promise<boolean> {
+  const db = dbIn ?? defaultDb;
+  const jd = jdIn !== undefined
+    ? jdIn
+    : (candidate.jdId
+        ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) })
+        : null);
+
+  // 1) Explicit recruiter opt-in.
+  if ((jd as any)?.workSampleRequired === true) return true;
+  // 2) Free-text JD work-sample instructions (the legacy/seed signal).
+  if (typeof (jd as any)?.workSampleInstructions === 'string' && (jd as any).workSampleInstructions.trim()) return true;
+  // 3) A resolvable library/department task for this role.
+  const resolved = await resolveDeptWorkSample(db, candidate).catch(() => null);
+  return resolved !== null;
+}
+
+/**
  * Fire the Work Sample entry side effects for a candidate that has just been
  * moved into the Work Sample stage.
  *
