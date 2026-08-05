@@ -451,17 +451,23 @@ export default function Candidates() {
     ? allRoleGroups.filter((g) => g.title.toLowerCase().includes(roleQuery) || (g.dept ?? '').toLowerCase().includes(roleQuery))
     : allRoleGroups;
 
-  // A role whose requisition is Closed (manually or auto-filled) is no longer an
-  // open role — move it out of the main list into a collapsed "Closed roles"
-  // section so it stops masquerading as active. Unassigned ('none') and On Hold
-  // stay in the open list.
-  const openRoleGroups = visibleRoleGroups.filter((g) => g.reqStatus !== 'Closed');
-  const closedRoleGroups = visibleRoleGroups.filter((g) => g.reqStatus === 'Closed');
-  // "Open roles" stat = the number of role cards actually shown in the open list,
-  // so the number always matches what's on screen. (It previously counted only
-  // status='Open' requisitions, which diverged from the list — the list also
-  // shows On Hold roles, roles with active candidates, and the unassigned bucket.)
-  // The 'none' unassigned bucket isn't a role, so it's excluded from the count.
+  // A role is "open" only when it is backed by a genuinely active requisition —
+  // status 'Open' or 'On Hold'. Everything else collapses into the "Closed
+  // roles" drawer instead of masquerading as an open role and inflating the
+  // count: not just Closed/filled reqs, but also a role whose requisition can't
+  // be resolved to an active one — e.g. a reusable/library JD that still has
+  // candidates attached but no open requisition (reqStatus null or 'Draft').
+  // (Testing only reqStatus !== 'Closed' let those null/Draft roles show as open,
+  // which is exactly how the two extra role cards were leaking into the list.)
+  // The unassigned ('none') bucket always stays in the open list so its
+  // candidates remain actionable.
+  const ACTIVE_REQ_STATUSES: readonly string[] = ['Open', 'On Hold'];
+  const isActiveRole = (g: any) => g.jdId === 'none' || ACTIVE_REQ_STATUSES.includes(g.reqStatus as string);
+  const openRoleGroups = visibleRoleGroups.filter(isActiveRole);
+  const closedRoleGroups = visibleRoleGroups.filter((g) => !isActiveRole(g));
+  // "Open roles" stat = the number of active role cards actually shown in the
+  // open list, so the number always matches what's on screen. The 'none'
+  // unassigned bucket isn't a role, so it's excluded from the count.
   const openRoleCount = openRoleGroups.filter((g) => g.jdId !== 'none').length;
 
   const candidateRow = (c: any) => {
@@ -1055,7 +1061,7 @@ export default function Candidates() {
                   <Archive size={15} className="text-gray-400" />
                   <span>Closed roles</span>
                   <span className="text-gray-400 font-normal">· {closedRoleGroups.length}</span>
-                  <span className="ml-auto text-xs text-gray-400 font-normal">filled or closed — candidates released</span>
+                  <span className="ml-auto text-xs text-gray-400 font-normal">closed, filled, or not actively open</span>
                 </button>
                 {showClosedRoles && (
                   <div className="space-y-3 mt-3">
