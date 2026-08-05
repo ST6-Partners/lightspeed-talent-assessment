@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { Plus, X, Pencil, Trash2, CheckCircle2 } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
@@ -15,8 +15,13 @@ const STATUS_COLORS: Record<string, string> = {
   Closed: 'bg-red-100 text-red-700',
 };
 
+const DEPARTMENTS = [
+  'Engineering', 'Product', 'Sales', 'Marketing', 'Operations',
+  'Finance', 'HR', 'Customer Success', 'Legal', 'Other',
+];
+
 const EMPTY_FORM = {
-  reqId: '',
+  department: '',
   jobTitle: '',
   summary: '',
   responsibilities: '',
@@ -44,7 +49,6 @@ export default function JobDescriptions() {
   const { data: requisitions } = trpc.requisitions.list.useQuery();
   const { data: jobDescriptions, refetch } = trpc.jobDescriptions.list.useQuery();
   const { data: tasks } = trpc.tasks.list.useQuery();
-  const { data: jdQuestions } = trpc.intake.questionsForReq.useQuery({ reqId: form.reqId }, { enabled: !!editingId && !!form.reqId });
   const [uploadingWorkSample, setUploadingWorkSample] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -101,7 +105,7 @@ export default function JobDescriptions() {
   const startEdit = (jd: any) => {
     setEditingId(jd.id);
     setForm({
-      reqId: jd.reqId ?? '',
+      department: jd.department ?? '',
       jobTitle: jd.jobTitle ?? '',
       summary: jd.summary ?? '',
       responsibilities: jd.responsibilities ?? '',
@@ -117,7 +121,7 @@ export default function JobDescriptions() {
   };
 
   const handleSave = () => {
-    if (!form.reqId || !form.jobTitle) return;
+    if (!form.department || !form.jobTitle) return;
     const payload = { ...form, workSampleTaskId: form.workSampleTaskId || null };
     if (editingId) updateMutation.mutate({ id: editingId, ...payload });
     else createMutation.mutate(payload);
@@ -136,14 +140,18 @@ export default function JobDescriptions() {
     }));
   };
 
-  const getReqDept = (reqId: string | null | undefined) => {
-    const r = (requisitions ?? []).find((x: any) => x.id === reqId);
-    return r?.department ?? '—';
-  };
-  const getReqLabel = (reqId: string | null | undefined) => {
-    const r = (requisitions ?? []).find((r) => r.id === reqId);
-    return r ? `${r.department} · ${r.hiringManager}` : reqId;
-  };
+  // How many openings (requisitions) reuse this library description. A req links
+  // to its JD via base_jd_id; legacy 1:1 rows are counted via the JD's own reqId.
+  const usedBy = (jd: any) =>
+    (requisitions ?? []).filter((r: any) => r.baseJdId === jd.id || r.id === jd.reqId).length;
+
+  // Group the library by the description's own department.
+  const grouped = (jobDescriptions ?? []).reduce((acc: Record<string, any[]>, jd: any) => {
+    const d = jd.department || 'Unassigned';
+    (acc[d] ??= []).push(jd);
+    return acc;
+  }, {} as Record<string, any[]>);
+  const departmentsInUse = Object.keys(grouped).sort();
 
   const saving = createMutation.isLoading || updateMutation.isLoading;
 
@@ -152,7 +160,7 @@ export default function JobDescriptions() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Job Descriptions</h1>
-          <p className="text-gray-500 text-sm mt-1">Define roles and EPP value targets</p>
+          <p className="text-gray-500 text-sm mt-1">Reusable role library — define a role once, use it across many openings</p>
         </div>
         <button
           onClick={() => (showForm ? closeForm() : startCreate())}
@@ -176,17 +184,16 @@ export default function JobDescriptions() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Requisition *</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Department *</label>
               <select
-                value={form.reqId}
-                onChange={(e) => setForm({ ...form, reqId: e.target.value })}
+                value={form.department}
+                onChange={(e) => setForm({ ...form, department: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               >
-                <option value="">Select requisition</option>
-                {(requisitions ?? []).map((r) => (
-                  <option key={r.id} value={r.id}>{r.department} — {r.hiringManager}</option>
-                ))}
+                <option value="">Select department</option>
+                {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
+              <p className="text-xs text-gray-400 mt-1">The description lives in the library under this department. Openings attach to it later.</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Job Title *</label>
@@ -307,23 +314,10 @@ export default function JobDescriptions() {
               </div>
             </div>
           </div>
-          {editingId && jdQuestions && (jdQuestions.questions as any[]).length > 0 && (
-            <div className="mt-5 border-t border-gray-100 pt-4">
-              <label className="block text-xs font-medium text-gray-600 mb-2">
-                Standard interview questions — the 70%{jdQuestions.source ? ` · ${jdQuestions.source}` : ''} (auto-generated from this description)
-              </label>
-              <ol className="list-decimal pl-5 space-y-1 text-sm text-gray-700">
-                {(jdQuestions.questions as any[]).map((q: any, i: number) => (
-                  <li key={i}>{q.question}{q.category ? <span className="text-gray-400"> ({q.category})</span> : null}</li>
-                ))}
-              </ol>
-              <p className="text-xs text-gray-400 mt-2">The tailored ~30% is curated and emailed to the interviewer later, after the candidate's EPP/candidate review.</p>
-            </div>
-          )}
           <div className="flex gap-2 mt-4">
             <button
               onClick={handleSave}
-              disabled={!form.reqId || !form.jobTitle || saving}
+              disabled={!form.department || !form.jobTitle || saving}
               className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50"
             >
               {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Save as Draft'}
@@ -343,71 +337,84 @@ export default function JobDescriptions() {
             <thead>
               <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase">
                 <th className="px-4 py-3">Job Title</th>
-                <th className="px-4 py-3">Department</th>
-                <th className="px-4 py-3">Requisition</th>
                 <th className="px-4 py-3">EPP Values</th>
+                <th className="px-4 py-3">Used by</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 w-28"></th>
               </tr>
             </thead>
             <tbody>
-              {jobDescriptions.map((jd) => (
-                <tr key={jd.id} className={`border-b border-gray-50 text-sm ${(jd as any).pendingReview ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}`}>
-                  <td className="px-4 py-3 font-medium text-gray-900">
-                    {jd.jobTitle}
-                    {(jd as any).pendingReview && (
-                      <span className="ml-2 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-amber-200 text-amber-800 align-middle">NEW JD for review</span>
-                    )}
-                    <div className="text-gray-400 text-xs font-normal mt-0.5">Work sample: {
-                      (jd as any).workSampleTaskId
-                        ? ((tasks ?? []).find((t: any) => t.id === (jd as any).workSampleTaskId)?.title ?? 'Linked task')
-                        : ((jd as any).workSampleUploadName
-                            ? (jd as any).workSampleUploadName
-                            : 'None')
-                    }</div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 text-xs font-medium">{getReqDept(jd.reqId)}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{getReqLabel(jd.reqId)}</td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
-                    {Array.isArray(jd.eppValues) && (jd.eppValues as string[]).length > 0
-                      ? (jd.eppValues as string[]).slice(0, 3).join(', ') + ((jd.eppValues as string[]).length > 3 ? ` +${(jd.eppValues as string[]).length - 3}` : '')
-                      : '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_COLORS[jdStatus(jd)] ?? ''}`}>
-                      {jdStatus(jd)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      {(jd as any).pendingReview && (
-                        <button
-                          onClick={() => approveReviewMutation.mutate({ id: jd.id })}
-                          disabled={approveReviewMutation.isLoading}
-                          className="p-1 text-gray-400 hover:text-amber-600 transition-colors"
-                          title="Approve new JD (clears the review flag)"
-                        >
-                          <CheckCircle2 size={15} />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => startEdit(jd)}
-                        className="p-1 text-gray-400 hover:text-ls-primary transition-colors"
-                        title="Edit"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(jd)}
-                        disabled={deleteMutation.isLoading}
-                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+              {departmentsInUse.map((dept) => (
+                <Fragment key={dept}>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                      {dept}
+                      <span className="text-gray-400 font-medium"> · {grouped[dept].length} {grouped[dept].length === 1 ? 'role' : 'roles'}</span>
+                    </td>
+                  </tr>
+                  {grouped[dept].map((jd: any) => {
+                    const openings = usedBy(jd);
+                    return (
+                      <tr key={jd.id} className={`border-b border-gray-50 text-sm ${jd.pendingReview ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50'}`}>
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          {jd.jobTitle}
+                          {jd.pendingReview && (
+                            <span className="ml-2 inline-flex px-1.5 py-0.5 text-[10px] rounded-full bg-amber-200 text-amber-800 align-middle">NEW JD for review</span>
+                          )}
+                          <div className="text-gray-400 text-xs font-normal mt-0.5">Work sample: {
+                            jd.workSampleTaskId
+                              ? ((tasks ?? []).find((t: any) => t.id === jd.workSampleTaskId)?.title ?? 'Linked task')
+                              : (jd.workSampleUploadName ? jd.workSampleUploadName : 'None')
+                          }</div>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 text-xs">
+                          {Array.isArray(jd.eppValues) && (jd.eppValues as string[]).length > 0
+                            ? (jd.eppValues as string[]).slice(0, 3).join(', ') + ((jd.eppValues as string[]).length > 3 ? ` +${(jd.eppValues as string[]).length - 3}` : '')
+                            : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          {openings > 0
+                            ? <span className="text-gray-700"><span className="inline-flex items-center justify-center min-w-[20px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold mr-1.5">{openings}</span>{openings === 1 ? 'opening' : 'openings'}</span>
+                            : <span className="text-gray-400">— unused</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STATUS_COLORS[jdStatus(jd)] ?? ''}`}>
+                            {jdStatus(jd)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            {jd.pendingReview && (
+                              <button
+                                onClick={() => approveReviewMutation.mutate({ id: jd.id })}
+                                disabled={approveReviewMutation.isLoading}
+                                className="p-1 text-gray-400 hover:text-amber-600 transition-colors"
+                                title="Approve new JD (clears the review flag)"
+                              >
+                                <CheckCircle2 size={15} />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => startEdit(jd)}
+                              className="p-1 text-gray-400 hover:text-ls-primary transition-colors"
+                              title="Edit"
+                            >
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(jd)}
+                              disabled={deleteMutation.isLoading}
+                              className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </Fragment>
               ))}
             </tbody>
           </table>

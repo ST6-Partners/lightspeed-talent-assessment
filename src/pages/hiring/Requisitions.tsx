@@ -26,7 +26,7 @@ const DEPARTMENTS = [
 ];
 
 const EMPTY_FORM = {
-  department: '', hiringManager: '', numOpenings: 1,
+  department: '', baseJdId: '', hiringManager: '', numOpenings: 1,
   employmentType: 'Full-Time', location: '', remote: false,
   salaryMin: '', salaryMax: '', reason: '', priority: 'Medium',
 };
@@ -37,6 +37,7 @@ export default function Requisitions() {
   const [form, setForm] = useState<typeof EMPTY_FORM>({ ...EMPTY_FORM });
 
   const { data: requisitions, refetch } = trpc.requisitions.list.useQuery();
+  const { data: jobDescriptions } = trpc.jobDescriptions.list.useQuery();
   const changeNote = trpc.intake.changesRequestedNote.useQuery({ reqId: editingId! }, { enabled: !!editingId });
   const editingReq = (requisitions ?? []).find((r: any) => r.id === editingId);
   const visibleReqs = ((requisitions ?? []) as any[]).filter((r) => !(r.seeded && r.status === 'Draft'));
@@ -64,6 +65,7 @@ export default function Requisitions() {
     setEditingId(r.id);
     setForm({
       department: r.department ?? '',
+      baseJdId: r.baseJdId ?? '',
       hiringManager: r.hiringManager ?? '',
       numOpenings: r.numOpenings ?? 1,
       employmentType: r.employmentType ?? 'Full-Time',
@@ -81,6 +83,7 @@ export default function Requisitions() {
     if (!form.department || !form.hiringManager) return;
     const payload = {
       ...form,
+      baseJdId: form.baseJdId || undefined,
       employmentType: form.employmentType as any,
       priority: form.priority as any,
       salaryMin: form.salaryMin ? parseInt(form.salaryMin) : undefined,
@@ -142,6 +145,22 @@ export default function Requisitions() {
                 placeholder="e.g. Jade Friedman"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan"
               />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Job description (from library)</label>
+              <select
+                value={form.baseJdId}
+                onChange={(e) => setForm({ ...form, baseJdId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ls-cyan"
+              >
+                <option value="">No description yet — attach one later</option>
+                {(jobDescriptions ?? [])
+                  .filter((jd: any) => !form.department || jd.department === form.department)
+                  .map((jd: any) => (
+                    <option key={jd.id} value={jd.id}>{jd.jobTitle}{jd.department ? ` · ${jd.department}` : ''}</option>
+                  ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Reuse a role from the Job Descriptions library. One description can serve many openings.</p>
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Number of Openings</label>
