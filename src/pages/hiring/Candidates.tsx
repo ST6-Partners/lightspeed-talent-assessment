@@ -192,13 +192,21 @@ export default function Candidates() {
   const { data: departmentsList } = trpc.departments.list.useQuery();
   const deptByReq: Record<string, string> = {};
   for (const r of (requisitions ?? []) as any[]) deptByReq[r.id] = r.department;
-  const jdDepartments = Array.from(new Set(((jobDescriptions ?? []) as any[]).map((j) => deptByReq[j.reqId]).filter(Boolean))).sort();
+  // A JD's department can come from the JD itself, its legacy jd.req_id link, or
+  // the reusable-JD link (a requisition points to the JD via base_jd_id). Mirrors
+  // Intake's jdDeptOf so a reusable/library JD (null req_id) — e.g. General
+  // Manager, International — resolves to its real department instead of being
+  // dropped from every department filter in the Add Candidate picker.
+  const deptByBaseJd: Record<string, string> = {};
+  for (const r of (requisitions ?? []) as any[]) if (r.baseJdId) deptByBaseJd[r.baseJdId] = r.department;
+  const jdDeptOf = (j: any) => j.department ?? deptByReq[j.reqId] ?? deptByBaseJd[j.id];
+  const jdDepartments = Array.from(new Set(((jobDescriptions ?? []) as any[]).map((j) => jdDeptOf(j)).filter(Boolean))).sort();
   const deptOptions = Array.from(new Set([
     ...(((departmentsList ?? []) as any[]).map((d) => d.name)),
     ...jdDepartments,
   ])).sort();
   const jdOptions = deptFilter
-    ? ((jobDescriptions ?? []) as any[]).filter((j) => deptByReq[j.reqId] === deptFilter)
+    ? ((jobDescriptions ?? []) as any[]).filter((j) => jdDeptOf(j) === deptFilter)
     : ((jobDescriptions ?? []) as any[]);
 
   const [resumeFileName, setResumeFileName] = useState('');
@@ -817,7 +825,7 @@ export default function Candidates() {
                     const dept = e.target.value;
                     setDeptFilter(dept);
                     const cur = ((jobDescriptions ?? []) as any[]).find((j) => j.id === form.jdId);
-                    if (dept && cur && deptByReq[cur.reqId] !== dept) setForm({ ...form, jdId: '' });
+                    if (dept && cur && jdDeptOf(cur) !== dept) setForm({ ...form, jdId: '' });
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan">
                   <option value="">— All departments —</option>
