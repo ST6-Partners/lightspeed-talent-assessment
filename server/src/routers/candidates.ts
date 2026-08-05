@@ -611,7 +611,20 @@ export const candidatesRouter = router({
       const interviewNeedIds = new Set(
         openRounds.filter((r) => Array.isArray(r.slots) && (r.slots as any[]).length > 0).map((r) => r.candidateId),
       );
-      return result.map((c) => ({ ...c, interviewNeedsOutreach: interviewNeedIds.has(c.id) }));
+      // Latest offer-approval state per candidate (pending | approved | sent_back),
+      // so the Needs-action marker on the Offer stage can tell "waiting on the
+      // hiring manager" and "sent back for changes" apart from "no offer sent yet".
+      const offerRows = await ctx.db.select({
+        candidateId: offerApprovals.candidateId,
+        status: offerApprovals.status,
+      }).from(offerApprovals).orderBy(desc(offerApprovals.createdAt));
+      const offerStateById = new Map<string, string>();
+      for (const r of offerRows) { if (!offerStateById.has(r.candidateId)) offerStateById.set(r.candidateId, r.status); }
+      return result.map((c) => ({
+        ...c,
+        interviewNeedsOutreach: interviewNeedIds.has(c.id),
+        offerApprovalState: offerStateById.get(c.id) ?? null,
+      }));
     }),
 
   getById: protectedProcedure

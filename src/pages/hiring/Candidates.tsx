@@ -44,7 +44,15 @@ const stageLabel = (s: string): string => STAGE_LABEL[s] ?? s;
 export function needsAction(c: any): boolean {
   switch (c.currentStage) {
     case 'Reference Check': return true;
-    case 'Offer': return true;
+    case 'Offer': {
+      // Recruiter action is needed only when nothing has been sent yet, or the
+      // hiring manager sent the offer back. Once the offer letter is delivered
+      // (offerSignToken set) it is on the candidate to sign; while it is pending
+      // manager approval it is on the manager. Neither is a recruiter task.
+      if (c.offerSignToken) return false;
+      if (c.offerApprovalState === 'pending') return false;
+      return true;
+    }
     case 'Interview': return !!c.interviewNeedsOutreach;
     case 'Work Sample': return !!(c.workSampleSubmittedAt || c.workSampleScore != null);
     case 'Phone Screen': {
@@ -110,9 +118,15 @@ export function needsActionInfo(c: any): NeedsActionInfo {
     };
   }
   if (c.currentStage === 'Offer') {
+    if (c.offerApprovalState === 'sent_back') {
+      return {
+        headline: 'Revise and resend the offer',
+        detail: 'The hiring manager sent the offer back for changes. Update it in the Offer section below, then send it again (directly to the candidate, or for approval).',
+      };
+    }
     return {
-      headline: 'Send the offer, then mark Hired',
-      detail: 'Send the offer letter from the Offer section below. Once the candidate accepts, mark them Hired.',
+      headline: 'Send the offer',
+      detail: 'Draft and send the offer letter from the Offer section below, either directly to the candidate or to the hiring manager for approval first.',
     };
   }
   return {
