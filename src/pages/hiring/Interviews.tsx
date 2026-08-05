@@ -11,7 +11,6 @@ import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Search, Plus, Trash2, Pencil, X, XCircle } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
-import { SchedulingSection } from './Candidates';
 
 const STATUS_STYLE: Record<string, string> = {
   planned: 'bg-gray-100 text-gray-600',
@@ -592,8 +591,6 @@ export default function Interviews() {
             )}
           </div>
 
-          {/* Candidate self-scheduling (Calendly) — collapsed */}
-          <SchedulingSection key={`sched-${selected.id}`} candidate={selected} onChanged={refetch} />
         </div>
       )}
 
