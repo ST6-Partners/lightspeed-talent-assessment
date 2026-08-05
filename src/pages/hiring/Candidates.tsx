@@ -457,9 +457,12 @@ export default function Candidates() {
   // stay in the open list.
   const openRoleGroups = visibleRoleGroups.filter((g) => g.reqStatus !== 'Closed');
   const closedRoleGroups = visibleRoleGroups.filter((g) => g.reqStatus === 'Closed');
-  // "Open roles" stat counts requisitions actually in the Open status, matching
-  // the Requisitions page (not "any role group that still has candidate rows").
-  const openRoleCount = ((requisitions ?? []) as any[]).filter((r: any) => r.status === 'Open').length;
+  // "Open roles" stat = the number of role cards actually shown in the open list,
+  // so the number always matches what's on screen. (It previously counted only
+  // status='Open' requisitions, which diverged from the list — the list also
+  // shows On Hold roles, roles with active candidates, and the unassigned bucket.)
+  // The 'none' unassigned bucket isn't a role, so it's excluded from the count.
+  const openRoleCount = openRoleGroups.filter((g) => g.jdId !== 'none').length;
 
   const candidateRow = (c: any) => {
     const nextStage = getNextStage(c);
