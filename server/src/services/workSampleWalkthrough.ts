@@ -9,7 +9,6 @@
 // ============================================================
 import { eq, sql } from 'drizzle-orm';
 import { candidateInterviews } from '../db/schema/interviews.js';
-import { openInterviewScheduling } from './scheduling.js';
 
 export const WALKTHROUGH_ROUND_NAME = 'Work Sample Walkthrough';
 
@@ -30,15 +29,12 @@ export async function ensureWalkthroughRound(
     sortOrder: (maxRow?.m ?? -1) + 1,
   }).returning();
 
-  // Auto-send the candidate the "pick a time" invite the moment the walkthrough
-  // round is created — no recruiter click. Fire-and-forget: a mail failure must
-  // not undo the round. Won't double-send if a booking is already open.
-  let bookingUrl: string | null = null;
-  try {
-    const sched = await openInterviewScheduling(db, candidateId, { kind: 'work_sample_walkthrough' });
-    bookingUrl = sched.bookingUrl;
-  } catch (err) {
-    console.error('[work-sample-walkthrough] auto-open scheduling failed:', err);
-  }
-  return { roundId: created.id, roundName: WALKTHROUGH_ROUND_NAME, created: true, bookingUrl };
+  // Recruiter-first scheduling: create the round but do NOT auto-email a booking
+  // link. Previously this auto-opened a Calendly-style link the instant the round
+  // was created, so the candidate got a link that dead-ended on "not ready" before
+  // any times existed (and it flipped the recruiter section into a "sent" state
+  // with no availability). The recruiter now offers windows from the Work Sample
+  // section (submitWalkthroughAvailability), which is what emails the candidate a
+  // link with real times to pick from.
+  return { roundId: created.id, roundName: WALKTHROUGH_ROUND_NAME, created: true, bookingUrl: null };
 }

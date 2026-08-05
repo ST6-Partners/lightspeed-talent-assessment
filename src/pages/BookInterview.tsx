@@ -165,12 +165,17 @@ export default function BookInterview() {
   }
 
   if (!data.calendlyUrl) {
+    const isWalk = data.mode === 'work_sample_walkthrough';
     return (
       <Shell>
         <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
           <Calendar className="mx-auto mb-3 text-gray-400" size={28} />
-          <h1 className="font-semibold text-gray-900 mb-1">Scheduling not ready yet</h1>
-          <p className="text-sm text-gray-500">The interview scheduling link isn't set up yet. We'll email you as soon as it's ready.</p>
+          <h1 className="font-semibold text-gray-900 mb-1">{isWalk ? 'Your walkthrough times aren’t ready yet' : 'Scheduling not ready yet'}</h1>
+          <p className="text-sm text-gray-500">
+            {isWalk
+              ? 'The team is still setting up available times for your work sample walkthrough. We’ll email you as soon as you can pick one.'
+              : 'The interview scheduling link isn’t set up yet. We’ll email you as soon as it’s ready.'}
+          </p>
         </div>
       </Shell>
     );
