@@ -81,8 +81,34 @@ function flaggedCount(dims: any[]): number {
 }
 
 // ── Remediate-this-flag: the workbench under the audit ──────
+// Modeled projection of a dimension when work-sample weight is applied. The
+// gate has no real work-sample scores for this population (rejected candidates
+// never reach the work sample), so this is an ASSUMPTION, not measured: shifting
+// weight toward the lower-gap work sample closes a fraction w of each flagged
+// group's remaining gap to the reference group. Clearly badged "Projected" in the UI.
+function projectDimension(dim: any, w: number): any {
+  const refPass = dim.groups.find((g: any) => g.group === dim.reference)?.passRate ?? 0;
+  return {
+    ...dim,
+    groups: dim.groups.map((g: any) => {
+      if (g.passRate == null || g.status === 'insufficient') return g;
+      const isTop = g.group === dim.reference;
+      const realRatio = refPass > 0 ? g.passRate / refPass : 0;
+      const projRatio = isTop ? 1 : realRatio + w * (1 - realRatio);
+      return {
+        ...g,
+        passed: null,
+        passRate: isTop ? g.passRate : Math.round(projRatio * refPass),
+        ratio: Math.round(projRatio * 100) / 100,
+        status: isTop ? 'reference' : (projRatio < 0.8 ? 'flagged' : 'ok'),
+      };
+    }),
+  };
+}
+
 function Remediation({ jdId, baseCutoff, liveFlagged }: { jdId: string; baseCutoff: number; liveFlagged: number }) {
   const [cutoff, setCutoff] = useState<number>(baseCutoff);
+  const [wsWeight, setWsWeight] = useState<number>(0); // 0..60 (percent)
   const [status, setStatus] = useState<string>('remediation_applied_monitoring');
   const [note, setNote] = useState<string>('');
   const [snoozeDays, setSnoozeDays] = useState<number>(30);
@@ -94,60 +120,113 @@ function Remediation({ jdId, baseCutoff, liveFlagged }: { jdId: string; baseCuto
     onSuccess: () => { setSaved(true); disp.refetch(); },
   });
 
-  const simFlagged = sim.data ? flaggedCount(sim.data.dimensions) : null;
+  const w = wsWeight / 100;
+  const projected = w > 0;
+  const previewDims = sim.data
+    ? sim.data.dimensions.map((d: any) => (projected ? projectDimension(d, w) : d))
+    : [];
+  const simFlagged = sim.data ? flaggedCount(previewDims) : null;
   const lowered = cutoff < baseCutoff;
+  const changed = cutoff !== baseCutoff || projected;
   const current = disp.data as any;
+
+  // Quality: REAL passing-pool avg CCAT percentile (responds to the cutoff),
+  // plus a MODELED work-sample uplift when weight > 0 (badged projected).
+  const baseQ = sim.data?.passingAvgPercentile ?? null;
+  const uplift = baseQ != null ? Math.round(w * 18) : 0;
+  const quality = baseQ != null ? Math.min(100, baseQ + uplift) : null;
+  const qColor = quality == null ? '#9ca3af' : quality >= 78 ? GREEN : quality >= 68 ? '#C99300' : RED;
+
+  const reset = () => { setCutoff(baseCutoff); setWsWeight(0); setSaved(false); };
 
   return (
     <div style={{ borderTop: '1px solid #e5e7eb', marginTop: 22, paddingTop: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: '#111827' }}>Remediate this flag</div>
         <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', background: '#EAF4FA', color: '#246F97', border: '1px solid #cfe6f4', borderRadius: 999, padding: '3px 9px' }}>New</span>
+        <button onClick={() => { setCutoff(26); setWsWeight(40); setSaved(false); }}
+          style={{ marginLeft: 'auto', background: '#fff', color: '#2E89B8', border: '1px solid #cfe6f4', borderRadius: 6, padding: '5px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Use recommended alternative</button>
       </div>
       <div style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.7, margin: '8px 0 14px' }}>
-        The one legal, group-blind lever the gate actually has is the cutoff itself. Model a new CCAT cutoff below and the four-fifths
-        audit re-runs on the same candidates. This never changes the live gate — it only previews. Any change applies to <b>everyone</b>;
-        the app will not adjust scores by group.
+        Two group-blind levers, previewed against the same candidates — this never changes the live gate. The <b>cutoff</b> is real:
+        the audit re-runs at the score you pick. The <b>work-sample weight</b> is a projection (this role has no work-sample scores at
+        the gate yet), so anything it changes is badged <b>Projected</b>. Any change applies to everyone; the app will not adjust scores by group.
       </div>
 
-      {/* Cutoff simulator */}
+      {/* Levers */}
       <div style={{ background: '#f9fafb', border: '1px solid #eef0f2', borderRadius: 8, padding: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <label style={{ fontSize: 13, fontWeight: 600 }}>Preview CCAT cutoff</label>
-          <div>
-            <span style={{ fontSize: 18, fontWeight: 700, color: '#2E89B8' }}>{cutoff}</span>
-            <span style={{ fontSize: 12, color: '#9ca3af' }}> / 50 · current gate is {baseCutoff}</span>
+        <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 230 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>CCAT cutoff score</label>
+              <div><span style={{ fontSize: 17, fontWeight: 700, color: '#2E89B8' }}>{cutoff}</span><span style={{ fontSize: 12, color: '#9ca3af' }}> · gate is {baseCutoff}</span></div>
+            </div>
+            <input type="range" min={15} max={40} step={1} value={cutoff}
+              onChange={(e) => { setCutoff(Number(e.target.value)); setSaved(false); }}
+              style={{ width: '100%', accentColor: '#2E89B8', marginTop: 8 }} />
+            <div style={{ fontSize: 11.5, color: '#9ca3af', marginTop: 3 }}>Lower an overly strict cutoff so it screens on real job need, not headroom. Real audit.</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 230 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>Weight on work sample</label>
+              <div><span style={{ fontSize: 17, fontWeight: 700, color: '#2E89B8' }}>{wsWeight}%</span></div>
+            </div>
+            <input type="range" min={0} max={60} step={5} value={wsWeight}
+              onChange={(e) => { setWsWeight(Number(e.target.value)); setSaved(false); }}
+              style={{ width: '100%', accentColor: '#2E89B8', marginTop: 8 }} />
+            <div style={{ fontSize: 11.5, color: '#9ca3af', marginTop: 3 }}>Shift weight toward the lower-gap work sample. Projected — modeled, not measured.</div>
           </div>
         </div>
-        <input type="range" min={15} max={40} step={1} value={cutoff}
-          onChange={(e) => { setCutoff(Number(e.target.value)); setSaved(false); }}
-          style={{ width: '100%', accentColor: '#2E89B8', marginTop: 10 }} />
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginTop: 6 }}>
+
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginTop: 12, alignItems: 'center' }}>
           <div><span style={{ color: '#6b7280' }}>Groups flagged now</span> <b style={{ color: liveFlagged ? RED : '#111827' }}>{liveFlagged}</b></div>
           <div style={{ color: '#9ca3af' }}>→</div>
-          <div><span style={{ color: '#6b7280' }}>at cutoff {cutoff}</span> <b style={{ color: (simFlagged ?? 0) ? RED : GREEN }}>{simFlagged ?? '…'}</b></div>
-          {cutoff !== baseCutoff && (
-            <button onClick={() => { setCutoff(baseCutoff); setSaved(false); }}
-              style={{ marginLeft: 'auto', background: '#fff', color: '#2E89B8', border: '1px solid #cfe6f4', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Reset to {baseCutoff}</button>
+          <div><span style={{ color: '#6b7280' }}>after change</span> <b style={{ color: (simFlagged ?? 0) ? RED : GREEN }}>{simFlagged ?? '…'}</b></div>
+          {projected && <span style={{ fontSize: 11, fontWeight: 700, background: '#FBF2DC', color: '#8a5b00', borderRadius: 999, padding: '2px 8px' }}>Projected</span>}
+          {changed && (
+            <button onClick={reset}
+              style={{ marginLeft: 'auto', background: '#fff', color: '#2E89B8', border: '1px solid #cfe6f4', borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Reset</button>
           )}
         </div>
 
         {sim.data && (
           <div style={{ fontSize: 12.5, color: '#4b5563', lineHeight: 1.6, marginTop: 10, background: '#fff', border: '1px solid #eef0f2', borderRadius: 6, padding: '9px 11px' }}>
             {lowered
-              ? <>Lowering the cutoff to {cutoff} lets through <b>{sim.data.addedCount}</b> more candidate{sim.data.addedCount === 1 ? '' : 's'} on this role{sim.data.addedMedianPercentile != null ? <> (median CCAT percentile <b>{sim.data.addedMedianPercentile}</b>)</> : ''}. Real candidates, not a synthetic score — check they clear the bar you'd actually defend as job-related.</>
+              ? <>Lowering the cutoff to {cutoff} lets through <b>{sim.data.addedCount}</b> more candidate{sim.data.addedCount === 1 ? '' : 's'} on this role{sim.data.addedMedianPercentile != null ? <> (median CCAT percentile <b>{sim.data.addedMedianPercentile}</b>)</> : ''}. Real candidates — check they clear a bar you'd defend as job-related.</>
               : cutoff > baseCutoff
                 ? <>Raising the cutoff to {cutoff} removes <b>{sim.data.removedCount}</b> candidate{sim.data.removedCount === 1 ? '' : 's'} who currently pass. This usually widens the gap, not closes it.</>
-                : <>This is the current gate. Move the slider to preview a change.</>}
+                : projected
+                  ? <>Cutoff unchanged; the work-sample weight below is a projected effect only.</>
+                  : <>This is the current gate. Move a lever to preview a change.</>}
           </div>
         )}
       </div>
 
-      {/* Simulated four-fifths bars */}
-      {sim.data && cutoff !== baseCutoff && (
+      {/* Preview four-fifths bars */}
+      {sim.data && changed && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10 }}>Four-fifths audit at cutoff {cutoff} (preview)</div>
-          {sim.data.dimensions.filter((d: any) => d.groups.some((g: any) => g.status !== 'insufficient')).map((d: any) => <Dimension key={d.key} dim={d} />)}
+          <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+            Four-fifths audit at cutoff {cutoff}{projected ? `, work sample ${wsWeight}%` : ''} (preview)
+            {projected && <span style={{ fontSize: 10.5, fontWeight: 700, background: '#FBF2DC', color: '#8a5b00', borderRadius: 999, padding: '1px 7px' }}>Projected</span>}
+          </div>
+          {previewDims.filter((d: any) => d.groups.some((g: any) => g.status !== 'insufficient')).map((d: any) => <Dimension key={d.key} dim={d} />)}
+        </div>
+      )}
+
+      {/* Predicted quality of hires */}
+      {sim.data && (
+        <div style={{ marginTop: 16, background: '#f9fafb', border: '1px solid #eef0f2', borderRadius: 8, padding: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Predicted quality of hires <span style={{ fontWeight: 400, color: '#9ca3af', fontSize: 12 }}>(so you don't trade fairness for a weaker bar)</span></div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: qColor }}>{quality != null ? `${quality} / 100` : '—'}</div>
+          </div>
+          <div style={{ height: 12, borderRadius: 7, background: '#eef0f2', position: 'relative', overflow: 'hidden', marginTop: 8 }}>
+            <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${quality ?? 0}%`, background: qColor, borderRadius: 7, transition: 'width .4s ease, background .4s ease' }} />
+          </div>
+          <div style={{ fontSize: 11.5, color: '#9ca3af', lineHeight: 1.6, marginTop: 7 }}>
+            Base is real: the average CCAT percentile of the pool that passes at this cutoff, so it drops as you lower the bar.
+            {projected && <> The <b style={{ color: '#8a5b00' }}>+{uplift} from work-sample weight is projected</b>, not measured.</>} Not a validated performance prediction.
+          </div>
         </div>
       )}
 
