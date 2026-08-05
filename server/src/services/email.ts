@@ -474,6 +474,7 @@ export function offerSignBlock(signUrl: string): string {
       <div style="font-size:15px;font-weight:700;color:#166534;margin:0 0 6px;">Ready to accept? Sign electronically</div>
       <p style="font-size:13px;line-height:1.6;color:#15803d;margin:0 0 16px;">Review your offer and sign securely via Adobe Sign \u2014 no printing required. Signing accepts the offer.</p>
       ${button('Agree &amp; sign', signUrl)}
+      <p style="font-size:12px;color:#4d7c5a;margin:14px 0 0;word-break:break-all;">Or paste this link into your browser: ${signUrl}</p>
     </div>`;
 }
 

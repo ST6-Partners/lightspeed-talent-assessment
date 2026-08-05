@@ -208,7 +208,9 @@ async function deliverOfferToCandidate(db: any, userId: string | null, candidate
     .set({ offerSignToken: signToken, offerAgreementId: agreementId, updatedAt: new Date() })
     .where(eq(candidates.id, candidate.id));
 
-  const signUrl = `/offer-sign/${signToken}`;
+  // Absolute URL — a relative link won't resolve when the candidate clicks it
+  // from their email client (matches every other tokenized link in the app).
+  const signUrl = `${appBaseUrl()}/offer-sign/${signToken}`;
   const emailedHtml = `${letterHtml}${offerSignBlock(signUrl)}`;
 
   await emailOfferLetter({ to: candidate.email, firstName: candidate.firstName, jobTitle, letterHtml, signUrl }).catch((err) => console.warn('[email] emailOfferLetter failed (non-blocking):', err));
