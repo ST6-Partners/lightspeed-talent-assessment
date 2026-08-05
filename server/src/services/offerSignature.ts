@@ -12,9 +12,9 @@
 // ============================================================
 
 import { eq } from 'drizzle-orm';
-import { candidates, candidateStageHistory } from '../db/schema/hiring.js';
+import { candidates, candidateStageHistory, jobDescriptions } from '../db/schema/hiring.js';
 import { inboundEmails } from '../db/schema/email.js';
-import { emailWelcomeHired } from './email.js';
+import { emailWelcomeHired, emailOfferAcceptedHR } from './email.js';
 import { logDecision } from './decisionLog.js';
 import { maybeAutoCloseFilledReq } from './requisitionClose.js';
 
@@ -65,13 +65,29 @@ export async function completeOfferSignature(
     inputs: { via: opts.via, fromStage },
   });
 
-  // Welcome email + inbox record (best-effort).
+  // Resolve the role title for the notifications (candidates carry jdId, not a title).
+  let jobTitle: string | undefined = candidate.jobTitle ?? undefined;
+  if (!jobTitle && candidate.jdId) {
+    try {
+      const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, candidate.jdId) });
+      jobTitle = jd?.jobTitle ?? undefined;
+    } catch { /* non-blocking */ }
+  }
+
+  // Notifications (best-effort): the candidate is welcomed, and HR is told the
+  // offer was ACCEPTED — this is the genuine acceptance point (they just signed).
   try {
+    await emailOfferAcceptedHR({
+      firstName: candidate.firstName,
+      lastName: candidate.lastName,
+      email: candidate.email,
+      jobTitle,
+    } as any);
     await emailWelcomeHired({
       firstName: candidate.firstName,
       lastName: candidate.lastName,
       email: candidate.email,
-      jobTitle: candidate.jobTitle ?? undefined,
+      jobTitle,
     } as any);
     await db.insert(inboundEmails).values({
       fromEmail: process.env.EMAIL_FROM ?? 'hiring@lightspeedsystems.com',

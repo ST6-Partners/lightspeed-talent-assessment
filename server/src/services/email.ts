@@ -613,8 +613,8 @@ export async function emailOfferAcceptedHR(data: CandidateEmailData) {
     subject: `Offer accepted: ${data.firstName} ${data.lastName} — ${data.jobTitle ?? 'position'}`,
     html: wrap(`
       ${h1('Offer accepted!')}
-      ${p(`<strong>${data.firstName} ${data.lastName}</strong> has accepted the offer for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
-      ${p('Please initiate the onboarding process and update the candidate\'s status to Hired in the pipeline.')}
+      ${p(`<strong>${data.firstName} ${data.lastName}</strong> has signed and accepted the offer for <strong>${data.jobTitle ?? 'the position'}</strong>.`)}
+      ${p('They have been moved to <strong>Hired</strong> automatically. Please initiate the onboarding process.')}
     `),
   });
 }
@@ -1177,8 +1177,10 @@ export async function dispatchStageEmail(
       await emailInterviewScheduled(data);
       break;
     case 'Offer':
+      // Entering the Offer stage EXTENDS an offer — it does not mean the candidate
+      // accepted. The "offer accepted → HR" email is fired only on genuine
+      // acceptance (completeOfferSignature, when the candidate e-signs).
       await emailOfferExtended(data);
-      await emailOfferAcceptedHR(data);
       break;
     case 'Hired':
       await emailWelcomeHired(data);
