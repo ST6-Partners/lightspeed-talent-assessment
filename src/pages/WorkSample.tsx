@@ -3,23 +3,8 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
-export default function WorkSample() {
-  const { token = '' } = useParams();
-  const [submission, setSubmission] = useState('');
-  const [link, setLink] = useState('');
-  const [done, setDone] = useState(false);
-  const [selected, setSelected] = useState<string[]>([]);
-
-  const { data, isLoading, error } = trpc.workSample.getByToken.useQuery(
-    { token },
-    { enabled: !!token, retry: false },
-  );
-
-  const submitMutation = trpc.workSample.submit.useMutation({
-    onSuccess: () => setDone(true),
-  });
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
     <div className="min-h-screen bg-ls-bg flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         <div className="flex items-center gap-3 mb-5">
@@ -38,6 +23,24 @@ export default function WorkSample() {
       </div>
     </div>
   );
+}
+
+export default function WorkSample() {
+  const { token = '' } = useParams();
+  const [submission, setSubmission] = useState('');
+  const [link, setLink] = useState('');
+  const [done, setDone] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const { data, isLoading, error } = trpc.workSample.getByToken.useQuery(
+    { token },
+    { enabled: !!token, retry: false },
+  );
+
+  const submitMutation = trpc.workSample.submit.useMutation({
+    onSuccess: () => setDone(true),
+  });
+
 
   if (isLoading) {
     return <Shell><div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400 text-sm">Loading…</div></Shell>;

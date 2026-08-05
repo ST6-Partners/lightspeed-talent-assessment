@@ -8,21 +8,8 @@ import { trpc } from '../lib/trpc';
 // (books it) or reaches out directly. Mirrors the recruiter side of the
 // phone-screen counter-proposal flow (PhoneScreenAvailability's candidate-slots
 // branch), wired to the interview-round proposal endpoints.
-export default function InterviewRoundPick() {
-  const { token = '' } = useParams();
-  const [selected, setSelected] = useState<string | null>(null);
-  const [reachedOut, setReachedOut] = useState<{ email: string } | null>(null);
-
-  const { data, isLoading, error, refetch } = trpc.scheduling.getInterviewRoundProposalContext.useQuery(
-    { token },
-    { enabled: !!token, retry: false },
-  );
-  const confirm = trpc.scheduling.confirmInterviewRoundProposedSlot.useMutation({ onSuccess: () => refetch() });
-  const reachOut = trpc.scheduling.interviewerReachOutInterviewRound.useMutation({
-    onSuccess: (res: any) => setReachedOut({ email: res?.email ?? data?.candidateEmail ?? '' }),
-  });
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
     <div className="min-h-screen bg-ls-bg flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
         <div className="flex items-center gap-3 mb-5">
@@ -41,6 +28,22 @@ export default function InterviewRoundPick() {
       </div>
     </div>
   );
+}
+
+export default function InterviewRoundPick() {
+  const { token = '' } = useParams();
+  const [selected, setSelected] = useState<string | null>(null);
+  const [reachedOut, setReachedOut] = useState<{ email: string } | null>(null);
+
+  const { data, isLoading, error, refetch } = trpc.scheduling.getInterviewRoundProposalContext.useQuery(
+    { token },
+    { enabled: !!token, retry: false },
+  );
+  const confirm = trpc.scheduling.confirmInterviewRoundProposedSlot.useMutation({ onSuccess: () => refetch() });
+  const reachOut = trpc.scheduling.interviewerReachOutInterviewRound.useMutation({
+    onSuccess: (res: any) => setReachedOut({ email: res?.email ?? data?.candidateEmail ?? '' }),
+  });
+
 
   const fmtWhen = (v: string | Date | null) => (v ? new Date(v).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '');
 

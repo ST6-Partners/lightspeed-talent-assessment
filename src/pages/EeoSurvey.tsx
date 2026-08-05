@@ -21,22 +21,8 @@ const DIS = ['Yes', 'No', 'Declined'];
 const PREFER_NOT = 'Prefer not to say';
 const label = (v: string) => (v === 'Declined' ? PREFER_NOT : v);
 
-export default function EeoSurvey() {
-  const { token = '' } = useParams();
-  const [sex, setSex] = useState<string>('');
-  const [raceEthnicity, setRace] = useState<string>('');
-  const [veteranStatus, setVet] = useState<string>('');
-  const [disabilityStatus, setDis] = useState<string>('');
-  const [done, setDone] = useState(false);
-
-  const { data, isLoading, error } = trpc.eeo.getByToken.useQuery(
-    { token },
-    { enabled: !!token, retry: false },
-  );
-
-  const submit = trpc.eeo.submit.useMutation({ onSuccess: () => setDone(true) });
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
     <div className="min-h-screen bg-ls-bg flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         <div className="flex items-center gap-3 mb-5">
@@ -55,10 +41,14 @@ export default function EeoSurvey() {
       </div>
     </div>
   );
+}
 
-  const Field = ({ title, options, value, onChange }: {
-    title: string; options: string[]; value: string; onChange: (v: string) => void;
-  }) => (
+// Module scope so it keeps a stable identity across renders (a component defined
+// inside EeoSurvey remounted the radios on every render).
+function Field({ title, options, value, onChange }: {
+  title: string; options: string[]; value: string; onChange: (v: string) => void;
+}) {
+  return (
     <div className="mb-5">
       <div className="text-sm font-medium text-gray-900 mb-2">{title}</div>
       <div className="flex flex-col gap-1.5">
@@ -71,6 +61,23 @@ export default function EeoSurvey() {
       </div>
     </div>
   );
+}
+
+export default function EeoSurvey() {
+  const { token = '' } = useParams();
+  const [sex, setSex] = useState<string>('');
+  const [raceEthnicity, setRace] = useState<string>('');
+  const [veteranStatus, setVet] = useState<string>('');
+  const [disabilityStatus, setDis] = useState<string>('');
+  const [done, setDone] = useState(false);
+
+  const { data, isLoading, error } = trpc.eeo.getByToken.useQuery(
+    { token },
+    { enabled: !!token, retry: false },
+  );
+
+  const submit = trpc.eeo.submit.useMutation({ onSuccess: () => setDone(true) });
+
 
   if (isLoading) {
     return <Shell><div className="bg-white rounded-lg border border-gray-200 p-8 text-center text-gray-400 text-sm">Loading…</div></Shell>;

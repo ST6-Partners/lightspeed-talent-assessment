@@ -10,6 +10,20 @@ import { useParams } from 'react-router-dom';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { trpc } from '../lib/trpc';
 
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: '100%', maxWidth: 760, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+          <span style={{ fontWeight: 700, color: '#1f2733' }}>Lightspeed</span>
+          <span style={{ color: '#5b6675', fontSize: 13 }}>Talent Assessment</span>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function TaskReview() {
   const { token = '' } = useParams();
   const view = trpc.tasks.reviewView.useQuery({ token }, { enabled: !!token, retry: false });
@@ -34,17 +48,6 @@ export default function TaskReview() {
   const save = trpc.tasks.reviewSaveEdits.useMutation({ onSuccess: () => { setSaved(true); setTimeout(() => setSaved(false), 2500); } });
   const approve = trpc.tasks.reviewApprove.useMutation({ onSuccess: (r) => setDone(r.title || 'the task') });
 
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div style={{ minHeight: '100vh', background: '#f7f9fc', display: 'flex', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: '100%', maxWidth: 760, fontFamily: '-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-          <span style={{ fontWeight: 700, color: '#1f2733' }}>Lightspeed</span>
-          <span style={{ color: '#5b6675', fontSize: 13 }}>Talent Assessment</span>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
   const card: React.CSSProperties = { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '22px 24px', boxShadow: '0 4px 16px rgba(20,40,80,.05)' };
   const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 700, color: '#374151', margin: '16px 0 4px', textTransform: 'uppercase', letterSpacing: '.03em' };
   const inp: React.CSSProperties = { width: '100%', padding: '9px 11px', fontSize: 14, border: '1px solid #d1d5db', borderRadius: 6, boxSizing: 'border-box', fontFamily: 'inherit' };
