@@ -424,29 +424,41 @@ export default function Candidates() {
     };
   }).sort((a, b) => b.cands.length - a.cands.length);
 
-  // Show open roles that have NO candidates yet as empty cards, so the list
-  // matches the "Open roles" count. Without this a freshly opened role (no
-  // applicants) is counted in the stat but never rendered. Keyed by the role's
-  // JD, resolved from the requisition's own JD (jd.reqId) or its base-JD link;
-  // skipped when a candidate group already covers that JD.
+  // Show open roles that have NO candidate group yet as empty cards, so the list
+  // matches the "Open roles" count and every Open requisition is visible — the
+  // same rule the Open Roles (Postings) tab uses. Resolve the role's JD from
+  // jd.reqId or the base-JD link when there is one (skipping a JD already covered
+  // by a candidate group, and de-duping reusable JDs shared by two open reqs).
+  // When an Open requisition has NO linked JD (e.g. a freshly opened role whose
+  // JD link isn't set), still render it with a "{department} role" fallback title
+  // instead of silently dropping it — otherwise the role appears on the Open
+  // Roles tab but goes missing here.
   const presentJdIds = new Set(roleGroups.map((g) => g.jdId));
+  const seenEmptyKeys = new Set<string>();
   const emptyOpenGroups = ((requisitions ?? []) as any[])
     .filter((r: any) => r.status === 'Open')
     .map((r: any) => {
       const jd = ((jobDescriptions ?? []) as any[]).find((j: any) => j.reqId === r.id)
         ?? (r.baseJdId ? jdById[r.baseJdId] : null);
-      return jd ? { r, jd } : null;
+      if (jd) {
+        if (presentJdIds.has(jd.id) || seenEmptyKeys.has(jd.id)) return null;
+        seenEmptyKeys.add(jd.id);
+        return { jdId: jd.id, title: jd.jobTitle ?? getJdTitle(jd.id), r };
+      }
+      // No linked JD — key by the requisition so it still shows (one card per req).
+      const key = `req:${r.id}`;
+      if (seenEmptyKeys.has(key)) return null;
+      seenEmptyKeys.add(key);
+      return { jdId: key, title: `${r.department ?? 'Unassigned'} role`, r };
     })
-    .filter((x: any) => !!x && !presentJdIds.has(x.jd.id))
-    // Dedupe: two open reqs could resolve to the same reusable JD.
-    .filter((x: any, i: number, arr: any[]) => arr.findIndex((y: any) => y.jd.id === x.jd.id) === i)
-    .map(({ r, jd }: any) => ({
-      jdId: jd.id,
+    .filter(Boolean)
+    .map(({ jdId, title, r }: any) => ({
+      jdId,
       cands: [] as any[],
       closed: [] as any[],
       counts: {} as Record<string, number>,
       reqStatus: r.status as string | null,
-      title: jd.jobTitle ?? getJdTitle(jd.id),
+      title,
       dept: (r.department ?? '') as string,
       hm: (r.hiringManager ?? '') as string,
     }))
