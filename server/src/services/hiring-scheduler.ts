@@ -12,6 +12,7 @@
 import { eq, and, lte, gte, lt, isNull, isNotNull, inArray, sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { candidates, candidateStageHistory, emailLog, jobDescriptions, jobRequisitions } from '../db/schema/hiring.js';
+import { assessmentTasks } from '../db/schema/assessmentTasks.js';
 import { approvals } from '../db/schema/intake.js';
 import { registerJob, rescheduleCronJob, type JobResult } from './job-runner.js';
 import { rankNewApplicants } from './candidateRanking.js';
@@ -992,6 +993,46 @@ async function runDueRejectionEmails(): Promise<JobResult> {
   return { affected: sent, details: sent ? `Sent ${sent} due rejection email(s).` : 'No rejection emails due.' };
 }
 
+// ── Job: task approval reminder (bell) ──
+// While a work-sample task is still Draft with an approver on file (a review
+// request went out but the task was never approved), drop a daily bell on the
+// hiring team to resend / fix the address — so a mistyped or missed approval
+// email doesn't leave a task stuck in Draft forever. Repeats daily until the
+// task is approved (Live) or retired. Bell only; the recruiter resends from the
+// Work Sample page. A fresh create / resend resets the clock, so the first nudge
+// only lands once the request has sat unactioned for a while.
+async function runTaskApprovalReminderBell(): Promise<JobResult> {
+  const team = await hiringTeamUsers();
+  if (!team.length) return { affected: 0, details: 'No hiring-team users to notify.' };
+  const REMIND_AFTER_MS = 6 * 60 * 60 * 1000; // grace period before the first nudge
+  const now = Date.now();
+  const dedupeSince = new Date(now - 20 * 60 * 60 * 1000); // once a day, not a flood
+  const drafts = await db.query.assessmentTasks.findMany({ where: eq(assessmentTasks.status, 'Draft') });
+  let notified = 0;
+  for (const t of drafts as any[]) {
+    if (!t.approverEmail) continue; // no review was ever requested → nothing to resend
+    const ref = t.updatedAt ? new Date(t.updatedAt).getTime() : (t.createdAt ? new Date(t.createdAt).getTime() : now);
+    if (now - ref < REMIND_AFTER_MS) continue; // too soon since create / last resend
+    const recent = (await db.select().from(notifications).where(and(
+      eq(notifications.type, 'task_approval_reminder'),
+      eq(notifications.referenceId, t.id),
+      gte(notifications.createdAt, dedupeSince),
+    )).limit(1))[0];
+    if (recent) continue; // already reminded within the last day
+    try {
+      await db.insert(notifications).values((team as any[]).map((u) => ({
+        userId: u.id,
+        type: 'task_approval_reminder',
+        message: `Work sample "${t.title}" is still awaiting approval from ${t.approverEmail}. If the email didn't arrive, resend it (or fix the address) from the Work Sample page.`,
+        referenceId: t.id,
+        referenceType: 'assessment_task',
+      })));
+      notified++;
+    } catch (err) { console.error('[task-approval-reminder] notify failed for', t.id, err); }
+  }
+  return { affected: notified, details: notified ? `Bell-reminded the hiring team on ${notified} task(s) awaiting approval.` : 'No tasks awaiting approval.' };
+}
+
 export function registerHiringJobs(): void {
   registerJob({
     name:           'send-due-rejection-emails',
@@ -1164,5 +1205,14 @@ export function registerHiringJobs(): void {
     jobType:        'cron',
     cronExpression: '0 * * * *',   // top of every hour
     handler:        runBiasAlert,
+  });
+  registerJob({
+    name:           'task-approval-reminder',
+    label:          'Task Approval Reminder',
+    description:    'Daily bell reminder to the hiring team when a work-sample task is still Draft with a review request out — prompts a resend if the approval email never landed. Repeats daily until the task is approved or retired.',
+    color:          '#f59e0b',
+    jobType:        'cron',
+    cronExpression: '35 9 * * *',  // 9:35 AM daily
+    handler:        runTaskApprovalReminderBell,
   });
 }
