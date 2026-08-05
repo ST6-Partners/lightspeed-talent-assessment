@@ -98,10 +98,38 @@ export default function TaskReview() {
       </p>
 
       {field('title', 'Title', 1)}
-      {field('brief', 'Brief (what the candidate sees)', 5)}
-      {field('showYourWorkInstructions', 'Show-your-work instructions', 3)}
-      {field('scoringGuideWork', 'Scoring guide — work quality', 3)}
-      {field('scoringGuideAi', 'Scoring guide — AI skill', 3)}
+      {field('brief', task.answerFormat === 'multi_select' ? 'Question (what the candidate sees)' : 'Brief (what the candidate sees)', 5)}
+
+      {task.answerFormat === 'multi_select' ? (
+        <div>
+          <label style={lbl}>
+            Answer options{typeof task.selectCount === 'number' ? ` — candidate picks ${task.selectCount}` : ''}
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {((task.options as string[] | null) ?? []).map((opt: string, i: number) => {
+              const correct = ((task.correctOptions as string[] | null) ?? []).includes(opt);
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', border: `1px solid ${correct ? '#bbf7d0' : '#e2e8f0'}`, background: correct ? '#f0fdf4' : '#fff', borderRadius: 8, fontSize: 14 }}>
+                  <span style={{ flex: 1, color: '#1f2733' }}>{opt}</span>
+                  {correct && <span style={{ fontSize: 11, fontWeight: 700, color: '#15803d', background: '#dcfce7', borderRadius: 999, padding: '2px 9px' }}>Correct answer</span>}
+                </div>
+              );
+            })}
+            {(!task.options || (task.options as string[]).length === 0) && (
+              <span style={{ fontSize: 13, color: '#9ca3af' }}>No options are set on this task yet.</span>
+            )}
+          </div>
+          <p style={{ fontSize: 12, color: '#9ca3af', margin: '8px 0 0' }}>
+            Auto-graded pick-list question. The correct answer is highlighted here for your review and is never shown to the candidate. To change the options, edit the task in the app.
+          </p>
+        </div>
+      ) : (
+        <>
+          {field('showYourWorkInstructions', 'Show-your-work instructions', 3)}
+          {field('scoringGuideWork', 'Scoring guide — work quality', 3)}
+          {field('scoringGuideAi', 'Scoring guide — AI skill', 3)}
+        </>
+      )}
 
       {approve.error && <p style={{ color: '#b91c1c', fontSize: 13, margin: '12px 0 0' }}>{approve.error.message}</p>}
       {save.error && <p style={{ color: '#b91c1c', fontSize: 13, margin: '12px 0 0' }}>{save.error.message}</p>}
