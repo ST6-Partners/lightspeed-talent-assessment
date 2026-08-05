@@ -27,6 +27,7 @@ import { interviewPlan, hiringTeam } from '../db/schema/intake.js';
 import { INTERVIEW_WINDOW_HOURS, businessHoursBetween } from './interviews.js';
 import { emailBookingInvite, emailScreeningCallInvite, emailInterviewerDeclinedRoleManager, buildInterviewerAvailabilityEmail, sendEmail, HIRING_TEAM_INBOX, emailPhoneScreenCandidateWindow, emailPhoneScreenConfirmedRecruiter, emailPhoneScreenNoAvailabilityRecruiter, emailPhoneScreenConfirmedCandidate, emailInterviewBookedCandidate, emailInterviewsBookedCandidate, emailInterviewRoundCandidateProposed, emailInterviewRoundReachOutCandidate } from '../services/email.js';
 import { sendFirstRoundPrep, sendRoundPrep, sendInterviewScheduledTeamEmail } from '../services/interviewRounds.js';
+import { WALKTHROUGH_ROUND_NAME } from '../services/workSampleWalkthrough.js';
 import { prepInterviewQuestions } from '../services/interviewPrep.js';
 
 // Capability tokens for the interviewer "can't interview for this role" link that
@@ -406,6 +407,105 @@ export const schedulingRouter = router({
     }),
 
   // ── PUBLIC: candidate opens their booking link ─────────────
+  // ══ WORK-SAMPLE WALKTHROUGH — recruiter-first scheduling (no Calendly) ══
+  // Mirrors the phone-screen flow: the recruiter offers >=3 date/time windows,
+  // the candidate picks one on the booking page, and the walkthrough round is
+  // scheduled. No external calendar required.
+
+  // In-app: recruiter offers availability windows for the walkthrough.
+  submitWalkthroughAvailability: protectedProcedure
+    .input(z.object({
+      candidateId: z.string().uuid(),
+      windows: z.array(z.object({ date: z.string().min(1), start: z.string().min(1), end: z.string().min(1) })).min(3).max(20),
+      note: z.string().max(500).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const slots = input.windows.map((w) => ({ date: w.date, start: w.start, end: w.end, label: fmtAvailabilityWindow(w) }));
+      const availabilityText = slots.map((s) => s.label).join('\n')
+        + (input.note && input.note.trim() ? `\n\nNote: ${input.note.trim()}` : '');
+      const bookingToken = candidate.workSampleBookingToken ?? randomUUID();
+      await ctx.db.update(candidates).set({
+        workSampleSlots: slots,
+        workSampleAvailability: availabilityText,
+        workSampleSelectedSlot: null,
+        workSampleBookingToken: bookingToken,
+        workSampleBookingOpenedAt: new Date(),
+        workSampleScheduledAt: null,
+        workSampleEndAt: null,
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, candidate.id));
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      const bookingUrl = `${appBaseUrl()}/book-interview/${bookingToken}`;
+      await emailBookingInvite({ email: candidate.email, firstName: candidate.firstName, jobTitle: jobTitle ?? undefined, bookingUrl, kind: 'work_sample_walkthrough' })
+        .catch((err) => console.error('[scheduling.submitWalkthroughAvailability] candidate email failed:', err));
+      return { ok: true as const, bookingUrl };
+    }),
+
+  // Public: candidate confirms one of the offered walkthrough windows.
+  confirmWalkthrough: publicProcedure
+    .input(z.object({ token: z.string().min(1), slot: z.string().min(1).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.workSampleBookingToken, input.token) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND', message: 'This link is invalid or has expired.' });
+      const offeredRaw: any[] = Array.isArray((candidate as any).workSampleSlots) ? (candidate as any).workSampleSlots as any[] : [];
+      const offered = offeredRaw.map((s) => (typeof s === 'string' ? { label: s } : s));
+      const matched = offered.find((s) => s.label === input.slot);
+      if (offered.length && !matched) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'That time is no longer offered. Please pick one of the listed times.' });
+      }
+      let startAt: Date | null = null;
+      let endAt: Date | null = null;
+      if (matched?.date && matched?.start && matched?.end) {
+        const s = new Date(`${matched.date}T${matched.start}:00`);
+        const e = new Date(`${matched.date}T${matched.end}:00`);
+        if (!Number.isNaN(s.getTime())) startAt = s;
+        if (!Number.isNaN(e.getTime())) endAt = e;
+      }
+      await ctx.db.update(candidates).set({
+        workSampleSelectedSlot: input.slot,
+        workSampleScheduledAt: startAt ?? new Date(),
+        workSampleEndAt: endAt,
+        updatedAt: new Date(),
+      }).where(eq(candidates.id, candidate.id));
+      // Mark the walkthrough round scheduled so the interviewer + decision reminders
+      // fire against a real time.
+      try {
+        await ctx.db.update(candidateInterviews)
+          .set({ scheduledAt: startAt ?? new Date(), status: 'scheduled', updatedAt: new Date() })
+          .where(and(eq(candidateInterviews.candidateId, candidate.id), eq(candidateInterviews.roundName, WALKTHROUGH_ROUND_NAME)));
+      } catch (err) { console.error('[scheduling.confirmWalkthrough] round update failed:', err); }
+      const jobTitle = await jobTitleFor(ctx.db, candidate.jdId);
+      await emailInterviewBookedCandidate({
+        email: candidate.email, firstName: candidate.firstName, jobTitle: jobTitle ?? undefined,
+        interviewDate: input.slot, kind: 'work_sample_walkthrough',
+      }).catch((err) => console.error('[scheduling.confirmWalkthrough] candidate email failed:', err));
+      return { ok: true as const };
+    }),
+
+  // In-app: walkthrough scheduling status for the recruiter Work Sample section.
+  walkthroughStatusFor: protectedProcedure
+    .input(z.object({ candidateId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const candidate = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, input.candidateId) });
+      if (!candidate) throw new TRPCError({ code: 'NOT_FOUND' });
+      const round = (await ctx.db.select().from(candidateInterviews)
+        .where(and(eq(candidateInterviews.candidateId, input.candidateId), eq(candidateInterviews.roundName, WALKTHROUGH_ROUND_NAME))).limit(1))[0];
+      const slots = Array.isArray((candidate as any).workSampleSlots)
+        ? ((candidate as any).workSampleSlots as any[]).map((s) => (typeof s === 'string' ? s : s.label))
+        : [];
+      return {
+        isWalkthrough: !!round,
+        opened: !!candidate.workSampleBookingOpenedAt,
+        availability: (candidate as any).workSampleAvailability ?? null,
+        slots,
+        bookingUrl: candidate.workSampleBookingToken ? `${appBaseUrl()}/book-interview/${candidate.workSampleBookingToken}` : null,
+        scheduledAt: candidate.workSampleScheduledAt ?? null,
+        selectedSlot: (candidate as any).workSampleSelectedSlot ?? null,
+      };
+    }),
+
   getBookingContext: publicProcedure
     .input(z.object({ token: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
@@ -444,6 +544,10 @@ export const schedulingRouter = router({
       const joinUrl = mode === 'work_sample_walkthrough'
         ? candidate.workSampleJoinUrl
         : mode === 'phone_screen' ? null : candidate.interviewJoinUrl;
+      // Recruiter-offered walkthrough windows (recruiter-first flow, no Calendly).
+      const wsSlots = mode === 'work_sample_walkthrough' && Array.isArray((candidate as any).workSampleSlots)
+        ? ((candidate as any).workSampleSlots as any[]).map((s) => (typeof s === 'string' ? s : s.label))
+        : [];
       return {
         mode,
         firstName: candidate.firstName,
@@ -451,22 +555,27 @@ export const schedulingRouter = router({
         alreadyBooked,
         scheduledAt,
         joinUrl,
-        // Embedded Calendly widget URL (interview + walkthrough modes).
-        calendlyUrl: (mode === 'interview' || mode === 'work_sample_walkthrough') && interviewBase
+        // Embedded Calendly widget URL. Interviews always; walkthroughs ONLY as a
+        // fallback when the recruiter hasn't offered windows (otherwise use the picker).
+        calendlyUrl: (mode === 'interview' || (mode === 'work_sample_walkthrough' && wsSlots.length === 0)) && interviewBase
           ? prefillCalendlyUrl(interviewBase, `${candidate.firstName} ${candidate.lastName}`, candidate.email, input.token)
           : null,
         // External booking link to open (phone-screen / Zoom Scheduler mode).
         schedulingUrl: mode === 'phone_screen' ? (phoneScreenSchedulingUrl() || null) : null,
-        // Recruiter-submitted availability windows for the phone screen (recruiter-first flow).
-        availability: mode === 'phone_screen' ? ((candidate as any).phoneScreenAvailability ?? null) : null,
+        // Recruiter-submitted availability windows (phone screen or walkthrough).
+        availability: mode === 'phone_screen'
+          ? ((candidate as any).phoneScreenAvailability ?? null)
+          : mode === 'work_sample_walkthrough' ? ((candidate as any).workSampleAvailability ?? null) : null,
         slots: mode === 'phone_screen'
           ? (Array.isArray((candidate as any).phoneScreenSlots)
               ? ((candidate as any).phoneScreenSlots as any[]).map((s) => (typeof s === 'string' ? s : s.label))
               : ((candidate as any).phoneScreenAvailability
                   ? String((candidate as any).phoneScreenAvailability).split('\n').filter((l: string) => l.trim() && !l.startsWith('Note:'))
                   : []))
-          : null,
-        selectedSlot: mode === 'phone_screen' ? ((candidate as any).phoneScreenSelectedSlot ?? null) : null,
+          : mode === 'work_sample_walkthrough' ? wsSlots : null,
+        selectedSlot: mode === 'phone_screen'
+          ? ((candidate as any).phoneScreenSelectedSlot ?? null)
+          : mode === 'work_sample_walkthrough' ? ((candidate as any).workSampleSelectedSlot ?? null) : null,
       };
     }),
 
