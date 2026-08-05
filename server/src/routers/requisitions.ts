@@ -15,6 +15,9 @@ import { trackActivity } from '../services/telemetry.js';
 import { ataSeedRoles } from '../data/ataSeedRoles.js';
 
 const RequisitionInput = z.object({
+  // The library job description this requisition is filling (reusable across
+  // requisitions). Optional so a req can be opened before a JD is attached.
+  baseJdId: z.string().uuid().nullable().optional(),
   department: z.string().min(1).max(200),
   hiringManager: z.string().min(1).max(200),
   numOpenings: z.number().int().min(1).default(1),
@@ -42,10 +45,18 @@ export const requisitionsRouter = router({
       // and need the full set. Only the Job Requisitions page filters seeded rows out.
       const seededTitles = new Set(ataSeedRoles.map((r) => r.jobDescription.title));
       const jds = await ctx.db.query.jobDescriptions.findMany({});
-      const seededReqIds = new Set(
-        jds.filter((j: any) => seededTitles.has(j.jobTitle)).map((j: any) => j.reqId),
+      const seededJdIds = new Set(
+        jds.filter((j: any) => seededTitles.has(j.jobTitle)).map((j: any) => j.id),
       );
-      const withFlag = rows.map((r) => ({ ...r, seeded: seededReqIds.has(r.id) }));
+      // A req is seeded if a seeded JD points back at it (legacy jd.reqId) or the
+      // req points at a seeded JD from the library (base_jd_id).
+      const seededReqIds = new Set(
+        jds.filter((j: any) => seededTitles.has(j.jobTitle) && j.reqId).map((j: any) => j.reqId),
+      );
+      const withFlag = rows.map((r) => ({
+        ...r,
+        seeded: seededReqIds.has(r.id) || (!!(r as any).baseJdId && seededJdIds.has((r as any).baseJdId)),
+      }));
       if (input?.status) return withFlag.filter((r) => r.status === input.status);
       return withFlag;
     }),
@@ -118,8 +129,9 @@ export const requisitionsRouter = router({
       });
       if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
 
-      // FK: job_descriptions.req_id ON DELETE CASCADE removes child JDs;
-      // candidates.jd_id ON DELETE SET NULL detaches any linked candidates.
+      // FK: job_descriptions.req_id ON DELETE SET NULL detaches (does NOT delete)
+      // the JD from the library; candidates.jd_id / candidates.req_id ON DELETE
+      // SET NULL detach any linked candidates.
       await ctx.db.delete(jobRequisitions).where(eq(jobRequisitions.id, input.id));
 
       await auditChange(ctx.db, ctx.user.id, input.id, 'job_requisitions', 'delete');

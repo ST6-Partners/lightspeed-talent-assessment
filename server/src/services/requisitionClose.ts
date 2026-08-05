@@ -27,6 +27,7 @@ import {
 import { inboundEmails } from '../db/schema/email.js';
 import { emailReqStatusToCandidate } from './email.js';
 import { logDecision } from './decisionLog.js';
+import { resolveReqIdForJd } from './reqLink.js';
 
 // Stages that are already finished — never re-touched by a close/fill.
 
@@ -51,19 +52,33 @@ export async function dispositionCandidatesForReqStatus(
 ): Promise<DispositionResult> {
   const onHold = status === 'On Hold';
 
+  // Scope candidates to THIS requisition. Prefer the direct candidate.req_id
+  // link (a reusable JD can serve several requisitions); fall back to the legacy
+  // jd.req_id walk for candidates created before req_id was backfilled.
   const jds = await db.query.jobDescriptions.findMany({ where: eq(jobDescriptions.reqId, reqId) });
   const jdIds = jds.map((j: any) => j.id);
-  if (!jdIds.length) return { notified: 0, disposed: 0 };
+  const byReq = await db.query.candidates.findMany({ where: eq(candidates.reqId, reqId) });
+  const byJd = jdIds.length
+    ? await db.query.candidates.findMany({ where: inArray(candidates.jdId, jdIds) })
+    : [];
+  const seenIds = new Set<string>();
+  const cands = [...byReq, ...byJd].filter((c: any) => (seenIds.has(c.id) ? false : (seenIds.add(c.id), true)));
+  if (!cands.length) return { notified: 0, disposed: 0 };
 
-  const cands = await db.query.candidates.findMany({ where: inArray(candidates.jdId, jdIds) });
+  // Job-title lookup for the courtesy email, keyed by each candidate's JD.
+  const candJdIds = [...new Set(cands.map((c: any) => c.jdId).filter(Boolean))] as string[];
+  const jdRows = candJdIds.length
+    ? await db.query.jobDescriptions.findMany({ where: inArray(jobDescriptions.id, candJdIds) })
+    : [];
+  const jdTitleById = new Map<string, string>(jdRows.map((j: any) => [j.id, j.jobTitle]));
+
   const active = cands.filter((c: any) => !TERMINAL_STAGES.includes(c.currentStage));
 
   let notified = 0;
   let disposed = 0;
 
   for (const c of active) {
-    const jd = jds.find((j: any) => j.id === c.jdId);
-    const jobTitle = jd?.jobTitle ?? undefined;
+    const jobTitle = c.jdId ? jdTitleById.get(c.jdId) : undefined;
 
     // Closed/filled → move to a real terminal disposition (NOT 'Rejected').
     if (!onHold) {
@@ -134,16 +149,22 @@ export async function maybeAutoCloseFilledReq(
   jdId: string,
   changedByUserId: string | null,
 ): Promise<boolean> {
-  const jd = await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, jdId) });
-  if (!jd?.reqId) return false;
+  const reqId = await resolveReqIdForJd(db, jdId);
+  if (!reqId) return false;
 
-  const req = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) });
+  const req = await db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, reqId) });
   if (!req || req.status === 'Closed') return false;
 
-  // Count hires across every JD on this requisition.
+  // Count hires against THIS requisition (candidate.req_id), falling back to the
+  // legacy jd.req_id walk for candidates predating the req_id backfill.
   const jds = await db.query.jobDescriptions.findMany({ where: eq(jobDescriptions.reqId, req.id) });
   const jdIds = jds.map((j: any) => j.id);
-  const cands = await db.query.candidates.findMany({ where: inArray(candidates.jdId, jdIds) });
+  const byReq = await db.query.candidates.findMany({ where: eq(candidates.reqId, req.id) });
+  const byJd = jdIds.length
+    ? await db.query.candidates.findMany({ where: inArray(candidates.jdId, jdIds) })
+    : [];
+  const seenIds = new Set<string>();
+  const cands = [...byReq, ...byJd].filter((c: any) => (seenIds.has(c.id) ? false : (seenIds.add(c.id), true)));
   const hired = cands.filter((c: any) => c.currentStage === 'Hired').length;
   const openings = req.numOpenings ?? 1;
   if (hired < openings) return false;

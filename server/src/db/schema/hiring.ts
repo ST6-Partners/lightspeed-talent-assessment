@@ -122,9 +122,13 @@ export const jobRequisitions = pgTable('job_requisitions', {
 
 export const jobDescriptions = pgTable('job_descriptions', {
   id: uuid('id').primaryKey().defaultRandom(),
+  // A JD is reusable library content. It MAY still carry the legacy req_id
+  // (the 1:1 era); new JDs stand alone and are linked FROM a requisition via
+  // job_requisitions.base_jd_id. Deleting a req now detaches the JD (set null)
+  // instead of destroying it.
   reqId: uuid('req_id')
-    .references(() => jobRequisitions.id, { onDelete: 'cascade' })
-    .notNull(),
+    .references(() => jobRequisitions.id, { onDelete: 'set null' }),
+  department: varchar('department', { length: 200 }),
   jobTitle: varchar('job_title', { length: 300 }).notNull(),
   summary: text('summary'),
   responsibilities: text('responsibilities'),
@@ -156,6 +160,9 @@ export const jobDescriptions = pgTable('job_descriptions', {
 export const candidates = pgTable('candidates', {
   id: uuid('id').primaryKey().defaultRandom(),
   jdId: uuid('jd_id').references(() => jobDescriptions.id, { onDelete: 'set null' }),
+  // The requisition (opening) this candidate applied to. A JD can be reused
+  // across requisitions, so candidate scoping follows req_id, not the shared JD.
+  reqId: uuid('req_id').references(() => jobRequisitions.id, { onDelete: 'set null' }),
   firstName: varchar('first_name', { length: 100 }).notNull(),
   lastName: varchar('last_name', { length: 100 }).notNull(),
   email: varchar('email', { length: 300 }).notNull(),

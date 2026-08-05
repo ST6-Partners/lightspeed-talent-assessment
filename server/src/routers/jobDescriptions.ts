@@ -32,7 +32,10 @@ export const LIGHTSPEED_VALUES = [
 ] as const;
 
 const JdInput = z.object({
-  reqId: z.string().uuid(),
+  // Optional: a JD can be created standalone in the library and linked from a
+  // requisition later (via requisition.baseJdId).
+  reqId: z.string().uuid().optional(),
+  department: z.string().max(200).optional(),
   jobTitle: z.string().min(1).max(300),
   summary: z.string().optional(),
   responsibilities: z.string().optional(),

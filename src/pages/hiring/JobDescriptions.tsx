@@ -136,11 +136,11 @@ export default function JobDescriptions() {
     }));
   };
 
-  const getReqDept = (reqId: string) => {
+  const getReqDept = (reqId: string | null | undefined) => {
     const r = (requisitions ?? []).find((x: any) => x.id === reqId);
     return r?.department ?? '—';
   };
-  const getReqLabel = (reqId: string) => {
+  const getReqLabel = (reqId: string | null | undefined) => {
     const r = (requisitions ?? []).find((r) => r.id === reqId);
     return r ? `${r.department} · ${r.hiringManager}` : reqId;
   };

@@ -48,6 +48,7 @@ import { startPhoneScreenScheduling } from '../services/phoneScreen.js';
 import { startInterviewRoundScheduling } from '../services/interviewScheduling.js';
 import { rankOneCandidateIntoRole } from '../services/candidateRanking.js';
 import { maybeAutoCloseFilledReq } from '../services/requisitionClose.js';
+import { resolveReqIdForJd } from '../services/reqLink.js';
 import { computeHiringAlerts } from '../services/hiring-alerts.js';
 import { walkLeadershipChain, emailForEmployeeName } from '../services/orgChain.js';
 import { employees } from '../db/schema/employees.js';
@@ -616,7 +617,10 @@ export const candidatesRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const { needsSponsorship, references: refInput, ...candidateData } = input;
-      const [candidate] = await ctx.db.insert(candidates).values(candidateData).returning();
+      // Bind the candidate to the requisition (opening) it applied to, resolved
+      // from its JD (legacy jd.req_id or the requisition's base_jd_id link).
+      const reqId = await resolveReqIdForJd(ctx.db, (candidateData as any).jdId);
+      const [candidate] = await ctx.db.insert(candidates).values({ ...candidateData, reqId } as any).returning();
 
       // Log initial stage to history
       await ctx.db.insert(candidateStageHistory).values({

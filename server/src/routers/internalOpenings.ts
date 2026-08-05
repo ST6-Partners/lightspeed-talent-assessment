@@ -78,8 +78,13 @@ export const internalOpeningsRouter = router({
       const firstName = parts[0];
       const lastName = parts.slice(1).join(' ') || firstName;
 
+      // Bind to the requisition (opening): legacy jd.req_id, else the req that
+      // points at this JD via base_jd_id.
+      const openingReqId = (jd as any).reqId
+        ?? (await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.baseJdId, input.jdId) }))?.id
+        ?? null;
       const [candidate] = await ctx.db.insert(candidates).values({
-        jdId: input.jdId, firstName, lastName, email: input.email,
+        jdId: input.jdId, reqId: openingReqId, firstName, lastName, email: input.email,
         source: 'Internal', isInternal: true, internalEmployee: input.currentRole ?? null,
         currentStage: 'Applied',
       } as any).returning();

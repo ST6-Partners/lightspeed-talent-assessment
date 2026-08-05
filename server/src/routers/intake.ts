@@ -375,7 +375,7 @@ async function runKickoffAndPosting(db: DrizzleClient, req: any): Promise<void> 
     // opens against the JD already in the JD tab. Copy its question set to this req.
     jdTitle = baseJd?.jobTitle;
     try {
-      const prevQ = baseJd
+      const prevQ = baseJd?.reqId
         ? (await db.select().from(interviewQuestions)
             .where(eq(interviewQuestions.reqId, baseJd.reqId))
             .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0]
@@ -675,9 +675,9 @@ export const intakeRouter = router({
       const jd = (await ctx.db.select().from(jobDescriptions).where(eq(jobDescriptions.id, input.token)))[0];
       if (!jd) throw new TRPCError({ code: 'NOT_FOUND', message: 'This review link is invalid or has expired.' });
       const req = jd.reqId ? await ctx.db.query.jobRequisitions.findFirst({ where: eq(jobRequisitions.id, jd.reqId) }) : null;
-      const qRow = (await ctx.db.select().from(interviewQuestions)
+      const qRow = jd.reqId ? (await ctx.db.select().from(interviewQuestions)
         .where(eq(interviewQuestions.reqId, jd.reqId))
-        .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0];
+        .orderBy(desc(interviewQuestions.createdAt)).limit(1))[0] : undefined;
       return {
         jd,
         department: req?.department ?? null,
