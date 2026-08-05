@@ -49,7 +49,7 @@ export const STANDARD_OFFER_CLAUSES: string[] = [
   'As a condition of employment, you will be asked to sign the company\u2019s standard confidentiality, proprietary information, and invention-assignment agreement, and to comply with all company policies as they may be adopted or amended from time to time.',
   'You will be eligible to participate in the company\u2019s standard benefit programs, and in any equity or incentive plans referenced above, in accordance with the applicable plan terms and eligibility requirements, which may be amended from time to time. Paid time off accrues in accordance with company policy.',
   'This letter, together with any addendum and the agreements referenced above, constitutes the entire agreement regarding your employment and supersedes any prior discussions or representations. It is governed by the laws of the state in which you are employed.',
-  'To accept this offer, please sign and return this letter. This offer will remain open for five (5) business days from the date above.',
+  'To accept this offer, review it and sign electronically using the “Agree & sign” button in your offer email (or the secure signing link provided). No printing or handwritten signature is required. This offer will remain open for five (5) business days from the date above.',
 ]
 
 const RED = 'color:#dc2626;';
@@ -140,10 +140,9 @@ export function renderOfferLetter(input: OfferLetterInput): string {
       Talent Acquisition
     </div>
 
-    <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:14px;line-height:2.2;">
-      Accepted by: ______________________________<br/>
-      ${esc(name)}<br/>
-      Date: ______________________________
+    <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:14px;line-height:1.8;color:#374151;">
+      <strong>Electronic signature</strong><br/>
+      This offer is signed electronically by <strong>${esc(name)}</strong> using the &ldquo;Agree &amp; sign&rdquo; button in the offer email. Signing records your acceptance and the date automatically &mdash; no printing or handwritten signature is needed.
     </div>
 
     ${addendumHtml}
@@ -199,7 +198,7 @@ export const STANDARD_INTERNAL_OFFER_CLAUSES: string[] = [
   'This internal transfer does not change the at-will nature of your employment. Either you or the company may end the employment relationship at any time, with or without cause or notice. This letter is not a contract of employment for any specific duration.',
   'Your participation in company benefit programs continues in accordance with the applicable plan terms, adjusted for any changes to eligibility associated with your new role. Any equity or incentive plans referenced above are governed by their applicable plan terms.',
   'Except as changed here or in any addendum, all other terms of your employment and your existing company agreements (including any confidentiality and invention-assignment agreement) remain in effect.',
-  'To accept this internal offer, please sign and return this letter. This offer will remain open for five (5) business days from the date above.',
+  'To accept this internal offer, review it and sign electronically using the “Agree & sign” button in your offer email (or the secure signing link provided). No printing or handwritten signature is required. This offer will remain open for five (5) business days from the date above.',
 ]
 
 // Grey em-dash placeholder for an unknown comparison cell (distinct from
@@ -292,10 +291,9 @@ export function renderInternalOfferLetter(input: InternalOfferLetterInput): stri
       People &amp; Talent
     </div>
 
-    <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:14px;line-height:2.2;">
-      Accepted by: ______________________________<br/>
-      ${esc(name)}<br/>
-      Date: ______________________________
+    <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:14px;line-height:1.8;color:#374151;">
+      <strong>Electronic signature</strong><br/>
+      This offer is signed electronically by <strong>${esc(name)}</strong> using the &ldquo;Agree &amp; sign&rdquo; button in the offer email. Signing records your acceptance and the date automatically &mdash; no printing or handwritten signature is needed.
     </div>
 
     ${addendumHtml}
