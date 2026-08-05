@@ -1017,6 +1017,76 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
   }
 }
 
+// One reference row on the Reference Check card. Each reference carries its own
+// outcome (cleared / concerns / failed) plus an optional note, saved on its own
+// via candidates.recordReferenceItemOutcome. This is the per-reference record; it
+// does NOT move the candidate — the overall decision below the list does that.
+function ReferenceRow({ reference, onChanged }: { reference: any; onChanged: () => void }) {
+  const r = reference;
+  const [note, setNote] = useState<string>(r.outcomeNotes ?? '');
+  const [noteOpen, setNoteOpen] = useState(false);
+  const LABEL: Record<string, string> = { cleared: 'Cleared', concerns: 'Concerns', failed: 'Failed' };
+  const record = trpc.candidates.recordReferenceItemOutcome.useMutation({ onSuccess: onChanged });
+  const pillStyle = (o: string, active: boolean) => {
+    if (!active) return 'bg-white text-gray-700 border-gray-300 hover:border-gray-400';
+    if (o === 'cleared') return 'bg-emerald-500 text-white border-emerald-500';
+    if (o === 'failed') return 'bg-rose-600 text-white border-rose-600';
+    return 'bg-amber-500 text-white border-amber-500';
+  };
+  const save = (outcome: 'cleared' | 'concerns' | 'failed') =>
+    record.mutate({ referenceId: r.id, outcome, notes: note.trim() || undefined });
+  return (
+    <li className="bg-white border border-gray-200 rounded px-2.5 py-2 space-y-1.5">
+      <div className="text-[13px]">
+        <span className="font-semibold text-gray-900">{r.name}</span>
+        {r.relationship ? <span className="text-gray-500"> · {r.relationship}</span> : null}
+        <span className="text-gray-400"> · {r.email}</span>
+      </div>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {(['cleared', 'concerns', 'failed'] as const).map((o) => (
+          <button
+            key={o}
+            type="button"
+            disabled={record.isLoading}
+            onClick={() => save(o)}
+            className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors disabled:opacity-50 ${pillStyle(o, r.outcome === o)}`}
+          >
+            {LABEL[o]}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setNoteOpen((v) => !v)}
+          className="text-[11px] text-gray-500 hover:text-gray-700 underline underline-offset-2 ml-1"
+        >
+          {r.outcomeNotes || noteOpen ? 'Note' : 'Add note'}
+        </button>
+        {record.isLoading && <span className="text-[11px] text-gray-400">Saving…</span>}
+      </div>
+      {(noteOpen || (r.outcomeNotes && !noteOpen)) && (
+        <div className="flex items-start gap-1.5">
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Note for this reference (optional)"
+            className="flex-1 text-[12px] border border-gray-300 rounded px-2 py-1 min-h-[38px]"
+          />
+          <button
+            type="button"
+            disabled={record.isLoading || !r.outcome}
+            title={!r.outcome ? 'Pick an outcome first' : 'Save note'}
+            onClick={() => r.outcome && save(r.outcome)}
+            className={`text-[11px] font-semibold px-2.5 py-1 rounded-md ${record.isLoading || !r.outcome ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-ls-primary text-white hover:opacity-90'}`}
+          >
+            Save
+          </button>
+        </div>
+      )}
+      {record.error && <div className="text-[11px] text-rose-600">{record.error.message}</div>}
+    </li>
+  );
+}
+
 // Reference Check decision gate. References are checked off-system; the recorder
 // marks the outcome here and the app acts on it: Cleared advances the candidate
 // to the Offer stage (the recruiter then sends the offer letter from the Offer
@@ -1039,19 +1109,15 @@ function ReferenceCheckSection({ candidate, onChanged }: { candidate: any; onCha
     : 'Choose an outcome';
   return (
     <div className="space-y-3">
-      <div className="text-gray-500">Reference checks are done manually. Record the outcome and the app moves the candidate accordingly.</div>
+      <div className="text-gray-500">Reference checks are done manually. Mark each reference below, then record the overall decision — the app moves the candidate accordingly.</div>
       <div>
         <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">References provided ({refList.length})</div>
         {refList.length === 0 ? (
           <div className="text-gray-400 italic text-[12px]">No references were captured for this candidate. They can be added on the candidate&apos;s intake form.</div>
         ) : (
-          <ul className="space-y-1">
+          <ul className="space-y-2">
             {refList.map((r) => (
-              <li key={r.id} className="text-[13px] bg-white border border-gray-200 rounded px-2.5 py-1.5">
-                <span className="font-semibold text-gray-900">{r.name}</span>
-                {r.relationship ? <span className="text-gray-500"> · {r.relationship}</span> : null}
-                <span className="text-gray-400"> · {r.email}</span>
-              </li>
+              <ReferenceRow key={r.id} reference={r} onChanged={() => { refs.refetch(); onChanged(); }} />
             ))}
           </ul>
         )}
@@ -1062,6 +1128,7 @@ function ReferenceCheckSection({ candidate, onChanged }: { candidate: any; onCha
           {c.referenceDecidedAt ? <span className="text-gray-400"> ({new Date(c.referenceDecidedAt).toLocaleDateString()})</span> : null}
         </div>
       )}
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 -mb-1">Overall decision</div>
       <div className="flex gap-2 flex-wrap">
         {(['cleared', 'concerns', 'failed'] as const).map((o) => (
           <button
@@ -1074,7 +1141,7 @@ function ReferenceCheckSection({ candidate, onChanged }: { candidate: any; onCha
           </button>
         ))}
       </div>
-      {outcome === 'cleared' && <div className="text-[12px] text-emerald-700">Advances the candidate to the Offer stage. You then send the offer letter from the Offer section.</div>}
+      {outcome === 'cleared' &&<div className="text-[12px] text-emerald-700">Advances the candidate to the Offer stage. You then send the offer letter from the Offer section.</div>}
       {outcome === 'failed' && <div className="text-[12px] text-rose-700">Rejects the candidate. The rejection email sends after a short undo window.</div>}
       {outcome === 'concerns' && <div className="text-[12px] text-amber-700">Records the concern and keeps the candidate in Reference Check.</div>}
       <textarea

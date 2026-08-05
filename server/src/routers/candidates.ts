@@ -1083,6 +1083,40 @@ export const candidatesRouter = router({
       return candidate;
     }),
 
+  // Record an outcome for a SINGLE reference (cleared / concerns / failed) plus an
+  // optional note. This is the per-reference detail; it does not move the pipeline.
+  // The candidate-level recordReferenceOutcome above is still the action gate that
+  // advances / holds / rejects the candidate.
+  recordReferenceItemOutcome: protectedProcedure
+    .input(z.object({
+      referenceId: z.string().uuid(),
+      outcome: z.enum(['cleared', 'concerns', 'failed']),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const ref = await ctx.db.query.candidateReferences.findFirst({
+        where: eq(candidateReferences.id, input.referenceId),
+      });
+      if (!ref) throw new TRPCError({ code: 'NOT_FOUND', message: 'Reference not found.' });
+      const cand = await ctx.db.query.candidates.findFirst({ where: eq(candidates.id, ref.candidateId) });
+      if (!cand) throw new TRPCError({ code: 'NOT_FOUND', message: 'Candidate not found.' });
+      if (cand.currentStage !== 'Reference Check') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Reference outcomes can only be recorded while the candidate is in Reference Check.' });
+      }
+      const [updated] = await ctx.db.update(candidateReferences)
+        .set({
+          outcome: input.outcome,
+          outcomeNotes: input.notes?.trim() || null,
+          outcomeAt: new Date(),
+          outcomeBy: ctx.user.id,
+        })
+        .where(eq(candidateReferences.id, input.referenceId))
+        .returning();
+      await auditChange(ctx.db, ctx.user.id, ref.candidateId, 'candidate_references', 'update');
+      trackActivity(ctx.db, ctx.user.id, 'reference_item_outcome', 'candidates', { candidateId: ref.candidateId, referenceId: input.referenceId, outcome: input.outcome }).catch((err: unknown) => console.warn('[telemetry] trackActivity failed (non-blocking):', err));
+      return updated;
+    }),
+
   // List the references a candidate provided (shown on the Reference Check card).
   references: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))

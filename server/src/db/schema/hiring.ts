@@ -332,6 +332,13 @@ export const candidateReferences = pgTable('candidate_references', {
   respondedAt: timestamp('responded_at', { withTimezone: true }),
   response: text('response'),
   wouldRehire: varchar('would_rehire', { length: 20 }),
+  // Per-reference decision recorded by the recruiter at the Reference Check stage
+  // (cleared / concerns / failed), independent of the candidate-level roll-up in
+  // candidates.reference_outcome. Allowed values enforced in the tRPC layer.
+  outcome: varchar('outcome', { length: 20 }),
+  outcomeNotes: text('outcome_notes'),
+  outcomeAt: timestamp('outcome_at', { withTimezone: true }),
+  outcomeBy: uuid('outcome_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
