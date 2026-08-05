@@ -1,5 +1,5 @@
 import { useState, Fragment } from 'react';
-import { Plus, X, Trash2, Pencil, ChevronRight, ChevronDown, PenLine, Upload, Check, Archive } from 'lucide-react';
+import { Plus, X, Trash2, Pencil, ChevronRight, ChevronDown, PenLine, Upload, Check, Archive, Mail } from 'lucide-react';
 import { trpc } from '../../lib/trpc';
 
 const DIFFICULTIES = ['Entry', 'Mid', 'Senior'] as const;
@@ -50,6 +50,8 @@ export default function TaskLibrary() {
   const deleteMutation = trpc.tasks.delete.useMutation({ onSuccess: () => refetch() });
   const approveMutation = trpc.tasks.approve.useMutation({ onSuccess: () => refetch() });
   const retireMutation = trpc.tasks.retire.useMutation({ onSuccess: () => refetch() });
+  const resendMutation = trpc.tasks.resendReview.useMutation({ onSuccess: () => { refetch(); setResend(null); } });
+  const [resend, setResend] = useState<{ id: string; title: string; email: string } | null>(null);
   const linkJdMutation = trpc.jobDescriptions.setWorkSampleTask.useMutation({ onSuccess: () => refetchJds() });
   const draftMutation = trpc.tasks.draftFromUpload.useMutation();
 
@@ -448,6 +450,29 @@ export default function TaskLibrary() {
         </div>
       )}
 
+      {resend && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold text-gray-700">Resend approval request — {resend.title}</span>
+            <button onClick={() => setResend(null)} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+          </div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Approver email</label>
+          <div className="flex gap-2">
+            <input type="email" value={resend.email}
+              onChange={(e) => setResend({ ...resend, email: e.target.value })}
+              placeholder="hiring manager's email"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-ls-cyan" />
+            <button onClick={() => resendMutation.mutate({ id: resend.id, approverEmail: resend.email })}
+              disabled={!resend.email || resendMutation.isLoading}
+              className="px-4 py-2 bg-ls-primary text-white rounded-md text-sm font-medium hover:bg-ls-primary-600 disabled:opacity-50">
+              {resendMutation.isLoading ? 'Sending…' : 'Send'}
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">Sends the review link to this address and saves it as the task's approver.</p>
+          {resendMutation.error && <p className="text-xs text-red-600 mt-1">{resendMutation.error.message}</p>}
+        </div>
+      )}
+
       <div className="bg-white rounded-lg border border-gray-200">
         {!tasks || tasks.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">No tasks yet. Add one to get started.</div>
@@ -483,6 +508,11 @@ export default function TaskLibrary() {
                           )}
                         </div>
                         <div className="text-gray-500 text-xs mt-0.5 line-clamp-1">{t.brief}</div>
+                        {t.status === 'Draft' && (
+                          <div className="text-[11px] text-amber-600 mt-0.5">
+                            Pending approval{t.approverEmail ? ` · ${t.approverEmail}` : ' · no approver set'}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -497,6 +527,9 @@ export default function TaskLibrary() {
                   <td className="px-4 py-3 text-gray-500">v{t.version}</td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
+                      {t.status === 'Draft' && (
+                        <button onClick={() => setResend({ id: t.id, title: t.title, email: t.approverEmail ?? '' })} className="p-1.5 text-gray-400 hover:text-ls-primary rounded hover:bg-gray-100" title="Resend / change approver"><Mail size={15} /></button>
+                      )}
                       {t.status === 'Draft' && (
                         <button onClick={() => approveMutation.mutate({ id: t.id })} disabled={approveMutation.isLoading} className="p-1.5 text-gray-400 hover:text-green-600 rounded hover:bg-gray-100" title="Approve → Live"><Check size={15} /></button>
                       )}

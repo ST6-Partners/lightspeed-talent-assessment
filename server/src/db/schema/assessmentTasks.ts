@@ -31,6 +31,10 @@ export const assessmentTasks = pgTable('assessment_tasks', {
   scoringGuideWork: text('scoring_guide_work'),
   scoringGuideAi: text('scoring_guide_ai'),
   status: taskStatusEnum('status').notNull().default('Draft'),
+  // Who was emailed to approve this task (captured at create / on resend). Kept
+  // so the list can show "pending approval from X" and the request can be resent
+  // or redirected if the address was mistyped.
+  approverEmail: varchar('approver_email', { length: 300 }),
   // How the candidate completes this task:
   //  'take_home'       — emailed link, candidate submits a written answer/file (auto-scored)
   //  'live_walkthrough' — a Zoom interview round where the candidate walks the panel through it (human-scored)

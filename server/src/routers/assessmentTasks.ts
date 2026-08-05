@@ -118,10 +118,26 @@ export const assessmentTasksRouter = router({
       // emailed review link or the in-app Approve action), so nothing unreviewed
       // can be attached to a role.
       const [t] = await ctx.db.insert(assessmentTasks)
-        .values({ ...values, status: 'Draft', createdBy: ctx.user.id })
+        .values({ ...values, status: 'Draft', approverEmail: approverEmail ?? null, createdBy: ctx.user.id })
         .returning();
       await auditChange(ctx.db, ctx.user.id, t.id, 'assessment_tasks', 'create');
       if (approverEmail) await sendTaskReviewInvite(ctx.db, t, approverEmail);
+      return t;
+    }),
+
+  // Resend the approval request — optionally to a corrected address (fixes a
+  // mistyped approver without recreating the task). Persists the new address.
+  resendReview: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), approverEmail: z.string().email() }))
+    .mutation(async ({ ctx, input }) => {
+      const existing = await ctx.db.query.assessmentTasks.findFirst({ where: eq(assessmentTasks.id, input.id) });
+      if (!existing) throw new TRPCError({ code: 'NOT_FOUND' });
+      const [t] = await ctx.db.update(assessmentTasks)
+        .set({ approverEmail: input.approverEmail, updatedAt: new Date() })
+        .where(eq(assessmentTasks.id, input.id))
+        .returning();
+      await sendTaskReviewInvite(ctx.db, t, input.approverEmail);
+      await auditChange(ctx.db, ctx.user.id, input.id, 'assessment_tasks', 'update');
       return t;
     }),
 
