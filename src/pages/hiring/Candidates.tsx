@@ -247,11 +247,13 @@ export default function Candidates() {
   // "Needs action" = the system is waiting on a human advance/reject decision and
   // the thing that stage waits on has already happened:
   //   • Reference Check  — always (only a human moves it to Offer or Reject)
+  //   • Offer            — always (a human sends the offer letter, then marks Hired)
   //   • Work Sample      — once the sample is submitted or scored (take-home or walkthrough)
   //   • Phone Screen     — once the scheduled call time has passed
   const needsAction = (c: any): boolean => {
     switch (c.currentStage) {
       case 'Reference Check': return true;
+      case 'Offer': return true;
       case 'Interview': return !!c.interviewNeedsOutreach;
       case 'Work Sample': return !!(c.workSampleSubmittedAt || c.workSampleScore != null);
       case 'Phone Screen': {
@@ -1001,7 +1003,13 @@ function stageDetail(name: string, c: any, rounds: any[], onChanged: () => void)
     case 'Reference Check':
       return <ReferenceCheckSection candidate={c} onChanged={onChanged} />;
     case 'Offer':
-      return <div className="text-gray-500">The candidate is in the Offer stage. Send the offer letter from the Offer section below.</div>;
+      // Render the actual offer-letter workflow inline (internal move vs external
+      // hire), open by default, so there's an actionable review/send control right
+      // here — previously this was static text pointing at an "Offer section below"
+      // that was never mounted, leaving no way forward but the manual arrows.
+      return c.isInternal
+        ? <InternalOfferSection candidateId={c.id} onChanged={onChanged} defaultOpen />
+        : <OfferSection candidateId={c.id} onChanged={onChanged} defaultOpen />;
     case 'Hired':
       return <div className="text-gray-400 italic">Final stage.</div>;
     default:
@@ -1732,7 +1740,7 @@ function TimelineAlerts() {
   );
 }
 
-function OfferSection({ candidateId, onChanged }: { candidateId: string; onChanged?: () => void }) {
+function OfferSection({ candidateId, onChanged, defaultOpen }: { candidateId: string; onChanged?: () => void; defaultOpen?: boolean }) {
   const defaults = trpc.candidates.offerDefaults.useQuery({ id: candidateId });
   const [f, setF] = useState({ jobTitle: '', baseSalary: '', variableComp: '', startDate: '', reportsTo: '', department: '', employmentType: 'Full-Time', location: '' });
   const [clauses, setClauses] = useState<string[]>([]);
@@ -1791,7 +1799,7 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
     : null;
 
   return (
-    <Section title="Offer Letter (external)">
+    <Section title="Offer Letter (external)" defaultOpen={defaultOpen}>
       <div className="text-xs text-gray-500">
         Prefilled from the approved intake. Prefilled from the approved intake (title, comp, manager, department, location, dates). Every field and the standard legal language below are editable, so you can fix any mistake before it goes for approval. It is sent to the hiring manager first, who signs off before the candidate is contacted. Custom items go on an addendum. Generated from a fixed template — not AI.
       </div>
@@ -1880,7 +1888,7 @@ function OfferSection({ candidateId, onChanged }: { candidateId: string; onChang
   );
 }
 
-function InternalOfferSection({ candidateId, onChanged }: { candidateId: string; onChanged?: () => void }) {
+function InternalOfferSection({ candidateId, onChanged, defaultOpen }: { candidateId: string; onChanged?: () => void; defaultOpen?: boolean }) {
   const defaults = trpc.candidates.offerDefaults.useQuery({ id: candidateId });
   // New role (prefilled from intake; editable). Current role (HR-entered).
   const [nw, setNw] = useState({ newTitle: '', newBaseSalary: '', newBonus: '', newManager: '', newDepartment: '', newStipends: '', effectiveDate: '' });
@@ -1966,7 +1974,7 @@ function InternalOfferSection({ candidateId, onChanged }: { candidateId: string;
   );
 
   return (
-    <Section title="Offer Letter (internal move)">
+    <Section title="Offer Letter (internal move)" defaultOpen={defaultOpen}>
       <div className="text-xs text-gray-500">
         Internal move. The letter shows a <strong>before / now</strong> comparison so the employee sees exactly what changes. The <strong>new role</strong> column is prefilled from the approved intake; the <strong>current</strong> column is entered by HR (HRIS integration pending). Every field and the legal language are editable. Put the transition plan on the addendum. It is sent to the hiring manager for sign-off before the employee is contacted. Generated from a fixed template — not AI.
       </div>
