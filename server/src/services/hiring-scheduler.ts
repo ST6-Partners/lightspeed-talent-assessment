@@ -742,26 +742,39 @@ async function runInterviewOutreachReminderBell(): Promise<JobResult> {
 }
 
 // ── Job: work-sample walkthrough decision reminder ─────────
-// ~30 min after a completed work-sample walkthrough round, if the candidate is
-// still in Work Sample, nudge the interviewer who ran it (and the hiring team)
-// ONCE to record their read and advance or reject. Mirrors the scorecard nudge.
+// If the candidate is still in Work Sample, nudge the interviewer who ran it (and
+// the hiring team) ONCE to advance or reject. Fires when EITHER the round is marked
+// completed (~30 min after), OR the walkthrough's SCHEDULED END time has passed
+// (like the phone-screen decision reminder) — so a candidate is never left in Work
+// Sample even if nobody marks the round complete. Bell notification + email.
 async function runWalkthroughDecisionReminder(): Promise<JobResult> {
   const now = Date.now();
   const rounds = await db.select().from(candidateInterviews).where(eq(candidateInterviews.roundName, WALKTHROUGH_ROUND_NAME));
   let sent = 0;
   for (const r of rounds as any[]) {
-    if (r.status !== 'completed') continue;
-    const ref = r.updatedAt ? new Date(r.updatedAt).getTime() : (r.scheduledAt ? new Date(r.scheduledAt).getTime() : now);
-    if (now < ref + DECISION_REMINDER_AFTER_MS) continue;
     const c = await db.query.candidates.findFirst({ where: eq(candidates.id, r.candidateId) });
     if (!c || c.currentStage !== 'Work Sample') continue;                  // already moved on -> nothing to nudge
     if (await alreadySentTemplate(c.id, 'walkthrough_decision_reminder')) continue;
+
+    // Trigger 1: interviewer marked the round completed (30 min after).
+    const completedRef = r.status === 'completed'
+      ? (r.updatedAt ? new Date(r.updatedAt).getTime() : (r.scheduledAt ? new Date(r.scheduledAt).getTime() : null))
+      : null;
+    const completedDue = completedRef != null && now >= completedRef + DECISION_REMINDER_AFTER_MS;
+    // Trigger 2: the walkthrough's scheduled end time has passed (falls back to
+    // scheduled start + 45 min when no explicit end was captured).
+    const scheduledEnd = (c as any).workSampleEndAt
+      ? new Date((c as any).workSampleEndAt).getTime()
+      : ((c as any).workSampleScheduledAt ? new Date((c as any).workSampleScheduledAt).getTime() + 45 * 60 * 1000 : null);
+    const endDue = scheduledEnd != null && now >= scheduledEnd;
+    if (!completedDue && !endDue) continue;
+
     const jd = c.jdId ? await db.query.jobDescriptions.findFirst({ where: eq(jobDescriptions.id, c.jdId) }) : null;
     const jobTitle = jd?.jobTitle ?? 'the role';
     const base = schedAppBaseUrl();
     const link = base ? `${base}/hiring/candidates?candidate=${c.id}` : '';
     const subject = `Decision needed: work sample walkthrough with ${c.firstName} ${c.lastName}`;
-    const html = `<p>You completed the work sample walkthrough with <strong>${c.firstName} ${c.lastName}</strong> for <strong>${jobTitle}</strong>.</p>`
+    const html = `<p>The work sample walkthrough with <strong>${c.firstName} ${c.lastName}</strong> for <strong>${jobTitle}</strong> has wrapped up.</p>`
       + `<p>Please record your read and <strong>advance</strong> or <strong>reject</strong> them so they don't get left in the work-sample stage.</p>`
       + (link ? `<p><a href="${link}">Open ${c.firstName}'s record</a></p>` : '');
     try {
@@ -775,7 +788,7 @@ async function runWalkthroughDecisionReminder(): Promise<JobResult> {
         await db.insert(notifications).values([...notify.values()].map((u: any) => ({
           userId: u.id,
           type: 'walkthrough_decision',
-          message: `Advance or reject ${c.firstName} ${c.lastName} — their work sample walkthrough for ${jobTitle} is done.`,
+          message: `Advance or reject ${c.firstName} ${c.lastName} — their work sample walkthrough for ${jobTitle} has wrapped up.`,
           referenceId: c.id,
           referenceType: 'candidate',
         })));
