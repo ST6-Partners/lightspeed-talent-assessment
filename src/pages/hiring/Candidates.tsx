@@ -1143,24 +1143,26 @@ function ReferenceRow({ reference, onChanged }: { reference: any; onChanged: () 
 // enum's 'cleared'/'failed'; the 'concerns' hold path is no longer offered here.
 function ReferenceCheckSection({ candidate, onChanged }: { candidate: any; onChanged: () => void }) {
   const c = candidate;
-  // The final decision is just Pass or Fail. Pass advances to Offer, Fail rejects.
-  // (Per-reference marks below can still be cleared / concerns / failed.) Mapped to
-  // the backend outcome enum on submit: pass -> cleared, fail -> failed.
-  const [outcome, setOutcome] = useState<'pass' | 'fail' | ''>('');
+  // The final decision is Advance or Reject, taken directly from this section.
+  // Advance promotes to Offer and Reject rejects — both go through
+  // recordReferenceOutcome (cleared / failed) so the decision and any note are
+  // logged. (Per-reference marks below can still be cleared / concerns / failed.)
   const [notes, setNotes] = useState('');
+  const [pending, setPending] = useState<'cleared' | 'failed' | null>(null);
   const record = trpc.candidates.recordReferenceOutcome.useMutation({
-    onSuccess: () => { setOutcome(''); setNotes(''); onChanged(); },
+    onSuccess: () => { setNotes(''); setPending(null); onChanged(); },
+    onError: () => setPending(null),
   });
   const refs = trpc.candidates.references.useQuery({ id: c.id });
   const refList: any[] = (refs.data as any[]) ?? [];
   // Display label for a previously-recorded outcome. New decisions store cleared/failed;
-  // 'concerns' can only appear on legacy records made before this became Pass/Fail.
-  const PRIOR_LABEL: Record<string, string> = { cleared: 'Pass', failed: 'Fail', concerns: 'Concerns' };
-  const FINAL_LABEL: Record<string, string> = { pass: 'Pass', fail: 'Fail' };
+  // 'concerns' can only appear on legacy records made before this became Advance/Reject.
+  const PRIOR_LABEL: Record<string, string> = { cleared: 'Advanced to Offer', failed: 'Rejected', concerns: 'Concerns' };
   const prior = c.referenceOutcome as string | null;
-  const submitLabel = outcome === 'pass' ? 'Record & advance to Offer'
-    : outcome === 'fail' ? 'Record & reject'
-    : 'Choose an outcome';
+  const decide = (outcome: 'cleared' | 'failed') => {
+    setPending(outcome);
+    record.mutate({ id: c.id, outcome, notes: notes.trim() || undefined });
+  };
   return (
     <div className="space-y-3">
       <div className="text-gray-500">Reference checks are done manually. Mark each reference below, then record the final decision — Pass advances to Offer, Fail rejects.</div>
@@ -1183,39 +1185,31 @@ function ReferenceCheckSection({ candidate, onChanged }: { candidate: any; onCha
         </div>
       )}
       <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 -mb-1">Final decision</div>
-      <div className="flex gap-2 flex-wrap">
-        {(['pass', 'fail'] as const).map((o) => {
-          const activeCls = o === 'fail' ? 'bg-rose-600 text-white border-rose-600' : 'bg-emerald-500 text-white border-emerald-500';
-          return (
-            <button
-              key={o}
-              type="button"
-              onClick={() => setOutcome(o)}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${outcome === o ? activeCls : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'}`}
-            >
-              {FINAL_LABEL[o]}
-            </button>
-          );
-        })}
-      </div>
-      {outcome === 'pass' && <div className="text-[12px] text-emerald-700">Advances the candidate to the Offer stage. You then send the offer letter from the Offer section.</div>}
-      {outcome === 'fail' && <div className="text-[12px] text-rose-700">Rejects the candidate. The rejection email sends after a short undo window.</div>}
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         placeholder="Notes (optional)"
         className="w-full text-sm border border-gray-300 rounded-md px-2.5 py-1.5 min-h-[60px]"
       />
-      <div>
+      <div className="flex gap-2 flex-wrap">
         <button
           type="button"
-          disabled={!outcome || record.isLoading}
-          onClick={() => outcome && record.mutate({ id: c.id, outcome: outcome === 'pass' ? 'cleared' : 'failed', notes: notes.trim() || undefined })}
-          className={`text-xs font-semibold px-3 py-2 rounded-md ${!outcome || record.isLoading ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : outcome === 'fail' ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-ls-primary text-white hover:opacity-90'}`}
+          disabled={record.isLoading}
+          onClick={() => decide('cleared')}
+          className="text-xs font-semibold px-3 py-1.5 rounded-md border border-emerald-500 text-emerald-600 hover:bg-emerald-500 hover:text-white disabled:opacity-50"
         >
-          {record.isLoading ? 'Saving…' : submitLabel}
+          {pending === 'cleared' ? 'Advancing…' : 'Advance'}
+        </button>
+        <button
+          type="button"
+          disabled={record.isLoading}
+          onClick={() => decide('failed')}
+          className="text-xs font-semibold px-3 py-1.5 rounded-md border border-red-400 text-red-500 hover:bg-red-500 hover:text-white disabled:opacity-50"
+        >
+          {pending === 'failed' ? 'Rejecting…' : 'Reject'}
         </button>
       </div>
+      <div className="text-[11px] text-gray-400">Advance promotes to Offer (you send the offer letter next); Reject sends the rejection email after a short undo window.</div>
       {record.error && <div className="text-[12px] text-rose-600">{record.error.message}</div>}
     </div>
   );
@@ -1260,7 +1254,9 @@ function PipelineStages({ candidate, wsApplicable, nextStage, onAdvance, onRejec
               </div>
               {done ? (
                 <Check size={16} className="text-emerald-600 shrink-0" />
-              ) : current && !closed ? (
+              ) : current && !closed && name !== 'Reference Check' ? (
+                // Reference Check takes its Advance/Reject from the Final decision
+                // controls inside the section body, so the header omits them here.
                 <span className="flex gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                   {nextStage && (
                     <button onClick={() => onAdvance(nextStage as string)} disabled={advancing} className="text-[11px] font-semibold px-2.5 py-1 rounded-md border border-emerald-500 text-emerald-600 hover:bg-emerald-500 hover:text-white disabled:opacity-50">Advance</button>
