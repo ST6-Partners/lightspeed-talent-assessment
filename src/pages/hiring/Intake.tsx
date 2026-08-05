@@ -155,7 +155,14 @@ export default function Intake() {
   );
   const deptByReq: Record<string, string> = {};
   for (const r of (allReqs ?? []) as any[]) deptByReq[r.id] = r.department;
-  const jdOptions = ((allJds ?? []) as any[]).filter((jd) => form.department && deptByReq[jd.reqId] === form.department);
+  // A JD's department can come from the JD itself, the legacy jd.req_id link, or
+  // the reusable-JD link (a requisition points to the JD via base_jd_id and the
+  // JD carries no back-link). Resolve all three so a reusable JD — e.g. one whose
+  // only requisition was closed — still appears in the picker for its department.
+  const deptByBaseJd: Record<string, string> = {};
+  for (const r of (allReqs ?? []) as any[]) if (r.baseJdId) deptByBaseJd[r.baseJdId] = r.department;
+  const jdDeptOf = (jd: any) => jd.department ?? deptByReq[jd.reqId] ?? deptByBaseJd[jd.id];
+  const jdOptions = ((allJds ?? []) as any[]).filter((jd) => form.department && jdDeptOf(jd) === form.department);
   const [baseline, setBaseline] = useState<string | null>(null);
   const [showTitleModal, setShowTitleModal] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
